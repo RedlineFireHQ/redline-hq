@@ -1,2 +1,3 @@
-# elliott-fire-management
-Volunteer Fire Department Management Platform
+# Redline HQ
+
+Modern Fire Department Operations Platform
