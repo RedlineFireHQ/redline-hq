@@ -11,29 +11,45 @@ export default function TopBar() {
   });
 
   return (
-    <header className="flex items-center justify-between border-b border-neutral-800 bg-neutral-950 px-8 py-6">
-      <div>
-        <p className="text-sm uppercase tracking-[0.2em] text-red-500">
-          Command Center
-        </p>
+    <header className="sticky top-0 z-20 border-b border-neutral-800/80 bg-neutral-950/95 backdrop-blur">
+      <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-5 lg:px-10">
+        <div>
+          <div className="flex items-center gap-3">
+            <div className="h-3 w-3 rounded-full bg-red-500 shadow-lg shadow-red-500/50" />
 
-        <h1 className="mt-1 text-3xl font-bold text-white">
-          {department.name}
-        </h1>
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-red-500">
+              Command Center
+            </p>
+          </div>
 
-        <p className="mt-2 text-neutral-400">
-          Less Paperwork. More Readiness.
-        </p>
-      </div>
+          <h1 className="mt-3 text-3xl font-bold tracking-tight text-white">
+            {department.name}
+          </h1>
 
-      <div className="text-right">
-        <p className="text-sm text-neutral-500">
-          {formattedDate}
-        </p>
+          <p className="mt-2 text-sm text-neutral-400">
+            Firefighter-built software focused on operational readiness.
+          </p>
+        </div>
 
-        <p className="mt-2 text-lg font-semibold text-white">
-          Welcome back, Adam
-        </p>
+        <div className="rounded-xl border border-neutral-800 bg-neutral-900/70 px-5 py-4 text-right shadow-lg">
+          <p className="text-xs uppercase tracking-widest text-neutral-500">
+            Today
+          </p>
+
+          <p className="mt-1 text-sm text-neutral-300">
+            {formattedDate}
+          </p>
+
+          <div className="my-3 h-px bg-neutral-800" />
+
+          <p className="text-xs uppercase tracking-widest text-neutral-500">
+            Signed In
+          </p>
+
+          <p className="mt-1 text-lg font-semibold text-white">
+            Adam
+          </p>
+        </div>
       </div>
     </header>
   );
