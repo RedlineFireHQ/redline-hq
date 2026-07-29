@@ -1,5 +1,5 @@
 import { ReactNode } from "react";
-import Sidebar from "./Sidebar";
+import Sidebar from "@/components/command-center-v3/Sidebar";
 import TopBar from "./TopBar";
 
 interface PageLayoutProps {
