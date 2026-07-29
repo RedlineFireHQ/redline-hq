@@ -1,0 +1,137 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { sampleInspection } from "./sampleInspection";
+import TaskCard from "./TaskCard";
+
+export default function TodaysTasks() {
+  const [inspectionOpen, setInspectionOpen] = useState(false);
+  const [inspectionCompleted, setInspectionCompleted] = useState(false);
+  const [completedItems, setCompletedItems] = useState<number[]>([]);
+
+  function toggleItem(id: number) {
+    if (inspectionCompleted) return;
+
+    setCompletedItems((current) =>
+      current.includes(id)
+        ? current.filter((item) => item !== id)
+        : [...current, id]
+    );
+  }
+
+  function completeInspection() {
+    if (!allComplete) return;
+
+    setInspectionCompleted(true);
+    setInspectionOpen(false);
+  }
+
+  const completedCount = completedItems.length;
+  const totalCount = sampleInspection.length;
+
+  const allComplete = useMemo(
+    () => completedCount === totalCount,
+    [completedCount, totalCount]
+  );
+
+  return (
+    <div className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-8">
+      <h2 className="text-2xl font-bold text-white">
+        Today's Tasks
+      </h2>
+
+      <p className="mt-2 text-neutral-400">
+        Redline HQ has determined these tasks that are due today.
+      </p>
+
+      <div className="mt-6 rounded-xl border border-neutral-700 bg-neutral-900 p-4">
+        <div className="flex items-center justify-between">
+          <span className="font-semibold text-white">
+            Inspection Progress
+          </span>
+
+          {inspectionCompleted ? (
+            <span className="rounded-full bg-green-600 px-3 py-1 text-sm font-bold text-white">
+              ✓ Completed
+            </span>
+          ) : (
+            <span className="rounded-full bg-red-600 px-3 py-1 text-sm font-bold text-white">
+              {completedCount} / {totalCount} Complete
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-8 space-y-4">
+        <TaskCard
+          title="Daily Apparatus Inspection"
+          description="Confirm this apparatus is ready for emergency response."
+          status={inspectionCompleted ? "complete" : "due"}
+        >
+          {!inspectionCompleted && (
+            <>
+              <button
+                onClick={() => setInspectionOpen(!inspectionOpen)}
+                className="mb-5 rounded-lg border border-neutral-700 px-4 py-2 text-white transition hover:bg-neutral-800"
+              >
+                {inspectionOpen ? "Hide Inspection" : "Begin Inspection"}
+              </button>
+
+              {inspectionOpen && (
+                <>
+                  <div className="space-y-4">
+                    {sampleInspection.map((item) => (
+                      <label
+                        key={item.id}
+                        className="flex cursor-pointer items-center gap-3 text-white"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={completedItems.includes(item.id)}
+                          onChange={() => toggleItem(item.id)}
+                          className="h-5 w-5"
+                        />
+
+                        <span>{item.label}</span>
+                      </label>
+                    ))}
+                  </div>
+
+                  <div className="mt-6 flex gap-3">
+                    <button className="rounded-lg border border-neutral-700 px-4 py-2 text-white transition hover:bg-neutral-800">
+                      View Procedure
+                    </button>
+
+                    <button
+                      onClick={completeInspection}
+                      disabled={!allComplete}
+                      className={`rounded-lg px-5 py-2 font-bold transition ${
+                        allComplete
+                          ? "bg-red-600 text-white hover:bg-red-700"
+                          : "cursor-not-allowed bg-neutral-700 text-neutral-400"
+                      }`}
+                    >
+                      Complete Task
+                    </button>
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </TaskCard>
+
+        <TaskCard
+          title="Engine Hours"
+          description="Record current engine hours."
+          status="due"
+        />
+
+        <TaskCard
+          title="Fuel Level"
+          description="Verify apparatus fuel level."
+          status="due"
+        />
+      </div>
+    </div>
+  );
+}

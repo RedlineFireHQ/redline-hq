@@ -10,15 +10,15 @@ export default function PageLayout({
   children,
 }: PageLayoutProps) {
   return (
-    <div className="min-h-screen bg-neutral-950 text-white">
-      <div className="flex min-h-screen">
+    <div className="h-screen overflow-hidden bg-neutral-950 text-white">
+      <div className="flex h-screen">
         <Sidebar />
 
         <div className="flex min-w-0 flex-1 flex-col">
           <TopBar />
 
-          <main className="flex-1 overflow-y-auto">
-            <div className="mx-auto w-full max-w-7xl px-6 py-8 lg:px-10">
+          <main className="flex-1 overflow-y-auto bg-neutral-950">
+            <div className="w-full px-4 py-4 lg:px-6 xl:px-8">
               {children}
             </div>
           </main>
