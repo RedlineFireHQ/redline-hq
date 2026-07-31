@@ -1,12 +1,10 @@
+import ComingSoonPage from "@/components/ui/ComingSoonPage";
+
 export default function DeficienciesPage() {
 	return (
-		<main className="min-h-screen bg-[#090909] px-6 py-10 text-white">
-			<div className="mx-auto w-full max-w-7xl">
-				<h1 className="text-4xl font-black tracking-tight text-white">Deficiencies</h1>
-				<p className="mt-3 max-w-2xl text-base text-zinc-400">
-					Track, manage, and resolve apparatus and equipment deficiencies.
-				</p>
-			</div>
-		</main>
+		<ComingSoonPage
+			title="Deficiencies"
+			description="Track, assign, and resolve apparatus and equipment deficiencies. This module is currently under development and will be available soon."
+		/>
 	);
 }

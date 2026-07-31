@@ -22,7 +22,7 @@ import {
 const navigationItems = [
   { label: "Command Center", icon: Home, href: "/" },
   { label: "Apparatus", icon: Truck, href: "/apparatus" },
-  { label: "Assets", icon: Package, href: "/assets" },
+  { label: "Inventory", icon: Package, href: "/assets" },
   { label: "Personnel", icon: Users, href: "/personnel" },
   { label: "Training", icon: GraduationCap, href: "/training" },
   { label: "Certifications", icon: Award, href: "/certifications" },

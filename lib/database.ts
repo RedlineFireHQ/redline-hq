@@ -29,6 +29,30 @@ export async function getApparatusById(id: string) {
   return data;
 }
 
+export async function getAssetById(id: string) {
+  console.log("[getAssetById] Requested asset ID:", id);
+
+  const { data, error } = await supabase
+    .from("assets")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (error) {
+    console.error("[getAssetById] Full Supabase error");
+    console.error("Requested ID:", id);
+    console.error("Code:", error.code);
+    console.error("Message:", error.message);
+    console.error("Details:", error.details);
+    console.error("Hint:", error.hint);
+    throw error;
+  }
+
+  console.log("[getAssetById] Retrieved asset:", data);
+
+  return data;
+}
+
 export async function updateApparatusStatus(
   id: string,
   status: "ready" | "needs_attention" | "out_of_service"

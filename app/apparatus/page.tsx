@@ -1,53 +1,17 @@
+import Link from "next/link";
+import { getApparatus } from "@/lib/database";
 import PageLayout from "@/components/layout/PageLayout";
 import MetricCard from "@/components/ui/MetricCard";
 
 type ApparatusStatus = "Ready" | "Checks Due" | "Out of Service";
 
 type ApparatusUnit = {
-  id: number;
+  id: string;
   unit: string;
   status: ApparatusStatus;
   lastInspection: string;
   openDeficiencies: number;
 };
-
-const apparatusUnits: ApparatusUnit[] = [
-  {
-    id: 1,
-    unit: "Engine 430",
-    status: "Ready",
-    lastInspection: "Jul 27, 2026",
-    openDeficiencies: 0,
-  },
-  {
-    id: 2,
-    unit: "Engine 432",
-    status: "Ready",
-    lastInspection: "Jul 27, 2026",
-    openDeficiencies: 1,
-  },
-  {
-    id: 3,
-    unit: "Tanker 445",
-    status: "Checks Due",
-    lastInspection: "Jul 25, 2026",
-    openDeficiencies: 2,
-  },
-  {
-    id: 4,
-    unit: "Grass 420",
-    status: "Out of Service",
-    lastInspection: "Jul 23, 2026",
-    openDeficiencies: 3,
-  },
-  {
-    id: 5,
-    unit: "Grass 421",
-    status: "Ready",
-    lastInspection: "Jul 28, 2026",
-    openDeficiencies: 0,
-  },
-];
 
 function getStatusClasses(status: ApparatusStatus): string {
   if (status === "Ready") {
@@ -61,7 +25,39 @@ function getStatusClasses(status: ApparatusStatus): string {
   return "border-red-500/35 bg-red-500/15 text-red-300";
 }
 
-export default function ApparatusPage() {
+export default async function ApparatusPage() {
+  const apparatusData = await getApparatus();
+
+  const apparatusUnits: ApparatusUnit[] = apparatusData.map((unit) => {
+    const status =
+      unit.status === "out_of_service"
+        ? "Out of Service"
+        : unit.status === "needs_attention"
+          ? "Checks Due"
+          : "Ready";
+
+    const lastInspection = unit.last_inspection_at
+      ? new Date(unit.last_inspection_at).toLocaleDateString("en-US", {
+          month: "short",
+          day: "2-digit",
+          year: "numeric",
+        })
+      : "N/A";
+
+    const openDeficiencies =
+      typeof unit.open_deficiencies_count === "number"
+        ? unit.open_deficiencies_count
+        : 0;
+
+    return {
+      id: String(unit.id),
+      unit: unit.name,
+      status,
+      lastInspection,
+      openDeficiencies,
+    };
+  });
+
   const totalApparatus = apparatusUnits.length;
   const readyCount = apparatusUnits.filter((unit) => unit.status === "Ready").length;
   const checksDueCount = apparatusUnits.filter(
@@ -150,10 +146,9 @@ export default function ApparatusPage() {
         {/* Card View */}
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
           {apparatusUnits.map((unit) => (
-            <div
+            <Link
               key={unit.id}
-              role="button"
-              tabIndex={0}
+              href={`/apparatus/${unit.id}`}
               className="group overflow-hidden rounded-2xl border border-white/10 bg-[#111111] text-left transition-all duration-300 hover:-translate-y-1 hover:border-red-500/40 hover:shadow-[0_18px_45px_rgba(239,43,45,.14)]"
             >
               <div className="relative h-40 w-full border-b border-white/10 bg-gradient-to-br from-[#1a1a1a] via-[#151515] to-[#101010]">
@@ -198,7 +193,7 @@ export default function ApparatusPage() {
                   Apparatus Check
                 </button>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       </div>

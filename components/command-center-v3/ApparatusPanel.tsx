@@ -108,7 +108,7 @@ export default function ApparatusPanel() {
 
             {apparatus.map((truck) => (
 
-              <button
+              <div
                 key={truck.id}
                 className="group w-[260px] flex-shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-[#111111] text-left transition-all duration-300 hover:-translate-y-1 hover:border-red-500/40 hover:shadow-[0_18px_45px_rgba(239,43,45,.18)]"
               >
@@ -198,7 +198,7 @@ export default function ApparatusPanel() {
 
                 </div>
 
-              </button>
+              </div>
              ))}
 
           </div>

@@ -12,7 +12,7 @@ export default function Sidebar() {
     { label: "Personnel", href: "/personnel" },
     { label: "Training", href: "/training" },
     { label: "Deficiencies", href: "/deficiencies" },
-    { label: "Assets", href: "/assets" },
+    { label: "Inventory", href: "/assets" },
     { label: "Reports", href: "/reports" },
     { label: "Documents", href: "/documents" },
     { label: "Settings", href: "/settings" },

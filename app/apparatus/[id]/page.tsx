@@ -26,6 +26,90 @@ export default async function ApparatusDetailPage({
     (task) => task.apparatusId === truck.id
   );
 
+  const statusValue =
+    truck.status === "out_of_service"
+      ? "Out of Service"
+      : truck.status === "needs_attention"
+        ? "Needs Attention"
+        : truck.inService === false
+          ? "Out of Service"
+          : "In Service";
+
+  const checkFrequencyValue =
+    truck.check_frequency ?? truck.checkFrequency ?? "Not Set";
+
+  const departmentValue =
+    truck.department_name ??
+    truck.department?.name ??
+    truck.department_id ??
+    "Not Set";
+
+  const lastInspectionValue = truck.last_inspection_at
+    ? new Date(truck.last_inspection_at).toLocaleDateString("en-US", {
+        month: "short",
+        day: "2-digit",
+        year: "numeric",
+      })
+    : "Not Set";
+
+  const quickFacts = [
+    { label: "Status", value: statusValue },
+    { label: "Type", value: truck.type ?? "Not Set" },
+    { label: "Check Frequency", value: checkFrequencyValue },
+    { label: "Department", value: departmentValue },
+    { label: "Last Inspection", value: lastInspectionValue },
+    { label: "Year", value: truck.year ?? "Not Set" },
+    { label: "Make", value: truck.make ?? "Not Set" },
+    { label: "Model", value: truck.model ?? "Not Set" },
+    { label: "VIN", value: truck.vin ?? "Not Set" },
+    {
+      label: "Pump Capacity (GPM)",
+      value: truck.pump_capacity ?? truck.pumpCapacity ?? "Not Set",
+    },
+    {
+      label: "Water Tank Capacity (Gallons)",
+      value:
+        truck.water_tank_capacity ??
+        truck.waterTankCapacity ??
+        "Not Set",
+    },
+    { label: "Mileage", value: truck.mileage ?? "Not Set" },
+    {
+      label: "Engine Hours",
+      value: truck.engine_hours ?? truck.engineHours ?? "Not Set",
+    },
+  ];
+
+  const assignedAssets = [
+    {
+      id: "asset-holmatro-cutter-32x",
+      name: "Holmatro Cutter 32X",
+      category: "Rescue Tools",
+      location: "Engine 430 - Driver Side Compartment B",
+      inspectionStatus: "Current",
+      statusClass: "text-green-300",
+      lastInspection: "Jul 27, 2026",
+    },
+    {
+      id: "asset-scba-spare-cylinder-rack",
+      name: "SCBA Spare Cylinder Rack",
+      category: "Air Supply",
+      location: "Engine 430 - Crew Cab Rear",
+      inspectionStatus: "Due This Week",
+      statusClass: "text-amber-300",
+      lastInspection: "Jul 22, 2026",
+    },
+    {
+      id: "asset-tft-blitzfire-monitor",
+      name: "TFT Blitzfire Monitor",
+      category: "Water Flow Equipment",
+      location: "Engine 430 - Top Side Tray",
+      inspectionStatus: "Needs Attention",
+      statusClass: "text-red-300",
+      lastInspection: "Jul 10, 2026",
+    },
+  ];
+
   return (
     <PageLayout>
       <div className="space-y-8">
@@ -44,27 +128,24 @@ export default async function ApparatusDetailPage({
           </p>
         </div>
 
-        {/* Status Cards */}
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-          <InfoCard
-            title="Status"
-            value={truck.inService ? "In Service" : "Out of Service"}
-          />
+        {/* Quick Facts */}
+        <div className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-6">
+          <h2 className="text-lg font-bold text-white">Quick Facts</h2>
 
-          <InfoCard
-            title="Check Frequency"
-            value={truck.checkFrequency ?? "Not Set"}
-          />
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            {quickFacts.map((fact) => (
+              <div
+                key={fact.label}
+                className="rounded-xl border border-white/10 bg-[#242424] p-4"
+              >
+                <p className="text-xs uppercase tracking-[0.25em] text-neutral-500">
+                  {fact.label}
+                </p>
 
-          <InfoCard
-            title="Maintenance"
-            value="Current"
-          />
-
-          <InfoCard
-            title="Monthly Check"
-            value="Due Soon"
-          />
+                <p className="mt-2 text-lg font-semibold text-white">{fact.value}</p>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Readiness Decision */}
@@ -126,15 +207,55 @@ export default async function ApparatusDetailPage({
             tasks={apparatusTasks}
           />
 
-          <SectionCard title="Assigned Members">
-            <p className="text-neutral-300">
-              2 firefighters assigned
-            </p>
+          <SectionCard title="Assigned Inventory">
+            <div className="mt-1 overflow-x-auto">
+              <table className="min-w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-white/10 text-[11px] uppercase tracking-[0.12em] text-neutral-500">
+                    <th className="px-3 py-2 font-semibold">Inventory Name</th>
+                    <th className="px-3 py-2 font-semibold">Category</th>
+                    <th className="px-3 py-2 font-semibold">Assigned Location</th>
+                    <th className="px-3 py-2 font-semibold">Inspection Status</th>
+                    <th className="px-3 py-2 font-semibold">Last Inspection</th>
+                  </tr>
+                </thead>
 
-            <ul className="mt-4 space-y-2 text-sm text-neutral-400">
-              <li>• Captain Smith</li>
-              <li>• FF Johnson</li>
-            </ul>
+                <tbody className="text-neutral-300">
+                  {assignedAssets.map((asset, index) => (
+                    <tr
+                      key={asset.id}
+                      className={`${index < assignedAssets.length - 1 ? "border-b border-white/5" : ""} transition-colors hover:bg-white/[0.02]`}
+                    >
+                      <td className="px-0 py-0">
+                        <Link href={`/assets/${asset.id}`} className="block px-3 py-3 text-neutral-300 hover:text-white">
+                          {asset.name}
+                        </Link>
+                      </td>
+                      <td className="px-0 py-0">
+                        <Link href={`/assets/${asset.id}`} className="block px-3 py-3 text-neutral-300 hover:text-white">
+                          {asset.category}
+                        </Link>
+                      </td>
+                      <td className="px-0 py-0">
+                        <Link href={`/assets/${asset.id}`} className="block px-3 py-3 text-neutral-300 hover:text-white">
+                          {asset.location}
+                        </Link>
+                      </td>
+                      <td className="px-0 py-0">
+                        <Link href={`/assets/${asset.id}`} className={`block px-3 py-3 hover:brightness-110 ${asset.statusClass}`}>
+                          {asset.inspectionStatus}
+                        </Link>
+                      </td>
+                      <td className="px-0 py-0">
+                        <Link href={`/assets/${asset.id}`} className="block px-3 py-3 text-neutral-300 hover:text-white">
+                          {asset.lastInspection}
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </SectionCard>
 
           <SectionCard title="Recent Activity">
