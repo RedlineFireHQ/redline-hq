@@ -1,10 +1,808 @@
-import ComingSoonPage from "@/components/ui/ComingSoonPage";
+"use client";
+
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+
+type Deficiency = {
+	id: string;
+	deficiency_number: string | null;
+	description: string | null;
+	priority: {
+		name: string | null;
+	} | null;
+	status: {
+		name: string | null;
+	} | null;
+	reported_at: string | null;
+};
+
+type SelectOption = {
+	id: string;
+	label: string;
+	value: string;
+};
+
+type ApparatusOption = {
+	id: string;
+	name: string;
+};
+
+type DeficiencyStatusOption = {
+	id: string;
+	name: string;
+};
+
+type ReportFormState = {
+	categoryId: string;
+	priorityId: string;
+	apparatusId: string;
+	description: string;
+	location: string;
+};
+
+const initialFormState: ReportFormState = {
+	categoryId: "",
+	priorityId: "",
+	apparatusId: "",
+	description: "",
+	location: "",
+};
+
+function getRecordString(
+	record: Record<string, unknown>,
+	keys: string[]
+) {
+	for (const key of keys) {
+		const value = record[key];
+
+		if (typeof value === "string" && value.trim()) {
+			return value;
+		}
+	}
+
+	return "";
+}
+
+function normalizeSelectOption(record: Record<string, unknown>): SelectOption {
+	const idValue = record.id ?? record.category_id ?? record.priority_id;
+	const id = typeof idValue === "string" ? idValue : String(idValue ?? "");
+	const label =
+		getRecordString(record, [
+			"name",
+			"label",
+			"title",
+			"value",
+			"category_name",
+			"priority_name",
+		]) || id;
+	const value =
+		getRecordString(record, [
+			"value",
+			"name",
+			"label",
+			"title",
+			"category_name",
+			"priority_name",
+		]) || label;
+
+	return { id, label, value };
+}
+
+function normalizeApparatusOption(record: Record<string, unknown>): ApparatusOption {
+	const idValue = record.id;
+	const id = typeof idValue === "string" ? idValue : String(idValue ?? "");
+	const name =
+		getRecordString(record, ["name", "unit", "apparatus_name", "label"]) ||
+		id;
+
+	return { id, name };
+}
+
+function normalizeDeficiencyRelation(value: unknown): { name: string | null } | null {
+	if (Array.isArray(value)) {
+		const first = value[0] as Record<string, unknown> | undefined;
+		if (!first) {
+			return null;
+		}
+
+		const nameValue = first.name;
+		return {
+			name: typeof nameValue === "string" ? nameValue : null,
+		};
+	}
+
+	if (value && typeof value === "object") {
+		const relation = value as Record<string, unknown>;
+		const nameValue = relation.name;
+
+		return {
+			name: typeof nameValue === "string" ? nameValue : null,
+		};
+	}
+
+	return null;
+}
+
+function normalizeDeficienciesData(data: unknown[] | null): Deficiency[] {
+	return (data ?? []).map((record) => {
+		const row = record as Record<string, unknown>;
+		const idValue = row.id;
+
+		return {
+			id: typeof idValue === "string" ? idValue : String(idValue ?? ""),
+			deficiency_number:
+				typeof row.deficiency_number === "string" ? row.deficiency_number : null,
+			description: typeof row.description === "string" ? row.description : null,
+			priority: normalizeDeficiencyRelation(row.priority),
+			status: normalizeDeficiencyRelation(row.status),
+			reported_at: typeof row.reported_at === "string" ? row.reported_at : null,
+		};
+	});
+}
+
+async function fetchDeficiencies() {
+	const result = await supabase
+		.from("deficiencies")
+		.select(
+			"id, deficiency_number, description, reported_at, priority:deficiency_priorities!fk_deficiencies_priority(name), status:deficiency_statuses!fk_deficiencies_status(name)"
+		)
+		.order("reported_at", { ascending: false });
+
+	console.log("fetchDeficiencies data:", result.data);
+	console.log("fetchDeficiencies error:", result.error);
+
+	if (result.error) {
+		console.error("fetchDeficiencies error message:", result.error.message);
+		console.error("fetchDeficiencies error details:", result.error.details);
+		console.error("fetchDeficiencies error hint:", result.error.hint);
+		console.error("fetchDeficiencies error code:", result.error.code);
+		console.error("fetchDeficiencies full error:", result.error);
+	}
+
+	return result;
+}
+
+async function fetchModalOptions() {
+	const [categoriesResult, prioritiesResult, apparatusResult] = await Promise.all([
+		supabase.from("deficiency_categories").select("*").order("display_order"),
+		supabase.from("deficiency_priorities").select("*").order("display_order"),
+		supabase.from("apparatus").select("*").order("name"),
+	]);
+
+	return {
+		categoriesResult,
+		prioritiesResult,
+		apparatusResult,
+	};
+}
+
+async function fetchDeficiencyStatuses() {
+	return supabase
+		.from("deficiency_statuses")
+		.select("*")
+		.order("display_order");
+}
+
+function formatReportedDate(value: string | null) {
+	if (!value) {
+		return "Not reported";
+	}
+
+	const date = new Date(value);
+
+	if (Number.isNaN(date.getTime())) {
+		return value;
+	}
+
+	return date.toLocaleDateString("en-US", {
+		month: "short",
+		day: "2-digit",
+		year: "numeric",
+	});
+}
 
 export default function DeficienciesPage() {
+	const [deficiencies, setDeficiencies] = useState<Deficiency[]>([]);
+	const [isLoading, setIsLoading] = useState(true);
+	const [errorMessage, setErrorMessage] = useState<string | null>(null);
+	const [isModalOpen, setIsModalOpen] = useState(false);
+	const [categories, setCategories] = useState<SelectOption[]>([]);
+	const [priorities, setPriorities] = useState<SelectOption[]>([]);
+	const [apparatusOptions, setApparatusOptions] = useState<ApparatusOption[]>([]);
+	const [openStatusId, setOpenStatusId] = useState("");
+	const [isOptionsLoading, setIsOptionsLoading] = useState(false);
+	const [optionsErrorMessage, setOptionsErrorMessage] = useState<string | null>(null);
+	const [submitErrorMessage, setSubmitErrorMessage] = useState<string | null>(null);
+	const [isSubmitting, setIsSubmitting] = useState(false);
+	const [formState, setFormState] = useState<ReportFormState>(initialFormState);
+
+	useEffect(() => {
+		let isMounted = true;
+
+		async function loadDeficiencyStatuses() {
+			const { data, error } = await fetchDeficiencyStatuses();
+
+			console.log("RAW STATUS DATA:", JSON.stringify(data, null, 2));
+			console.log("STATUS ERROR:", JSON.stringify(error, null, 2));
+
+			console.log("Raw data from fetchDeficiencyStatuses:", data);
+			console.table(data ?? []);
+
+			if (!isMounted) {
+				return;
+			}
+
+			if (error) {
+				console.error("Failed to load deficiency statuses:", error);
+				return;
+			}
+
+			const statuses: DeficiencyStatusOption[] = (data ?? []).map((record) => {
+				const statusRecord = record as Record<string, unknown>;
+				const idValue = statusRecord.id;
+				const id =
+					typeof idValue === "string" ? idValue : String(idValue ?? "");
+				const name =
+					getRecordString(statusRecord, ["name", "label", "title", "value"]) ||
+					id;
+
+				return { id, name };
+			});
+
+			console.log("Mapped statuses:");
+			console.table(statuses);
+
+			const { data: directQueryOpenStatus, error: openStatusError } = await supabase
+				.from("deficiency_statuses")
+				.select("id, name")
+				.eq("name", "Open")
+				.maybeSingle();
+
+			console.log(
+				"DIRECT OPEN QUERY:",
+				JSON.stringify(directQueryOpenStatus, null, 2)
+			);
+
+			console.log(
+				"DIRECT OPEN ERROR:",
+				JSON.stringify(openStatusError, null, 2)
+			);
+
+			console.log("Direct query Open:");
+			console.log(directQueryOpenStatus);
+
+			console.log("Direct query error:");
+			console.log(openStatusError);
+
+			if (openStatusError) {
+				console.error("Failed querying Open status directly:", openStatusError);
+				return;
+			}
+
+			const normalizedLookupOpenStatus = statuses.find(
+				(status) => status.name.trim().toLowerCase() === "open"
+			);
+
+			console.log(
+				"Normalized lookup:",
+				JSON.stringify(normalizedLookupOpenStatus, null, 2)
+			);
+
+			const resolvedOpenStatusId =
+				typeof directQueryOpenStatus?.id === "string" && directQueryOpenStatus.id
+					? directQueryOpenStatus.id
+					: normalizedLookupOpenStatus?.id;
+
+			console.log("Resolved Open Status ID:");
+			console.log(resolvedOpenStatusId);
+
+			if (!resolvedOpenStatusId) {
+				console.error('Unable to find "Open" record in deficiency_statuses.');
+				return;
+			}
+
+			setOpenStatusId(resolvedOpenStatusId);
+		}
+
+		loadDeficiencyStatuses();
+
+		return () => {
+			isMounted = false;
+		};
+	}, []);
+
+	async function reloadDeficiencies() {
+		setIsLoading(true);
+		setErrorMessage(null);
+
+		const { data, error } = await fetchDeficiencies();
+
+		console.log("fetchDeficiencies data:", data);
+		console.log("fetchDeficiencies error:", error);
+
+		if (error) {
+			console.error("Code:", error.code);
+			console.error("Message:", error.message);
+			console.error("Details:", error.details);
+			console.error("Hint:", error.hint);
+		}
+
+		if (error) {
+			setErrorMessage("Unable to load deficiencies right now.");
+			setDeficiencies([]);
+			setIsLoading(false);
+			return;
+		}
+
+		setDeficiencies(normalizeDeficienciesData(data as unknown[] | null));
+		setIsLoading(false);
+	}
+
+	function closeModal() {
+		setIsModalOpen(false);
+		setSubmitErrorMessage(null);
+		setOptionsErrorMessage(null);
+		setFormState(initialFormState);
+	}
+
+	function openModal() {
+		setSubmitErrorMessage(null);
+		setOptionsErrorMessage(null);
+		setIsModalOpen(true);
+	}
+
+	useEffect(() => {
+		let isMounted = true;
+
+		async function loadDeficiencies() {
+			setIsLoading(true);
+			setErrorMessage(null);
+
+			const { data, error } = await fetchDeficiencies();
+
+			console.log("fetchDeficiencies data:", data);
+			console.log("fetchDeficiencies error:", error);
+
+			if (error) {
+				console.error("Code:", error.code);
+				console.error("Message:", error.message);
+				console.error("Details:", error.details);
+				console.error("Hint:", error.hint);
+			}
+
+			if (!isMounted) {
+				return;
+			}
+
+			if (error) {
+				setErrorMessage("Unable to load deficiencies right now.");
+				setDeficiencies([]);
+				setIsLoading(false);
+				return;
+			}
+
+			setDeficiencies(normalizeDeficienciesData(data as unknown[] | null));
+			setIsLoading(false);
+		}
+
+		loadDeficiencies();
+
+		return () => {
+			isMounted = false;
+		};
+	}, []);
+
+	useEffect(() => {
+		if (!isModalOpen) {
+			return;
+		}
+
+		let isMounted = true;
+
+		async function loadModalOptions() {
+			setIsOptionsLoading(true);
+			setOptionsErrorMessage(null);
+
+			const { categoriesResult, prioritiesResult, apparatusResult } =
+				await fetchModalOptions();
+
+			console.log("Categories:", categoriesResult);
+			console.log("Priorities:", prioritiesResult);
+			console.log("Apparatus:", apparatusResult);
+			console.log(categoriesResult.data);
+			console.log(prioritiesResult.data);
+			console.log(apparatusResult.data);
+
+			if (!isMounted) {
+				return;
+			}
+
+			if (
+				categoriesResult.error ||
+				prioritiesResult.error ||
+				apparatusResult.error
+			) {
+				setOptionsErrorMessage(
+					categoriesResult.error?.message ||
+						prioritiesResult.error?.message ||
+						apparatusResult.error?.message ||
+						"Unable to load form options."
+				);
+				setIsOptionsLoading(false);
+				return;
+			}
+
+			setCategories(
+				(categoriesResult.data ?? []).map((record) =>
+					normalizeSelectOption(record as Record<string, unknown>)
+				)
+			);
+			setPriorities(
+				(prioritiesResult.data ?? []).map((record) =>
+					normalizeSelectOption(record as Record<string, unknown>)
+				)
+			);
+			setApparatusOptions(
+				(apparatusResult.data ?? []).map((record) =>
+					normalizeApparatusOption(record as Record<string, unknown>)
+				)
+			);
+			setIsOptionsLoading(false);
+		}
+
+		loadModalOptions();
+
+		return () => {
+			isMounted = false;
+		};
+	}, [isModalOpen]);
+
+	async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+		event.preventDefault();
+
+		const formStateWithOptionalPhoto = formState as ReportFormState & {
+			photo?: File | null | string;
+		};
+
+		console.log("Validation values:", {
+			categoryId: formState.categoryId,
+			priorityId: formState.priorityId,
+			apparatusId: formState.apparatusId,
+			description: formState.description,
+			location: formState.location,
+			openStatusId,
+			photo: formStateWithOptionalPhoto.photo,
+		});
+
+		console.log("Validation booleans:", {
+			missingCategory: !formState.categoryId,
+			missingPriority: !formState.priorityId,
+			missingApparatus: !formState.apparatusId,
+			missingDescription: !formState.description.trim(),
+			missingLocation: !formState.location.trim(),
+			missingOpenStatus: !openStatusId,
+			missingPhoto: !formStateWithOptionalPhoto.photo,
+		});
+
+		if (
+			!formState.categoryId ||
+			!formState.priorityId ||
+			!formState.apparatusId ||
+			!openStatusId ||
+			!formState.description.trim()
+		) {
+			setSubmitErrorMessage("Complete all required fields before submitting.");
+			return;
+		}
+
+		setIsSubmitting(true);
+		setSubmitErrorMessage(null);
+
+		const now = new Date().toISOString();
+		const payload = {
+			category_id: formState.categoryId,
+			priority: formState.priorityId,
+			apparatus_id: formState.apparatusId,
+			description: formState.description.trim(),
+			location: formState.location.trim() || null,
+			reported_at: now,
+			created_at: now,
+			status: openStatusId,
+		};
+
+		console.log("Deficiency insert payload:", payload);
+		console.log("INSERT PRE-CALL payload object:", payload);
+
+		let insertResult;
+
+		try {
+			insertResult = await supabase.from("deficiencies").insert(payload);
+		} catch (insertException) {
+			console.error("INSERT threw exception (full):", insertException);
+			throw insertException;
+		}
+
+		console.log("INSERT POST-CALL Supabase result:", insertResult);
+		console.log("INSERT POST-CALL data:", insertResult.data);
+		console.log("INSERT POST-CALL error:", insertResult.error);
+		console.log("INSERT POST-CALL status:", insertResult.status);
+		console.log("INSERT POST-CALL statusText:", insertResult.statusText);
+
+		const { error } = insertResult;
+
+		if (error) {
+			console.error("Submit deficiency error code:", error.code);
+			console.error("Submit deficiency error message:", error.message);
+			console.error("Submit deficiency error details:", error.details);
+			console.error("Submit deficiency error hint:", error.hint);
+			console.error("Submit deficiency error:", error);
+			setSubmitErrorMessage("Unable to submit deficiency right now.");
+			setIsSubmitting(false);
+			return;
+		}
+
+		await reloadDeficiencies();
+		closeModal();
+		setIsSubmitting(false);
+	}
+
 	return (
-		<ComingSoonPage
-			title="Deficiencies"
-			description="Track, assign, and resolve apparatus and equipment deficiencies. This module is currently under development and will be available soon."
-		/>
+		<main className="min-h-screen bg-[#090909] px-6 py-10 text-white">
+			<div className="mx-auto flex w-full max-w-7xl flex-col gap-8">
+				<div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+					<div>
+						<p className="text-sm font-semibold uppercase tracking-[0.28em] text-red-500">
+							Operations
+						</p>
+
+						<h1 className="mt-2 text-4xl font-black tracking-tight text-white md:text-5xl">
+							Deficiency Management
+						</h1>
+
+						<p className="mt-3 max-w-2xl text-base text-zinc-400 md:text-lg">
+							Track critical apparatus and equipment issues before they affect readiness.
+						</p>
+					</div>
+
+					<button
+						type="button"
+						onClick={openModal}
+						className="inline-flex items-center justify-center rounded-xl border border-red-500/30 bg-red-600 px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(184,18,18,0.25)] transition hover:bg-red-500"
+					>
+						Report Deficiency
+					</button>
+				</div>
+
+				<div className="overflow-hidden rounded-2xl border border-white/10 bg-[#111111] shadow-[0_24px_60px_rgba(0,0,0,0.35)]">
+					<div className="border-b border-white/10 px-6 py-4">
+						<h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-zinc-300">
+							Active Log
+						</h2>
+					</div>
+
+					{isLoading ? (
+						<div className="px-6 py-10 text-sm text-zinc-400">Loading deficiencies...</div>
+					) : errorMessage ? (
+						<div className="px-6 py-10 text-sm text-red-300">{errorMessage}</div>
+					) : deficiencies.length === 0 ? (
+						<div className="px-6 py-10 text-sm text-zinc-400">No deficiencies found.</div>
+					) : (
+						<div className="overflow-x-auto">
+							<table className="min-w-full divide-y divide-white/10 text-sm">
+								<thead className="bg-[#0d0d0d] text-left text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">
+									<tr>
+										<th className="px-6 py-4">Deficiency #</th>
+										<th className="px-6 py-4">Description</th>
+										<th className="px-6 py-4">Priority</th>
+										<th className="px-6 py-4">Status</th>
+										<th className="px-6 py-4">Reported</th>
+									</tr>
+								</thead>
+
+								<tbody className="divide-y divide-white/5">
+									{deficiencies.map((deficiency) => (
+										<tr key={deficiency.id} className="transition hover:bg-white/[0.03]">
+											<td className="px-6 py-4 font-semibold text-white">
+												{deficiency.deficiency_number ?? "Unassigned"}
+											</td>
+											<td className="px-6 py-4 text-zinc-300">
+												{deficiency.description ?? "No description provided."}
+											</td>
+											<td className="px-6 py-4 text-zinc-300">
+												{deficiency.priority?.name ?? "Not set"}
+											</td>
+											<td className="px-6 py-4 text-zinc-300">
+												{deficiency.status?.name ?? "Unknown"}
+											</td>
+											<td className="px-6 py-4 text-zinc-400">
+												{formatReportedDate(deficiency.reported_at)}
+											</td>
+										</tr>
+									))}
+								</tbody>
+							</table>
+						</div>
+					)}
+				</div>
+			</div>
+
+			{isModalOpen ? (
+				<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 py-10 backdrop-blur-sm">
+					<div
+						role="dialog"
+						aria-modal="true"
+						className="w-full max-w-2xl rounded-3xl border border-white/10 bg-[#0f0f0f] shadow-[0_30px_90px_rgba(0,0,0,0.55)]"
+					>
+						<div className="border-b border-white/10 px-6 py-5">
+							<h2 className="text-2xl font-black tracking-tight text-white">
+								Report Deficiency
+							</h2>
+							<p className="mt-2 text-sm text-zinc-400">
+								Document operational issues and route them into the readiness workflow.
+							</p>
+						</div>
+
+						<form onSubmit={handleSubmit} className="space-y-6 px-6 py-6">
+							{optionsErrorMessage ? (
+								<div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+									{optionsErrorMessage}
+								</div>
+							) : null}
+
+							{submitErrorMessage ? (
+								<div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+									{submitErrorMessage}
+								</div>
+							) : null}
+
+							{isOptionsLoading ? (
+								<div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4 text-sm text-zinc-400">
+									Loading form options...
+								</div>
+							) : null}
+
+							<div className="grid gap-5 md:grid-cols-2">
+								<label className="block">
+									<span className="mb-2 block text-sm font-semibold text-zinc-200">
+										Category
+									</span>
+									<select
+										value={formState.categoryId}
+										onChange={(event) =>
+											setFormState((current) => ({
+												...current,
+												categoryId: event.target.value,
+											}))
+										}
+										className="w-full rounded-xl border border-white/10 bg-[#151515] px-4 py-3 text-sm text-white outline-none transition focus:border-red-500/50"
+									>
+										<option value="">Select category</option>
+										{categories.map((option) => (
+											<option key={option.id} value={option.id}>
+												{option.label}
+											</option>
+										))}
+									</select>
+								</label>
+
+								<label className="block">
+									<span className="mb-2 block text-sm font-semibold text-zinc-200">
+										Priority
+									</span>
+									<select
+										value={formState.priorityId}
+										onChange={(event) =>
+											setFormState((current) => ({
+												...current,
+												priorityId: event.target.value,
+											}))
+										}
+										className="w-full rounded-xl border border-white/10 bg-[#151515] px-4 py-3 text-sm text-white outline-none transition focus:border-red-500/50"
+									>
+										<option value="">Select priority</option>
+										{priorities.map((option) => (
+											<option key={option.id} value={option.id}>
+												{option.label}
+											</option>
+										))}
+									</select>
+								</label>
+
+								<label className="block md:col-span-2">
+									<span className="mb-2 block text-sm font-semibold text-zinc-200">
+										Apparatus
+									</span>
+									<select
+										value={formState.apparatusId}
+										onChange={(event) =>
+											setFormState((current) => ({
+												...current,
+												apparatusId: event.target.value,
+											}))
+										}
+										className="w-full rounded-xl border border-white/10 bg-[#151515] px-4 py-3 text-sm text-white outline-none transition focus:border-red-500/50"
+									>
+										<option value="">Select apparatus</option>
+										{apparatusOptions.map((option) => (
+											<option key={option.id} value={option.id}>
+												{option.name}
+											</option>
+										))}
+									</select>
+								</label>
+
+								<label className="block md:col-span-2">
+									<span className="mb-2 block text-sm font-semibold text-zinc-200">
+										Description
+									</span>
+									<textarea
+										rows={5}
+										value={formState.description}
+										onChange={(event) =>
+											setFormState((current) => ({
+												...current,
+												description: event.target.value,
+											}))
+										}
+										className="w-full rounded-xl border border-white/10 bg-[#151515] px-4 py-3 text-sm text-white outline-none transition focus:border-red-500/50"
+										placeholder="Describe the issue, impact, and any immediate hazards."
+									/>
+								</label>
+
+								<label className="block md:col-span-2">
+									<span className="mb-2 block text-sm font-semibold text-zinc-200">
+										Location
+									</span>
+									<input
+										type="text"
+										value={formState.location}
+										onChange={(event) =>
+											setFormState((current) => ({
+												...current,
+												location: event.target.value,
+											}))
+										}
+										className="w-full rounded-xl border border-white/10 bg-[#151515] px-4 py-3 text-sm text-white outline-none transition focus:border-red-500/50"
+										placeholder="Example: Officer side compartment 3"
+									/>
+								</label>
+
+								<div className="block md:col-span-2">
+									<span className="mb-2 block text-sm font-semibold text-zinc-200">
+										Photo
+									</span>
+									<div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.03] p-4">
+										<input
+											type="file"
+											className="block w-full text-sm text-zinc-400 file:mr-4 file:rounded-lg file:border-0 file:bg-red-600 file:px-4 file:py-2 file:font-semibold file:text-white hover:file:bg-red-500"
+										/>
+										<p className="mt-2 text-xs text-zinc-500">
+											Photo upload is a placeholder for now and will not be saved yet.
+										</p>
+									</div>
+								</div>
+							</div>
+
+							<div className="flex justify-end gap-3 border-t border-white/10 pt-2">
+								<button
+									type="button"
+									onClick={closeModal}
+									className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-semibold text-zinc-200 transition hover:bg-white/[0.08]"
+								>
+									Cancel
+								</button>
+								<button
+									type="submit"
+									disabled={isSubmitting || isOptionsLoading}
+									className="rounded-xl border border-red-500/30 bg-red-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
+								>
+									{isSubmitting ? "Submitting..." : "Submit Deficiency"}
+								</button>
+							</div>
+						</form>
+					</div>
+				</div>
+			) : null}
+		</main>
 	);
 }
