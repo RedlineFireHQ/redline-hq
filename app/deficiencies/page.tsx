@@ -1,12 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 type Deficiency = {
 	id: string;
 	deficiency_number: string | null;
 	description: string | null;
+	apparatus: {
+		name: string | null;
+	} | null;
 	priority: {
 		name: string | null;
 	} | null;
@@ -133,6 +137,7 @@ function normalizeDeficienciesData(data: unknown[] | null): Deficiency[] {
 			deficiency_number:
 				typeof row.deficiency_number === "string" ? row.deficiency_number : null,
 			description: typeof row.description === "string" ? row.description : null,
+			apparatus: normalizeDeficiencyRelation(row.apparatus),
 			priority: normalizeDeficiencyRelation(row.priority),
 			status: normalizeDeficiencyRelation(row.status),
 			reported_at: typeof row.reported_at === "string" ? row.reported_at : null,
@@ -144,7 +149,7 @@ async function fetchDeficiencies() {
 	const result = await supabase
 		.from("deficiencies")
 		.select(
-			"id, deficiency_number, description, reported_at, priority:deficiency_priorities!fk_deficiencies_priority(name), status:deficiency_statuses!fk_deficiencies_status(name)"
+			"id, deficiency_number, description, reported_at, priority:deficiency_priorities!fk_deficiencies_priority(name), status:deficiency_statuses!fk_deficiencies_status(name), apparatus:apparatus!fk_deficiencies_apparatus(name)"
 		)
 		.order("reported_at", { ascending: false });
 
@@ -201,7 +206,52 @@ function formatReportedDate(value: string | null) {
 	});
 }
 
+function getStatusBadgeClasses(status: string) {
+	const normalizedStatus = status.trim().toLowerCase();
+
+	if (normalizedStatus === "open") {
+		return "bg-red-500/20 text-red-200";
+	}
+
+	if (normalizedStatus === "in progress") {
+		return "bg-amber-400/25 text-amber-100";
+	}
+
+	if (normalizedStatus === "resolved") {
+		return "bg-emerald-500/20 text-emerald-200";
+	}
+
+	return "bg-zinc-500/20 text-zinc-200";
+}
+
+function getPriorityBadgeClasses(priority: string) {
+	const normalizedPriority = priority.trim().toLowerCase();
+
+	if (normalizedPriority === "critical") {
+		return "bg-red-500/20 text-red-200";
+	}
+
+	if (normalizedPriority === "high") {
+		return "bg-orange-500/20 text-orange-200";
+	}
+
+	if (normalizedPriority === "medium") {
+		return "bg-amber-400/25 text-amber-100";
+	}
+
+	if (normalizedPriority === "low") {
+		return "bg-blue-500/20 text-blue-200";
+	}
+
+	if (normalizedPriority === "informational") {
+		return "bg-zinc-500/20 text-zinc-200";
+	}
+
+	return "bg-zinc-500/20 text-zinc-200";
+}
+
 export default function DeficienciesPage() {
+	const router = useRouter();
 	const [deficiencies, setDeficiencies] = useState<Deficiency[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -592,6 +642,7 @@ export default function DeficienciesPage() {
 								<thead className="bg-[#0d0d0d] text-left text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">
 									<tr>
 										<th className="px-6 py-4">Deficiency #</th>
+										<th className="px-6 py-4">Apparatus</th>
 										<th className="px-6 py-4">Description</th>
 										<th className="px-6 py-4">Priority</th>
 										<th className="px-6 py-4">Status</th>
@@ -601,18 +652,49 @@ export default function DeficienciesPage() {
 
 								<tbody className="divide-y divide-white/5">
 									{deficiencies.map((deficiency) => (
-										<tr key={deficiency.id} className="transition hover:bg-white/[0.03]">
+										<tr
+											key={deficiency.id}
+											onClick={() => router.push(`/operations/deficiencies/${deficiency.id}`)}
+											className="transition hover:bg-white/[0.03] cursor-pointer"
+										>
 											<td className="px-6 py-4 font-semibold text-white">
 												{deficiency.deficiency_number ?? "Unassigned"}
+											</td>
+											<td className="px-6 py-4 text-zinc-300">
+												{deficiency.apparatus?.name ?? "Unknown Apparatus"}
 											</td>
 											<td className="px-6 py-4 text-zinc-300">
 												{deficiency.description ?? "No description provided."}
 											</td>
 											<td className="px-6 py-4 text-zinc-300">
-												{deficiency.priority?.name ?? "Not set"}
+												{(() => {
+													const priorityName = deficiency.priority?.name ?? "Not set";
+
+													return (
+														<span
+															className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${getPriorityBadgeClasses(
+																priorityName
+															)}`}
+														>
+															{priorityName}
+														</span>
+													);
+												})()}
 											</td>
 											<td className="px-6 py-4 text-zinc-300">
-												{deficiency.status?.name ?? "Unknown"}
+												{(() => {
+													const statusName = deficiency.status?.name ?? "Unknown";
+
+													return (
+														<span
+															className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusBadgeClasses(
+																statusName
+															)}`}
+														>
+															{statusName}
+														</span>
+													);
+												})()}
 											</td>
 											<td className="px-6 py-4 text-zinc-400">
 												{formatReportedDate(deficiency.reported_at)}
