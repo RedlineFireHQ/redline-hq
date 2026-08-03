@@ -18,6 +18,7 @@ import {
   Settings,
   ChevronDown,
 } from "lucide-react";
+import LogoutButton from "@/components/auth/LogoutButton";
 
 const navigationItems = [
   { label: "Command Center", icon: Home, href: "/" },
@@ -137,6 +138,8 @@ export default function Sidebar() {
           />
 
         </button>
+
+        <LogoutButton />
 
       </div>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -8,6 +8,7 @@ type Deficiency = {
 	id: string;
 	deficiency_number: string | null;
 	description: string | null;
+	location: string | null;
 	apparatus: {
 		name: string | null;
 	} | null;
@@ -42,6 +43,7 @@ type ReportFormState = {
 	apparatusId: string;
 	description: string;
 	location: string;
+	photo: File | null;
 };
 
 const initialFormState: ReportFormState = {
@@ -50,6 +52,7 @@ const initialFormState: ReportFormState = {
 	apparatusId: "",
 	description: "",
 	location: "",
+	photo: null,
 };
 
 function getRecordString(
@@ -137,6 +140,7 @@ function normalizeDeficienciesData(data: unknown[] | null): Deficiency[] {
 			deficiency_number:
 				typeof row.deficiency_number === "string" ? row.deficiency_number : null,
 			description: typeof row.description === "string" ? row.description : null,
+			location: typeof row.location === "string" ? row.location : null,
 			apparatus: normalizeDeficiencyRelation(row.apparatus),
 			priority: normalizeDeficiencyRelation(row.priority),
 			status: normalizeDeficiencyRelation(row.status),
@@ -144,6 +148,8 @@ function normalizeDeficienciesData(data: unknown[] | null): Deficiency[] {
 		};
 	});
 }
+
+type DeficiencyStatusFilter = "all" | "open" | "in progress" | "resolved";
 
 async function fetchDeficiencies() {
 	const result = await supabase
@@ -253,6 +259,8 @@ function getPriorityBadgeClasses(priority: string) {
 export default function DeficienciesPage() {
 	const router = useRouter();
 	const [deficiencies, setDeficiencies] = useState<Deficiency[]>([]);
+	const [searchQuery, setSearchQuery] = useState("");
+	const [statusFilter, setStatusFilter] = useState<DeficiencyStatusFilter>("all");
 	const [isLoading, setIsLoading] = useState(true);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 	const [isModalOpen, setIsModalOpen] = useState(false);
@@ -265,6 +273,35 @@ export default function DeficienciesPage() {
 	const [submitErrorMessage, setSubmitErrorMessage] = useState<string | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [formState, setFormState] = useState<ReportFormState>(initialFormState);
+
+	const filteredDeficiencies = useMemo(() => {
+		const normalizedSearch = searchQuery.trim().toLowerCase();
+
+		return deficiencies.filter((deficiency) => {
+			const statusName = (deficiency.status?.name ?? "").trim().toLowerCase();
+			const statusMatches =
+				statusFilter === "all" || statusName === statusFilter;
+
+			if (!statusMatches) {
+				return false;
+			}
+
+			if (!normalizedSearch) {
+				return true;
+			}
+
+			const searchableFields = [
+				deficiency.deficiency_number ?? "",
+				deficiency.apparatus?.name ?? "",
+				deficiency.description ?? "",
+				deficiency.location ?? "",
+			];
+
+			return searchableFields.some((field) =>
+				field.toLowerCase().includes(normalizedSearch)
+			);
+		});
+	}, [deficiencies, searchQuery, statusFilter]);
 
 	useEffect(() => {
 		let isMounted = true;
@@ -566,7 +603,11 @@ export default function DeficienciesPage() {
 		let insertResult;
 
 		try {
-			insertResult = await supabase.from("deficiencies").insert(payload);
+			insertResult = await supabase
+				.from("deficiencies")
+				.insert(payload)
+				.select("id")
+				.single();
 		} catch (insertException) {
 			console.error("INSERT threw exception (full):", insertException);
 			throw insertException;
@@ -589,6 +630,70 @@ export default function DeficienciesPage() {
 			setSubmitErrorMessage("Unable to submit deficiency right now.");
 			setIsSubmitting(false);
 			return;
+		}
+
+		const insertedDeficiencyId =
+			typeof insertResult.data?.id === "string" ? insertResult.data.id : "";
+
+		if (insertedDeficiencyId && formState.photo) {
+			const originalName = formState.photo.name || "photo.jpg";
+			const sanitizedName = originalName.replace(/[^a-zA-Z0-9.-]/g, "_");
+			const photoPath = `${insertedDeficiencyId}/${Date.now()}-${sanitizedName}`;
+
+			const { data: sessionData } = await supabase.auth.getSession();
+			console.log("SESSION:", sessionData);
+
+			const { data: userData } = await supabase.auth.getUser();
+			console.log("USER:", userData);
+
+			const { error: uploadError } = await supabase.storage
+				.from("deficiency-photos")
+				.upload(photoPath, formState.photo, {
+					cacheControl: "3600",
+					upsert: false,
+				});
+
+			console.log("uploadError:", uploadError);
+			console.log("uploadError?.message:", uploadError?.message);
+			console.log("uploadError?.statusCode:", uploadError?.statusCode);
+			console.log("uploadError?.error:", (uploadError as any)?.error);
+			console.log("photoPath:", photoPath);
+			console.log("formState.photo?.name:", formState.photo?.name);
+			console.log("formState.photo?.size:", formState.photo?.size);
+			console.log("formState.photo?.type:", formState.photo?.type);
+
+			if (uploadError) {
+				console.error("Deficiency photo upload error:", uploadError);
+			} else {
+				const { error: photoPathUpdateError } = await supabase
+					.from("deficiencies")
+					.update({ photo_path: photoPath })
+					.eq("id", insertedDeficiencyId);
+
+				if (photoPathUpdateError) {
+					console.error("Deficiency photo path update error:", photoPathUpdateError);
+				}
+			}
+		}
+
+		if (insertedDeficiencyId) {
+			const { error: historyError } = await supabase
+				.from("deficiency_history")
+				.insert({
+					deficiency_id: insertedDeficiencyId,
+					event_type: "Reported",
+					event_description: "Deficiency reported.",
+					member_id: null,
+				});
+
+			if (historyError) {
+				console.error("Deficiency history insert full error:", historyError);
+			}
+		} else {
+			console.error(
+				"Deficiency history insert skipped: inserted deficiency id missing.",
+				insertResult.data
+			);
 		}
 
 		await reloadDeficiencies();
@@ -623,6 +728,50 @@ export default function DeficienciesPage() {
 					</button>
 				</div>
 
+				<div className="rounded-2xl border border-white/10 bg-[#111111] px-5 py-4 shadow-[0_14px_34px_rgba(0,0,0,0.25)]">
+					<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+						<div className="w-full lg:max-w-lg">
+							<label htmlFor="deficiency-search" className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">
+								Search Active Deficiencies
+							</label>
+							<input
+								id="deficiency-search"
+								type="text"
+								value={searchQuery}
+								onChange={(event) => setSearchQuery(event.target.value)}
+								placeholder="Search by deficiency #, apparatus, description, or location"
+								className="w-full rounded-xl border border-white/10 bg-[#151515] px-4 py-3 text-sm text-white outline-none transition focus:border-red-500/50"
+							/>
+						</div>
+
+						<div className="flex flex-wrap gap-2">
+							{([
+								{ key: "all", label: "All" },
+								{ key: "open", label: "Open" },
+								{ key: "in progress", label: "In Progress" },
+								{ key: "resolved", label: "Resolved" },
+							] as Array<{ key: DeficiencyStatusFilter; label: string }>).map((filter) => {
+								const isActive = statusFilter === filter.key;
+
+								return (
+									<button
+										key={filter.key}
+										type="button"
+										onClick={() => setStatusFilter(filter.key)}
+										className={`rounded-xl border px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] transition ${
+											isActive
+												? "border-red-500/60 bg-red-500/20 text-red-100"
+												: "border-white/10 bg-white/[0.03] text-zinc-300 hover:bg-white/[0.08]"
+										}`}
+									>
+										{filter.label}
+									</button>
+								);
+							})}
+						</div>
+					</div>
+				</div>
+
 				<div className="overflow-hidden rounded-2xl border border-white/10 bg-[#111111] shadow-[0_24px_60px_rgba(0,0,0,0.35)]">
 					<div className="border-b border-white/10 px-6 py-4">
 						<h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-zinc-300">
@@ -634,7 +783,7 @@ export default function DeficienciesPage() {
 						<div className="px-6 py-10 text-sm text-zinc-400">Loading deficiencies...</div>
 					) : errorMessage ? (
 						<div className="px-6 py-10 text-sm text-red-300">{errorMessage}</div>
-					) : deficiencies.length === 0 ? (
+					) : filteredDeficiencies.length === 0 ? (
 						<div className="px-6 py-10 text-sm text-zinc-400">No deficiencies found.</div>
 					) : (
 						<div className="overflow-x-auto">
@@ -651,7 +800,7 @@ export default function DeficienciesPage() {
 								</thead>
 
 								<tbody className="divide-y divide-white/5">
-									{deficiencies.map((deficiency) => (
+									{filteredDeficiencies.map((deficiency) => (
 										<tr
 											key={deficiency.id}
 											onClick={() => router.push(`/operations/deficiencies/${deficiency.id}`)}
@@ -856,10 +1005,18 @@ export default function DeficienciesPage() {
 									<div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.03] p-4">
 										<input
 											type="file"
+											accept="image/jpeg,image/png,image/heic,image/heif,.jpg,.jpeg,.png,.heic,.heif"
+											onChange={(event) => {
+												const selectedFile = event.target.files?.[0] ?? null;
+												setFormState((current) => ({
+													...current,
+													photo: selectedFile,
+												}));
+											}}
 											className="block w-full text-sm text-zinc-400 file:mr-4 file:rounded-lg file:border-0 file:bg-red-600 file:px-4 file:py-2 file:font-semibold file:text-white hover:file:bg-red-500"
 										/>
 										<p className="mt-2 text-xs text-zinc-500">
-											Photo upload is a placeholder for now and will not be saved yet.
+											Photo is optional. Supported formats include JPG, PNG, and HEIC (when supported by your browser).
 										</p>
 									</div>
 								</div>
