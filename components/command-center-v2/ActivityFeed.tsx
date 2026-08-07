@@ -3,7 +3,7 @@ import SectionHeader from "./SectionHeader";
 const activity = [
   {
     time: "09:14",
-       title: "Engine 430 Daily Check Completed",
+       title: "Engine 430 Apparatus Check Completed",
     user: "Capt. Smith",
   },
   {

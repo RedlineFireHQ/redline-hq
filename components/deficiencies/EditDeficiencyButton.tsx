@@ -64,6 +64,26 @@ function normalizeSelectOption(record: Record<string, unknown>): SelectOption {
 	return { id, label };
 }
 
+function resolveOptionId(options: SelectOption[], rawValue: string | null | undefined) {
+	const normalizedRawValue = rawValue?.trim();
+
+	if (!normalizedRawValue) {
+		return "";
+	}
+
+	const exactIdMatch = options.find((option) => option.id === normalizedRawValue);
+
+	if (exactIdMatch) {
+		return exactIdMatch.id;
+	}
+
+	const labelMatch = options.find(
+		(option) => option.label.trim().toLowerCase() === normalizedRawValue.toLowerCase()
+	);
+
+	return labelMatch?.id ?? normalizedRawValue;
+}
+
 export default function EditDeficiencyButton({
 	deficiencyId,
 	initialApparatusId,
@@ -84,6 +104,8 @@ export default function EditDeficiencyButton({
 	const [priorityOptions, setPriorityOptions] = useState<SelectOption[]>([]);
 	const [statusOptions, setStatusOptions] = useState<SelectOption[]>([]);
 	const [formState, setFormState] = useState<FormState>(initialFormState);
+	const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+	const [isPhotoLoading, setIsPhotoLoading] = useState(false);
 
 	useEffect(() => {
 		if (!isModalOpen) {
@@ -94,9 +116,10 @@ export default function EditDeficiencyButton({
 
 		async function loadOptions() {
 			setIsOptionsLoading(true);
+			setIsPhotoLoading(true);
 			setOptionsError(null);
 
-			const [apparatusResult, categoriesResult, prioritiesResult, statusesResult] =
+			const [apparatusResult, categoriesResult, prioritiesResult, statusesResult, deficiencyResult] =
 				await Promise.all([
 					supabase.from("apparatus").select("*").order("name"),
 					supabase
@@ -111,6 +134,11 @@ export default function EditDeficiencyButton({
 						.from("deficiency_statuses")
 						.select("*")
 						.order("display_order"),
+					supabase
+						.from("deficiencies")
+						.select("photo_path")
+						.eq("id", deficiencyId)
+						.maybeSingle(),
 				]);
 
 			if (!isMounted) {
@@ -131,6 +159,7 @@ export default function EditDeficiencyButton({
 						"Unable to load edit options."
 				);
 				setIsOptionsLoading(false);
+				setIsPhotoLoading(false);
 				return;
 			}
 
@@ -139,22 +168,48 @@ export default function EditDeficiencyButton({
 					normalizeSelectOption(record as Record<string, unknown>)
 				)
 			);
-			setCategoryOptions(
-				(categoriesResult.data ?? []).map((record) =>
-					normalizeSelectOption(record as Record<string, unknown>)
-				)
+
+			const normalizedCategoryOptions = (categoriesResult.data ?? []).map((record) =>
+				normalizeSelectOption(record as Record<string, unknown>)
 			);
-			setPriorityOptions(
-				(prioritiesResult.data ?? []).map((record) =>
-					normalizeSelectOption(record as Record<string, unknown>)
-				)
+			const normalizedPriorityOptions = (prioritiesResult.data ?? []).map((record) =>
+				normalizeSelectOption(record as Record<string, unknown>)
 			);
-			setStatusOptions(
-				(statusesResult.data ?? []).map((record) =>
-					normalizeSelectOption(record as Record<string, unknown>)
-				)
+			const normalizedStatusOptions = (statusesResult.data ?? []).map((record) =>
+				normalizeSelectOption(record as Record<string, unknown>)
 			);
+
+			setCategoryOptions(normalizedCategoryOptions);
+			setPriorityOptions(normalizedPriorityOptions);
+			setStatusOptions(normalizedStatusOptions);
+			setFormState((current) => ({
+				...current,
+				priorityId: resolveOptionId(
+					normalizedPriorityOptions,
+					current.priorityId || initialPriorityId
+				),
+				statusId: resolveOptionId(
+					normalizedStatusOptions,
+					current.statusId || initialStatusId
+				),
+			}));
+
+			if (deficiencyResult.error) {
+				console.error("Unable to load deficiency photo path:", deficiencyResult.error);
+				setPhotoUrl(null);
+			} else {
+				const photoPathValue = deficiencyResult.data?.photo_path;
+				const photoPath = typeof photoPathValue === "string" ? photoPathValue : null;
+				const resolvedPhotoUrl = photoPath
+					? supabase.storage.from("deficiency-photos").getPublicUrl(photoPath).data
+							.publicUrl
+					: null;
+
+				setPhotoUrl(resolvedPhotoUrl);
+			}
+
 			setIsOptionsLoading(false);
+			setIsPhotoLoading(false);
 		}
 
 		loadOptions();
@@ -167,14 +222,34 @@ export default function EditDeficiencyButton({
 	function openModal() {
 		setSaveError(null);
 		setOptionsError(null);
-		setFormState({
+
+		const initializedFormState = {
 			apparatusId: initialApparatusId ?? "",
 			description: initialDescription ?? "",
 			location: initialLocation ?? "",
 			categoryId: initialCategoryId ?? "",
 			priorityId: initialPriorityId ?? "",
 			statusId: initialStatusId ?? "",
+		};
+
+		console.log("[edit-deficiency] selected deficiency snapshot", {
+			deficiencyId,
+			initialApparatusId,
+			initialDescription,
+			initialLocation,
+			initialCategoryId,
+			initialPriorityId,
+			initialStatusId,
 		});
+
+		console.log("[edit-deficiency] initialized form state values", {
+			priorityId: initializedFormState.priorityId,
+			statusId: initializedFormState.statusId,
+			formState: initializedFormState,
+		});
+
+		setFormState(initializedFormState);
+		setPhotoUrl(null);
 		setIsModalOpen(true);
 	}
 
@@ -186,6 +261,7 @@ export default function EditDeficiencyButton({
 		setIsModalOpen(false);
 		setSaveError(null);
 		setOptionsError(null);
+		setPhotoUrl(null);
 	}
 
 	async function handleSave(event: React.FormEvent<HTMLFormElement>) {
@@ -414,6 +490,38 @@ export default function EditDeficiencyButton({
 										placeholder="Example: Officer side compartment 3"
 									/>
 								</label>
+
+								<div className="block md:col-span-2">
+									<span className="mb-2 block text-sm font-semibold text-zinc-200">
+										Current Photo
+									</span>
+
+									{isPhotoLoading ? (
+										<div className="rounded-xl border border-white/10 bg-[#151515] px-4 py-3 text-sm text-zinc-400">
+											Loading photo...
+										</div>
+									) : photoUrl ? (
+										<div>
+											<a
+												href={photoUrl}
+												target="_blank"
+												rel="noreferrer"
+												className="inline-block overflow-hidden rounded-lg border border-white/10 transition hover:border-red-500/40"
+											>
+												<img
+													src={photoUrl}
+													alt="Deficiency photo"
+													className="h-40 w-auto max-w-full object-cover"
+												/>
+											</a>
+											<p className="mt-2 text-xs text-zinc-500">Click image to open full size.</p>
+										</div>
+									) : (
+										<div className="rounded-xl border border-white/10 bg-[#151515] px-4 py-3 text-sm text-zinc-500">
+											No photo uploaded.
+										</div>
+									)}
+								</div>
 							</div>
 
 							<div className="flex justify-end gap-3 border-t border-white/10 pt-2">

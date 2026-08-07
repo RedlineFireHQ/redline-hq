@@ -22,7 +22,7 @@ export default function MyReadinessPanel() {
       type: "good",
     },
     {
-      title: "Engine 430 Daily Check",
+      title: "Engine 430 Apparatus Check",
       status: "Due Today",
       type: "warning",
     },

@@ -2,7 +2,7 @@ import SectionHeader from "./SectionHeader";
 
 const tasks = [
   {
-    title: "Complete Engine 430 Daily Check",
+    title: "Complete Engine 430 Apparatus Check",
     due: "Due Today",
     priority: "HIGH",
     completed: false,

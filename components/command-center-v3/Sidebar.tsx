@@ -19,6 +19,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import LogoutButton from "@/components/auth/LogoutButton";
+import { useAuth } from "@/components/auth/AuthProvider";
 
 const navigationItems = [
   { label: "Command Center", icon: Home, href: "/" },
@@ -37,6 +38,18 @@ const navigationItems = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { member, user } = useAuth();
+
+  const memberFirstName =
+    typeof member?.first_name === "string" ? member.first_name.trim() : "";
+  const memberLastName =
+    typeof member?.last_name === "string" ? member.last_name.trim() : "";
+  const fullName = `${memberFirstName} ${memberLastName}`.trim();
+  const displayName = fullName || user?.email?.trim() || "Unknown User";
+  const displayRole =
+    typeof member?.role === "string" && member.role.trim()
+      ? member.role.trim()
+      : "Firefighter";
 
   const isActivePath = (href: string) => {
     if (href === "/") {
@@ -123,11 +136,11 @@ export default function Sidebar() {
           <div className="flex-1 text-left">
 
             <div className="text-[15px] font-semibold text-white">
-              Adam Smith
+              {displayName}
             </div>
 
             <div className="text-[12px] text-zinc-400">
-              Administrator
+              {displayRole}
             </div>
 
           </div>

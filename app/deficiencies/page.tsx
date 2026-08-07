@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import PageLayout from "@/components/layout/PageLayout";
 
 type Deficiency = {
 	id: string;
@@ -258,6 +259,14 @@ function getPriorityBadgeClasses(priority: string) {
 
 export default function DeficienciesPage() {
 	const router = useRouter();
+	const searchParams = useSearchParams();
+	const returnToParam = searchParams.get("returnTo");
+	const apparatusIdParam = searchParams.get("apparatusId");
+	const safeReturnTo =
+		typeof returnToParam === "string" && returnToParam.startsWith("/")
+			? returnToParam
+			: null;
+	const hasInspectionReturnTarget = Boolean(safeReturnTo);
 	const [deficiencies, setDeficiencies] = useState<Deficiency[]>([]);
 	const [searchQuery, setSearchQuery] = useState("");
 	const [statusFilter, setStatusFilter] = useState<DeficiencyStatusFilter>("all");
@@ -273,6 +282,22 @@ export default function DeficienciesPage() {
 	const [submitErrorMessage, setSubmitErrorMessage] = useState<string | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [formState, setFormState] = useState<ReportFormState>(initialFormState);
+	const [hasAutoOpenedFromReturnTarget, setHasAutoOpenedFromReturnTarget] = useState(false);
+
+	function buildReportDeficiencyHref() {
+		const params = new URLSearchParams();
+
+		if (safeReturnTo) {
+			params.set("returnTo", safeReturnTo);
+		}
+
+		if (apparatusIdParam) {
+			params.set("apparatusId", apparatusIdParam);
+		}
+
+		const query = params.toString();
+		return query ? `/deficiencies/report?${query}` : "/deficiencies/report";
+	}
 
 	const filteredDeficiencies = useMemo(() => {
 		const normalizedSearch = searchQuery.trim().toLowerCase();
@@ -435,8 +460,30 @@ export default function DeficienciesPage() {
 	function openModal() {
 		setSubmitErrorMessage(null);
 		setOptionsErrorMessage(null);
+		if (apparatusIdParam) {
+			setFormState((current) => ({
+				...current,
+				apparatusId: current.apparatusId || apparatusIdParam,
+			}));
+		}
 		setIsModalOpen(true);
 	}
+
+	useEffect(() => {
+		if (!hasInspectionReturnTarget || hasAutoOpenedFromReturnTarget || isModalOpen) {
+			return;
+		}
+
+		router.push(buildReportDeficiencyHref());
+		setHasAutoOpenedFromReturnTarget(true);
+	}, [
+		hasAutoOpenedFromReturnTarget,
+		hasInspectionReturnTarget,
+		isModalOpen,
+		router,
+		safeReturnTo,
+		apparatusIdParam,
+	]);
 
 	useEffect(() => {
 		let isMounted = true;
@@ -534,6 +581,13 @@ export default function DeficienciesPage() {
 					normalizeApparatusOption(record as Record<string, unknown>)
 				)
 			);
+
+			if (apparatusIdParam) {
+				setFormState((current) => ({
+					...current,
+					apparatusId: current.apparatusId || apparatusIdParam,
+				}));
+			}
 			setIsOptionsLoading(false);
 		}
 
@@ -542,7 +596,7 @@ export default function DeficienciesPage() {
 		return () => {
 			isMounted = false;
 		};
-	}, [isModalOpen]);
+	}, [isModalOpen, apparatusIdParam]);
 
 	async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
 		event.preventDefault();
@@ -585,60 +639,14 @@ export default function DeficienciesPage() {
 		setIsSubmitting(true);
 		setSubmitErrorMessage(null);
 
-		const now = new Date().toISOString();
-		const payload = {
-			category_id: formState.categoryId,
-			priority: formState.priorityId,
-			apparatus_id: formState.apparatusId,
-			description: formState.description.trim(),
-			location: formState.location.trim() || null,
-			reported_at: now,
-			created_at: now,
-			status: openStatusId,
-		};
+		const deficiencyId = crypto.randomUUID();
+		let uploadedPhotoPath: string | null = null;
+		let didPhotoUploadSucceed = false;
 
-		console.log("Deficiency insert payload:", payload);
-		console.log("INSERT PRE-CALL payload object:", payload);
-
-		let insertResult;
-
-		try {
-			insertResult = await supabase
-				.from("deficiencies")
-				.insert(payload)
-				.select("id")
-				.single();
-		} catch (insertException) {
-			console.error("INSERT threw exception (full):", insertException);
-			throw insertException;
-		}
-
-		console.log("INSERT POST-CALL Supabase result:", insertResult);
-		console.log("INSERT POST-CALL data:", insertResult.data);
-		console.log("INSERT POST-CALL error:", insertResult.error);
-		console.log("INSERT POST-CALL status:", insertResult.status);
-		console.log("INSERT POST-CALL statusText:", insertResult.statusText);
-
-		const { error } = insertResult;
-
-		if (error) {
-			console.error("Submit deficiency error code:", error.code);
-			console.error("Submit deficiency error message:", error.message);
-			console.error("Submit deficiency error details:", error.details);
-			console.error("Submit deficiency error hint:", error.hint);
-			console.error("Submit deficiency error:", error);
-			setSubmitErrorMessage("Unable to submit deficiency right now.");
-			setIsSubmitting(false);
-			return;
-		}
-
-		const insertedDeficiencyId =
-			typeof insertResult.data?.id === "string" ? insertResult.data.id : "";
-
-		if (insertedDeficiencyId && formState.photo) {
+		if (formState.photo) {
 			const originalName = formState.photo.name || "photo.jpg";
 			const sanitizedName = originalName.replace(/[^a-zA-Z0-9.-]/g, "_");
-			const photoPath = `${insertedDeficiencyId}/${Date.now()}-${sanitizedName}`;
+			const photoPath = `${deficiencyId}/${Date.now()}-${sanitizedName}`;
 
 			const { data: sessionData } = await supabase.auth.getSession();
 			console.log("SESSION:", sessionData);
@@ -665,16 +673,65 @@ export default function DeficienciesPage() {
 			if (uploadError) {
 				console.error("Deficiency photo upload error:", uploadError);
 			} else {
-				const { error: photoPathUpdateError } = await supabase
-					.from("deficiencies")
-					.update({ photo_path: photoPath })
-					.eq("id", insertedDeficiencyId);
-
-				if (photoPathUpdateError) {
-					console.error("Deficiency photo path update error:", photoPathUpdateError);
-				}
+				uploadedPhotoPath = photoPath;
+				didPhotoUploadSucceed = true;
 			}
 		}
+
+		const now = new Date().toISOString();
+		const payload = {
+			id: deficiencyId,
+			category_id: formState.categoryId,
+			priority: formState.priorityId,
+			apparatus_id: formState.apparatusId,
+			description: formState.description.trim(),
+			location: formState.location.trim() || null,
+			reported_at: now,
+			created_at: now,
+			status: openStatusId,
+			photo_path: uploadedPhotoPath,
+		};
+
+		console.log("Deficiency insert payload:", payload);
+		console.log("INSERT PRE-CALL payload object:", payload);
+		console.log("INSERT PRE-CALL payload id:", payload.id);
+		console.log("INSERT PRE-CALL payload photo_path:", payload.photo_path);
+		console.log("INSERT PRE-CALL upload success:", didPhotoUploadSucceed);
+
+		let insertResult;
+
+		try {
+			insertResult = await supabase
+				.from("deficiencies")
+				.insert(payload)
+				.select("id")
+				.single();
+		} catch (insertException) {
+			console.error("INSERT threw exception (full):", insertException);
+			throw insertException;
+		}
+
+		console.log("INSERT POST-CALL Supabase result:", insertResult);
+		console.log("INSERT POST-CALL data:", insertResult.data);
+		console.log("INSERT POST-CALL error:", insertResult.error);
+		console.log("INSERT POST-CALL status:", insertResult.status);
+		console.log("INSERT POST-CALL statusText:", insertResult.statusText);
+
+		const { error } = insertResult;
+
+		if (error) {
+			console.error("error.code:", error.code);
+			console.error("error.message:", error.message);
+			console.error("error.details:", error.details);
+			console.error("error.hint:", error.hint);
+			console.error("error.fullJson:", JSON.stringify(error, null, 2));
+			setSubmitErrorMessage("Unable to submit deficiency right now.");
+			setIsSubmitting(false);
+			return;
+		}
+
+		const insertedDeficiencyId =
+			typeof insertResult.data?.id === "string" ? insertResult.data.id : deficiencyId;
 
 		if (insertedDeficiencyId) {
 			const { error: historyError } = await supabase
@@ -696,14 +753,21 @@ export default function DeficienciesPage() {
 			);
 		}
 
+		if (safeReturnTo) {
+			setIsSubmitting(false);
+			router.push(safeReturnTo);
+			return;
+		}
+
 		await reloadDeficiencies();
 		closeModal();
 		setIsSubmitting(false);
 	}
 
 	return (
-		<main className="min-h-screen bg-[#090909] px-6 py-10 text-white">
-			<div className="mx-auto flex w-full max-w-7xl flex-col gap-8">
+		<PageLayout>
+			<main className="min-h-screen bg-[#090909] px-6 py-10 text-white">
+				<div className="mx-auto flex w-full max-w-7xl flex-col gap-8">
 				<div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
 					<div>
 						<p className="text-sm font-semibold uppercase tracking-[0.28em] text-red-500">
@@ -721,7 +785,7 @@ export default function DeficienciesPage() {
 
 					<button
 						type="button"
-						onClick={openModal}
+						onClick={() => router.push(buildReportDeficiencyHref())}
 						className="inline-flex items-center justify-center rounded-xl border border-red-500/30 bg-red-600 px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(184,18,18,0.25)] transition hover:bg-red-500"
 					>
 						Report Deficiency
@@ -855,10 +919,10 @@ export default function DeficienciesPage() {
 						</div>
 					)}
 				</div>
-			</div>
+				</div>
 
-			{isModalOpen ? (
-				<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 py-10 backdrop-blur-sm">
+				{isModalOpen ? (
+					<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 py-10 backdrop-blur-sm">
 					<div
 						role="dialog"
 						aria-modal="true"
@@ -1040,8 +1104,9 @@ export default function DeficienciesPage() {
 							</div>
 						</form>
 					</div>
-				</div>
-			) : null}
-		</main>
+					</div>
+				) : null}
+			</main>
+		</PageLayout>
 	);
 }

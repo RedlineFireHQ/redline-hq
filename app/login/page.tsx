@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
+import PageLayout from "@/components/layout/PageLayout";
 
 export default function LoginPage() {
 	const router = useRouter();
@@ -50,27 +51,28 @@ export default function LoginPage() {
 	}
 
 	return (
-		<div className="relative min-h-screen overflow-hidden text-white">
-			<div
-				className="fixed inset-0 -z-20 bg-cover bg-center bg-no-repeat"
-				style={{
-					backgroundImage: "url('/branding-images/redline-hq-login-hero-v1.png')",
-				}}
-			/>
-			<div
-				className="fixed inset-0 -z-10"
-				style={{
-					background:
-						"linear-gradient(90deg, rgba(0,0,0,0.20) 0%, rgba(0,0,0,0.35) 50%, rgba(0,0,0,0.65) 100%)",
-				}}
-			/>
-
-			<div className="relative flex min-h-screen items-center justify-center px-6 py-8 lg:justify-end lg:px-10 xl:px-16">
+		<PageLayout>
+			<div className="relative min-h-screen overflow-hidden text-white">
 				<div
-					className={`w-full max-w-[460px] rounded-[24px] border border-[rgba(255,255,255,0.08)] bg-[rgba(10,10,10,0.48)] px-12 py-[38px] shadow-[0_16px_38px_rgba(0,0,0,0.30)] backdrop-blur-2xl transition-opacity duration-200 ease-out lg:translate-x-12 ${
-						isReady ? "opacity-100" : "opacity-0"
-					}`}
-				>
+					className="fixed inset-0 -z-20 bg-cover bg-center bg-no-repeat"
+					style={{
+						backgroundImage: "url('/branding-images/redline-hq-login-hero-v1.png')",
+					}}
+				/>
+				<div
+					className="fixed inset-0 -z-10"
+					style={{
+						background:
+							"linear-gradient(90deg, rgba(0,0,0,0.20) 0%, rgba(0,0,0,0.35) 50%, rgba(0,0,0,0.65) 100%)",
+					}}
+				/>
+
+				<div className="relative flex min-h-screen items-center justify-center px-6 py-8 lg:justify-end lg:px-10 xl:px-16">
+					<div
+						className={`w-full max-w-[460px] rounded-[24px] border border-[rgba(255,255,255,0.08)] bg-[rgba(10,10,10,0.48)] px-12 py-[38px] shadow-[0_16px_38px_rgba(0,0,0,0.30)] backdrop-blur-2xl transition-opacity duration-200 ease-out lg:translate-x-12 ${
+							isReady ? "opacity-100" : "opacity-0"
+						}`}
+					>
 					<div className="mb-7">
 						<p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">
 							Redline HQ
@@ -134,8 +136,9 @@ export default function LoginPage() {
 							{isSubmitting || isLoading ? "Signing in..." : "Enter Command Center"}
 						</button>
 					</form>
+					</div>
 				</div>
 			</div>
-		</div>
+		</PageLayout>
 	);
 }

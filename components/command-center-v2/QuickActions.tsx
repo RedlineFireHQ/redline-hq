@@ -2,7 +2,7 @@ import SectionHeader from "./SectionHeader";
 
 const actions = [
   {
-    title: "Daily Checks",
+    title: "Apparatus Checks",
     subtitle: "Inspect apparatus",
     icon: "🚒",
   },

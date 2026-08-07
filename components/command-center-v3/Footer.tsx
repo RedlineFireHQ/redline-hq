@@ -5,7 +5,7 @@ export default function Footer() {
     <footer className="flex h-12 items-center justify-center">
       <div className="flex items-center gap-3 text-[16px] font-[700] tracking-[0.14em]">
         <Image
-          src="/logos/redline-brand-mark.png"
+          src="/branding/logos/redline-brand-mark.png"
           alt="Redline HQ"
           width={60}
           height={60}

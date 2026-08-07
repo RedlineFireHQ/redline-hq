@@ -19,7 +19,7 @@ export default function WeatherPanel() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <Image
-          src="/logos/redline-weather-logo.png"
+          src="/branding/logos/redline-weather-logo.png"
           alt="Redline HQ Weather"
           width={180}
           height={30}

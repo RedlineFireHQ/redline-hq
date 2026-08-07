@@ -2,11 +2,13 @@
 
 import Image from "next/image";
 import { ChevronRight, CheckCircle2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import PrimaryActionButton from "./PrimaryActionButton";
 
 const apparatus = [
   {
     id: 1,
+    routeId: "pumper-430",
     name: "Pumper 430",
     type: "Pumper",
     image: "/apparatus/elliott/pumper-430.jpg",
@@ -17,6 +19,7 @@ const apparatus = [
   },
   {
     id: 2,
+    routeId: "pumper-432",
     name: "Pumper 432",
     type: "Pumper",
     image: "/apparatus/elliott/pumper-432.jpg",
@@ -27,6 +30,7 @@ const apparatus = [
   },
   {
     id: 3,
+    routeId: "tanker-445",
     name: "Tanker 445",
     type: "Tanker",
     image: "/apparatus/elliott/tanker-445.jpg",
@@ -37,6 +41,7 @@ const apparatus = [
   },
   {
     id: 4,
+    routeId: "brush-420",
     name: "Brush 420",
     type: "Brush",
     image: "/apparatus/elliott/brush-420.jpg",
@@ -47,6 +52,7 @@ const apparatus = [
   },
   {
     id: 5,
+    routeId: "brush-421",
     name: "Brush 421",
     type: "Brush",
     image: "/apparatus/elliott/brush-421.jpg",
@@ -58,6 +64,12 @@ const apparatus = [
 ];
 
 export default function ApparatusPanel() {
+  const router = useRouter();
+
+  function handleCardNavigation(routeId: string) {
+    router.push(`/apparatus/${routeId}/daily-check`);
+  }
+
   return (
     <section className="relative overflow-hidden rounded-[22px] border border-white/10 bg-[#101010] shadow-[0_20px_60px_rgba(0,0,0,.45)]">
 
@@ -110,7 +122,16 @@ export default function ApparatusPanel() {
 
               <div
                 key={truck.id}
-                className="group w-[260px] flex-shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-[#111111] text-left transition-all duration-300 hover:-translate-y-1 hover:border-red-500/40 hover:shadow-[0_18px_45px_rgba(239,43,45,.18)]"
+                role="button"
+                tabIndex={0}
+                onClick={() => handleCardNavigation(truck.routeId)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    handleCardNavigation(truck.routeId);
+                  }
+                }}
+                className="group w-[260px] flex-shrink-0 cursor-pointer overflow-hidden rounded-2xl border border-white/10 bg-[#111111] text-left transition-all duration-300 hover:-translate-y-1 hover:border-red-500/40 hover:shadow-[0_18px_45px_rgba(239,43,45,.18)]"
               >
 
                 {/* Photo */}

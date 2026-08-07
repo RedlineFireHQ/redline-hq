@@ -59,7 +59,7 @@ export default function ReadinessCard() {
     if (readiness >= 90) {
       setStatus("REDLINE READY");
       setMessage(
-        "Department readiness is excellent. Continue completing daily checks and maintaining certifications."
+        "Department readiness is excellent. Continue completing apparatus checks and maintaining certifications."
       );
     } else if (readiness >= 75) {
       setStatus("MISSION READY");

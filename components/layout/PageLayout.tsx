@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import Sidebar from "@/components/command-center-v3/Sidebar";
 import Header from "@/components/command-center-v3/Header";
+import Footer from "@/components/command-center-v3/Footer";
 
 interface PageLayoutProps {
   children: ReactNode;
@@ -22,6 +23,10 @@ export default function PageLayout({
               {children}
             </div>
           </main>
+
+          <div className="border-t border-white/10 bg-neutral-950 px-4 lg:px-6 xl:px-8">
+            <Footer />
+          </div>
         </div>
       </div>
     </div>

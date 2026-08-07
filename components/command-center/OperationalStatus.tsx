@@ -98,7 +98,7 @@ export default function OperationalStatus() {
 
         <div className="rounded-xl bg-neutral-900 p-4">
           <p className="text-[10px] uppercase text-neutral-500">
-            Daily Checks
+            Apparatus Checks
           </p>
 
           <p className="mt-2 text-3xl font-bold text-yellow-400">

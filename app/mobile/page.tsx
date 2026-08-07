@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import PageLayout from "@/components/layout/PageLayout";
 import {
 	Activity,
 	AlertTriangle,
@@ -118,7 +119,7 @@ export default function MobilePage() {
 	const innerTickCount = 36;
 
 	return (
-		<>
+		<PageLayout>
 			<main className="min-h-screen overscroll-y-none bg-[#020202] px-3 py-5 text-white">
 			<div className="mx-auto w-full max-w-[420px] overflow-hidden rounded-[44px] border border-white/20 bg-[#050505] shadow-[0_40px_100px_rgba(0,0,0,0.75)]">
 				<div className="pointer-events-none fixed left-1/2 top-5 z-0 h-[280px] w-[calc(100%-24px)] max-w-[420px] -translate-x-1/2 overflow-hidden rounded-[44px] border-b border-white/10">
@@ -341,6 +342,6 @@ export default function MobilePage() {
 					}
 				}
 			`}</style>
-		</>
+		</PageLayout>
 	);
 }

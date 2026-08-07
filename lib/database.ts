@@ -1,5 +1,24 @@
 import { supabase } from "./supabase";
 
+async function getOpenDeficiencyStatusId() {
+  const { data, error } = await supabase
+    .from("deficiency_statuses")
+    .select("id, name")
+    .order("display_order", { ascending: true });
+
+  if (error) {
+    console.error(error);
+    return null;
+  }
+
+  const openStatus = (data ?? []).find((row) => {
+    const record = row as Record<string, unknown>;
+    return typeof record.name === "string" && record.name.trim().toLowerCase() === "open";
+  }) as Record<string, unknown> | undefined;
+
+  return typeof openStatus?.id === "string" ? openStatus.id : null;
+}
+
 export async function getApparatus() {
   const { data, error } = await supabase
     .from("apparatus")
@@ -12,6 +31,41 @@ export async function getApparatus() {
   }
 
   return data;
+}
+
+export async function getOpenDeficiencyCountsByApparatusIds(apparatusIds: string[]) {
+  if (apparatusIds.length === 0) {
+    return {};
+  }
+
+  const openStatusId = await getOpenDeficiencyStatusId();
+
+  if (!openStatusId) {
+    return {};
+  }
+
+  const { data, error } = await supabase
+    .from("deficiencies")
+    .select("apparatus_id")
+    .eq("status", openStatusId)
+    .in("apparatus_id", apparatusIds);
+
+  if (error) {
+    console.error(error);
+    return {};
+  }
+
+  return (data ?? []).reduce<Record<string, number>>((accumulator, row) => {
+    const record = row as Record<string, unknown>;
+    const apparatusId = typeof record.apparatus_id === "string" ? record.apparatus_id : "";
+
+    if (!apparatusId) {
+      return accumulator;
+    }
+
+    accumulator[apparatusId] = (accumulator[apparatusId] ?? 0) + 1;
+    return accumulator;
+  }, {});
 }
 
 export async function getApparatusById(id: string) {

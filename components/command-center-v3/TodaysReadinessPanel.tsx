@@ -47,7 +47,7 @@ export default function TodaysReadinessPanel() {
           <div className="pointer-events-none absolute right-[-95px] top-[-170px] h-[485px] w-[485px]">
 
             <Image
-              src="/images/todays-readiness-shield.png"
+              src="/branding/images/todays-readiness-shield.png"
               alt="Today's Readiness Shield"
               fill
               priority

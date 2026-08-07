@@ -29,12 +29,14 @@ export default function ResolveDeficiencyButton({
 	const [isResolving, setIsResolving] = useState(false);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 	const [isResolvedState, setIsResolvedState] = useState(isResolved);
+	const [createMaintenanceAfterResolve, setCreateMaintenanceAfterResolve] = useState(true);
 
 	async function openModal() {
 		setIsLoadingContext(true);
 		setErrorMessage(null);
 		setRepairNotes("");
 		setSelectedResolvedByMemberId("");
+		setCreateMaintenanceAfterResolve(true);
 		setIsModalOpen(true);
 
 		const [{ data: members, error: membersError }, { data: statuses, error: statusesError }] =
@@ -162,6 +164,12 @@ export default function ResolveDeficiencyButton({
 		setIsResolving(false);
 		setIsResolvedState(true);
 		setIsModalOpen(false);
+
+		if (createMaintenanceAfterResolve) {
+			router.push(`/maintenance?create=1&deficiencyId=${deficiencyId}`);
+			return;
+		}
+
 		router.refresh();
 	}
 
@@ -238,6 +246,20 @@ export default function ResolveDeficiencyButton({
 												);
 											})}
 										</select>
+									</label>
+
+									<label className="flex items-center gap-3 rounded-xl border border-white/10 bg-[#151515] px-4 py-3">
+										<input
+											type="checkbox"
+											checked={createMaintenanceAfterResolve}
+											onChange={(event) =>
+												setCreateMaintenanceAfterResolve(event.target.checked)
+											}
+											className="h-4 w-4 rounded border-white/20 bg-[#121212] text-emerald-500"
+										/>
+										<span className="text-sm text-zinc-200">
+											Perform Maintenance after resolving
+										</span>
 									</label>
 								</>
 							)}

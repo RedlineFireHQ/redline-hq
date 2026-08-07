@@ -20,7 +20,7 @@ export default function ReadinessPanel() {
       {/* Firefighter */}
       <div className="pointer-events-none absolute right-[6px] bottom-[-110px] h-[155%] w-[60%] overflow-hidden opacity-95">
         <Image
-          src="/images/readiness-hero.png"
+          src="/branding/images/readiness-hero.png"
           alt="Firefighter"
           fill
           priority

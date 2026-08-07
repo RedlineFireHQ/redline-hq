@@ -1,8 +1,5 @@
 import Link from "next/link";
 import PageLayout from "@/components/layout/PageLayout";
-import AssignRepairButton from "@/components/deficiencies/AssignRepairButton";
-import EditDeficiencyButton from "@/components/deficiencies/EditDeficiencyButton";
-import ResolveDeficiencyButton from "@/components/deficiencies/ResolveDeficiencyButton";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 type DeficiencyRelation = {
@@ -76,8 +73,8 @@ function normalizeDeficiencyRelation(value: unknown): DeficiencyRelation | null 
 
 function normalizeDeficiencyDetail(data: unknown): DeficiencyDetail {
 	const row = (data ?? {}) as Record<string, unknown>;
-	const priorityValue = row.priority;
-	const statusValue = row.status;
+	const priorityIdValue = row.priority;
+	const statusIdValue = row.status;
 	const categoryValue = row.category_id;
 	const apparatusIdValue = row.apparatus_id;
 
@@ -96,12 +93,12 @@ function normalizeDeficiencyDetail(data: unknown): DeficiencyDetail {
 			typeof row.reported_by_member_id === "string" ? row.reported_by_member_id : null,
 		assigned_to: typeof row.assigned_to === "string" ? row.assigned_to : null,
 		category_id: typeof categoryValue === "string" ? categoryValue : null,
-		priority_id: typeof priorityValue === "string" ? priorityValue : null,
-		status_id: typeof statusValue === "string" ? statusValue : null,
+		priority_id: typeof priorityIdValue === "string" ? priorityIdValue : null,
+		status_id: typeof statusIdValue === "string" ? statusIdValue : null,
 		apparatus_id: typeof apparatusIdValue === "string" ? apparatusIdValue : null,
-		apparatus: normalizeDeficiencyRelation(row.apparatus),
-		priority: normalizeDeficiencyRelation(row.priority),
-		status: normalizeDeficiencyRelation(row.status),
+		apparatus: normalizeDeficiencyRelation(row.apparatus_info),
+		priority: normalizeDeficiencyRelation(row.priority_info),
+		status: normalizeDeficiencyRelation(row.status_info),
 	};
 }
 
@@ -209,7 +206,7 @@ export default async function DeficiencyDetailPage({
 	const { data, error } = await supabase
 		.from("deficiencies")
 		.select(
-			"*, priority:deficiency_priorities!fk_deficiencies_priority(name), status:deficiency_statuses!fk_deficiencies_status(name), apparatus:apparatus!fk_deficiencies_apparatus(name)"
+			"*, priority_info:deficiency_priorities!fk_deficiencies_priority(*), status_info:deficiency_statuses!fk_deficiencies_status(*), apparatus_info:apparatus!fk_deficiencies_apparatus(*)"
 		)
 		.eq("id", id)
 		.maybeSingle();
@@ -454,17 +451,30 @@ export default async function DeficiencyDetailPage({
 					) : null}
 
 					<div className="mt-8 flex flex-wrap gap-3 border-t border-white/10 pt-6">
-						<AssignRepairButton deficiencyId={deficiency.id} />
-						<EditDeficiencyButton
-							deficiencyId={deficiency.id}
-							initialApparatusId={deficiency.apparatus_id}
-							initialDescription={deficiency.description}
-							initialLocation={deficiency.location}
-							initialCategoryId={deficiency.category_id}
-							initialPriorityId={deficiency.priority_id}
-							initialStatusId={deficiency.status_id}
-						/>
-						<ResolveDeficiencyButton deficiencyId={deficiency.id} isResolved={isResolved} />
+						<Link
+							href={`/operations/deficiencies/${deficiency.id}/assign-repair`}
+							className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-zinc-200 transition hover:bg-white/[0.08]"
+						>
+							Assign Repair
+						</Link>
+						<Link
+							href={`/operations/deficiencies/${deficiency.id}/edit`}
+							className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-zinc-200 transition hover:bg-white/[0.08]"
+						>
+							Edit
+						</Link>
+						{isResolved ? (
+							<span className="rounded-xl border border-emerald-500/30 bg-emerald-600/80 px-4 py-2 text-sm font-semibold text-white opacity-60">
+								Resolved
+							</span>
+						) : (
+							<Link
+								href={`/operations/deficiencies/${deficiency.id}/resolve`}
+								className="rounded-xl border border-emerald-500/30 bg-emerald-600/80 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
+							>
+								Resolve
+							</Link>
+						)}
 					</div>
 				</div>
 
