@@ -99,7 +99,11 @@ export async function getAssetById(id: string) {
     console.error("Message:", error.message);
     console.error("Details:", error.details);
     console.error("Hint:", error.hint);
-    throw error;
+    throw new Error(
+      typeof error === "string"
+        ? error
+        : error?.message ?? JSON.stringify(error)
+    );
   }
 
   console.log("[getAssetById] Retrieved asset:", data);

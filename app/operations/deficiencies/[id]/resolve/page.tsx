@@ -133,6 +133,71 @@ export default function ResolveDeficiencyPage() {
       event_description: `Resolved. ${repairNotes}`,
     });
 
+    const { data: deficiencyLinkRow, error: deficiencyLinkError } = await supabase
+      .from("deficiencies")
+      .select("fire_hose_id")
+      .eq("id", deficiencyId)
+      .maybeSingle();
+
+    if (deficiencyLinkError) {
+      console.error("[fire-hose][deficiency-resolve] failed to read deficiency fire_hose_id link", {
+        deficiencyId,
+        error: deficiencyLinkError,
+      });
+      setErrorMessage(deficiencyLinkError.message || "Unable to verify linked fire hose.");
+      setIsResolving(false);
+      return;
+    }
+
+    if (deficiencyLinkRow?.fire_hose_id) {
+      const linkedHoseId = deficiencyLinkRow.fire_hose_id;
+
+      const { data: linkedDeficiencies, error: linkedDeficienciesError } = await supabase
+        .from("deficiencies")
+        .select("id, status_info:deficiency_statuses!fk_deficiencies_status(name)")
+        .eq("fire_hose_id", linkedHoseId);
+
+      if (linkedDeficienciesError) {
+        console.error("[fire-hose][deficiency-resolve] failed to read linked deficiencies", {
+          deficiencyId,
+          linkedHoseId,
+          error: linkedDeficienciesError,
+        });
+        setErrorMessage(linkedDeficienciesError.message || "Unable to verify linked deficiencies.");
+        setIsResolving(false);
+        return;
+      }
+
+      if ((linkedDeficiencies ?? []).length > 0) {
+        const unresolvedCount = (linkedDeficiencies ?? []).reduce((count, row) => {
+          const statusInfo = Array.isArray(row.status_info) ? row.status_info[0] : row.status_info;
+          const statusName = typeof statusInfo?.name === "string" ? statusInfo.name.trim().toLowerCase() : "";
+          const isUnresolved = statusName !== "resolved" && statusName !== "closed";
+          return isUnresolved ? count + 1 : count;
+        }, 0);
+
+        if (unresolvedCount === 0) {
+          const { data: hoseUpdateRow, error: hoseUpdateError } = await supabase
+            .from("fire_hose")
+            .update({ status: "Ready" })
+            .eq("id", linkedHoseId)
+            .select("id, status")
+            .single();
+
+          if (hoseUpdateError || !hoseUpdateRow || hoseUpdateRow.id !== linkedHoseId) {
+            console.error("[fire-hose][deficiency-resolve] fire_hose ready-status update mismatch", {
+              expectedHoseId: linkedHoseId,
+              actualRow: hoseUpdateRow ?? null,
+              error: hoseUpdateError ?? null,
+            });
+            setErrorMessage(hoseUpdateError?.message || "Unable to update linked fire hose status.");
+            setIsResolving(false);
+            return;
+          }
+        }
+      }
+    }
+
     setIsResolving(false);
 
     if (createMaintenanceAfterResolve) {

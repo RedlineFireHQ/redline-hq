@@ -127,6 +127,10 @@ export default function InventoryCategoryWorkspace({
 	}, [rows]);
 
 	useEffect(() => {
+		setInventoryRows(rows);
+	}, [rows]);
+
+	useEffect(() => {
 		setDepartmentId(initialDepartmentId);
 	}, [initialDepartmentId]);
 
@@ -415,7 +419,8 @@ export default function InventoryCategoryWorkspace({
 		return "";
 	};
 
-	const mapFireHoseRow = (row: {
+	const mapFireHoseRow = (
+		row: {
 		id: string;
 		inventory_number: string;
 		hose_size: number | string | null;
@@ -424,16 +429,61 @@ export default function InventoryCategoryWorkspace({
 		in_service_date: string;
 		next_test_date: string | null;
 		status: string;
-	}): InventoryRow => ({
+		},
+		deficiencyStatusByHoseId: Record<string, string>,
+	): InventoryRow => ({
 		id: row.id,
 		inventoryNumber: row.inventory_number,
 		hoseSize: formatHoseSize(row.hose_size),
 		length: row.booster_reel ? "N/A (Booster Reel Hose)" : `${row.hose_length ?? "-"} ft`,
+			inServiceDateRaw: row.in_service_date ?? "",
 		inServiceDate: formatMonthYear(row.in_service_date),
 		nextTestDate: formatNextTestDate(row.next_test_date),
-		deficiencyStatus: "None",
+		deficiencyStatus: deficiencyStatusByHoseId[row.id] ?? "None",
 		status: row.status,
 	});
+
+	const buildDeficiencyStatusByHoseId = async (hoseIds: string[]) => {
+		if (hoseIds.length === 0) {
+			return {} as Record<string, string>;
+		}
+
+		const { data: deficiencyRows, error: deficiencyRowsError } = await supabase
+			.from("deficiencies")
+			.select("id, fire_hose_id, status_info:deficiency_statuses!fk_deficiencies_status(name)")
+			.in("fire_hose_id", hoseIds);
+
+		if (deficiencyRowsError) {
+			console.error("[fire-hose] failed to load deficiency rows by fire_hose_id", {
+				table: "deficiencies",
+				select: "id, fire_hose_id, status_info:deficiency_statuses!fk_deficiencies_status(name)",
+				filter: { fire_hose_id: hoseIds },
+				error: {
+					code: deficiencyRowsError.code ?? null,
+					message: deficiencyRowsError.message ?? null,
+					details: deficiencyRowsError.details ?? null,
+					hint: deficiencyRowsError.hint ?? null,
+				},
+			});
+			return {};
+		}
+
+		const deficiencyStatusByHoseId: Record<string, string> = {};
+		for (const deficiencyRow of deficiencyRows ?? []) {
+			const fireHoseId = deficiencyRow.fire_hose_id;
+			const statusInfo = Array.isArray(deficiencyRow.status_info)
+				? deficiencyRow.status_info[0]
+				: deficiencyRow.status_info;
+			const statusName = typeof statusInfo?.name === "string" ? statusInfo.name.trim().toLowerCase() : "";
+			const isUnresolved = statusName !== "resolved" && statusName !== "closed";
+
+			if (typeof fireHoseId === "string" && isUnresolved) {
+				deficiencyStatusByHoseId[fireHoseId] = "Active";
+			}
+		}
+
+		return deficiencyStatusByHoseId;
+	};
 
 	const refreshFireHoseRows = async () => {
 		if (!departmentId) {
@@ -455,7 +505,14 @@ export default function InventoryCategoryWorkspace({
 			return;
 		}
 
-		setInventoryRows((data ?? []).map(mapFireHoseRow));
+		const normalizedRows = data ?? [];
+		const deficiencyStatusByHoseId = await buildDeficiencyStatusByHoseId(
+			normalizedRows
+				.map((row) => row.id)
+				.filter((id): id is string => typeof id === "string" && id.length > 0),
+		);
+
+		setInventoryRows(normalizedRows.map((row) => mapFireHoseRow(row, deficiencyStatusByHoseId)));
 	};
 
 	const openEditModal = (row: InventoryRow) => {
@@ -479,26 +536,36 @@ export default function InventoryCategoryWorkspace({
 	};
 
 	const openTestingSession = () => {
-		setIsTestingModalOpen(true);
+		try {
+			setIsTestingModalOpen(true);
+		} catch (err) {
+			console.error("START HOSE TEST ERROR", err);
+			throw err;
+		}
 	};
 
-	const hasActiveDeficiencyForHose = async (inventoryNumber: string) => {
-		const normalizedInventoryNumber = inventoryNumber.trim().toLowerCase();
-		if (!normalizedInventoryNumber) {
+	const hasActiveDeficiencyForHose = async (hoseId: string): Promise<boolean | null> => {
+		if (!hoseId) {
 			return false;
 		}
 
-		const { data, error } = await supabase
+		const { data: deficiencyRows, error: deficiencyRowsError } = await supabase
 			.from("deficiencies")
-			.select("description, location, status_info:deficiency_statuses!fk_deficiencies_status(name)")
-			.limit(500);
+			.select("id, status_info:deficiency_statuses!fk_deficiencies_status(name)")
+			.eq("fire_hose_id", hoseId);
 
-		if (error) {
-			console.error("[fire-hose] failed to check active deficiencies", error);
-			return false;
+		if (deficiencyRowsError) {
+			console.error(
+				"[fire-hose] failed to check linked deficiencies",
+				JSON.stringify(deficiencyRowsError, null, 2),
+			);
+			setToastMessage(
+				deficiencyRowsError.message || "Unable to verify linked deficiencies for this hose.",
+			);
+			return null;
 		}
 
-		return (data ?? []).some((record) => {
+		return (deficiencyRows ?? []).some((record) => {
 			const statusInfoRecord = Array.isArray(record.status_info)
 				? record.status_info[0]
 				: record.status_info;
@@ -507,20 +574,7 @@ export default function InventoryCategoryWorkspace({
 					? statusInfoRecord.name.trim().toLowerCase()
 					: "";
 
-			const isActive =
-				normalizedStatusName.length > 0 &&
-				normalizedStatusName !== "resolved" &&
-				normalizedStatusName !== "closed";
-
-			if (!isActive) {
-				return false;
-			}
-
-			const description = typeof record.description === "string" ? record.description : "";
-			const location = typeof record.location === "string" ? record.location : "";
-			const searchableText = `${description} ${location}`.toLowerCase();
-
-			return searchableText.includes(normalizedInventoryNumber);
+			return normalizedStatusName !== "resolved" && normalizedStatusName !== "closed";
 		});
 	};
 
@@ -532,156 +586,411 @@ export default function InventoryCategoryWorkspace({
 	}) => {
 		if (!departmentId) {
 			setToastMessage("Unable to determine department. Please refresh and try again.");
-			return { ok: false };
+			return { ok: false, error: "Missing department context." };
 		}
 
 		const row = activeRows.find((candidate) => candidate.id === values.hoseId);
 		if (!row?.id) {
 			setToastMessage("Selected hose could not be found.");
-			return { ok: false };
+			return { ok: false, error: `Missing hose row for ${values.hoseId}.` };
 		}
 
-		if (values.status === "passed") {
-			const nextTestDate = addOneYearIso(values.testingDate);
-			const hasActiveDeficiency = await hasActiveDeficiencyForHose(
-				row.inventoryNumber ?? "",
-			);
-			const passStatus = hasActiveDeficiency ? "Out of Service" : "Ready";
+		const nextTestDate = addOneYearIso(values.testingDate);
+		const expectedStatus = values.status === "failed" ? "Out of Service" : "Ready";
 
-			const { error } = await supabase
+		if (values.status === "passed") {
+			const hasActiveDeficiency = await hasActiveDeficiencyForHose(
+				row.id,
+			);
+			if (hasActiveDeficiency === null) {
+				return { ok: false, error: "Failed to verify linked deficiencies." };
+			}
+			const passStatus = hasActiveDeficiency ? "Out of Service" : "Ready";
+			const expectedPassStatus = passStatus;
+
+			const { data, error } = await supabase
 				.from("fire_hose")
 				.update({
-					last_test_date: values.testingDate,
 					next_test_date: nextTestDate,
 					status: passStatus,
 				})
 				.eq("id", row.id)
-				.eq("department_id", departmentId);
+				.eq("department_id", departmentId)
+				.select();
+
+			console.log("[fire-hose update]", {
+				hoseId: row.id,
+				departmentId,
+				nextTestDate,
+				data,
+				error,
+			});
 
 			if (error) {
-				setToastMessage(error.message || "Unable to save hose test results.");
-				return { ok: false };
+				const message = error.message || "Unable to save hose test results.";
+				setToastMessage(message);
+				console.error("[hose-test] fire_hose update failed", {
+					hoseId: row.id,
+					status: values.status,
+					testingDate: values.testingDate,
+					nextTestDate,
+					error,
+				});
+				return { ok: false, error: message };
+			}
+
+			const { data: verificationData, error: verificationError } = await supabase
+				.from("fire_hose")
+				.select("next_test_date, status")
+				.eq("id", row.id)
+				.eq("department_id", departmentId)
+				.single();
+
+			if (verificationError || !verificationData) {
+				const message = verificationError?.message || "Unable to verify hose test update.";
+				setToastMessage(message);
+				console.error("[hose-test] fire_hose verification failed", {
+					hoseId: row.id,
+					error: verificationError,
+					verificationData,
+				});
+				return { ok: false, error: message };
+			}
+
+			const verifiedNext = verificationData.next_test_date ?? null;
+			const verifiedStatus = verificationData.status ?? "";
+
+			if (
+				verifiedNext !== nextTestDate ||
+				verifiedStatus !== expectedPassStatus
+			) {
+				const message = `Hose ${row.inventoryNumber ?? row.id} verification mismatch after save.`;
+				setToastMessage(message);
+				console.error("[hose-test] verification mismatch", {
+					hoseId: row.id,
+					expected: {
+						next_test_date: nextTestDate,
+						status: expectedPassStatus,
+					},
+					actual: verificationData,
+				});
+				return { ok: false, error: message };
 			}
 
 			return { ok: true };
 		}
 
-		const { error } = await supabase
+		const { data, error } = await supabase
 			.from("fire_hose")
 			.update({
-				last_test_date: values.testingDate,
+				next_test_date: nextTestDate,
 				status: "Out of Service",
 			})
 			.eq("id", row.id)
-			.eq("department_id", departmentId);
+			.eq("department_id", departmentId)
+			.select();
+
+		console.log("[fire-hose update]", {
+			hoseId: row.id,
+			departmentId,
+			nextTestDate,
+			data,
+			error,
+		});
 
 		if (error) {
-			setToastMessage(error.message || "Unable to save hose test results.");
-			return { ok: false };
+			const message = error.message || "Unable to save hose test results.";
+			setToastMessage(message);
+			console.error("[hose-test] fire_hose failed-update failed", {
+				hoseId: row.id,
+				status: values.status,
+				testingDate: values.testingDate,
+				nextTestDate,
+				error,
+			});
+			return { ok: false, error: message };
+		}
+
+		const { data: verificationData, error: verificationError } = await supabase
+			.from("fire_hose")
+			.select("next_test_date, status")
+			.eq("id", row.id)
+			.eq("department_id", departmentId)
+			.single();
+
+		if (verificationError || !verificationData) {
+			const message = verificationError?.message || "Unable to verify hose test update.";
+			setToastMessage(message);
+			console.error("[hose-test] fire_hose failed-update verification failed", {
+				hoseId: row.id,
+				error: verificationError,
+				verificationData,
+			});
+			return { ok: false, error: message };
+		}
+
+		const verifiedNext = verificationData.next_test_date ?? null;
+		const verifiedStatus = verificationData.status ?? "";
+
+		if (
+			verifiedNext !== nextTestDate ||
+			verifiedStatus !== expectedStatus
+		) {
+			const message = `Hose ${row.inventoryNumber ?? row.id} verification mismatch after save.`;
+			setToastMessage(message);
+			console.error("[hose-test] failed-hose verification mismatch", {
+				hoseId: row.id,
+				expected: {
+					next_test_date: nextTestDate,
+					status: expectedStatus,
+				},
+				actual: verificationData,
+			});
+			return { ok: false, error: message };
 		}
 
 		return { ok: true, failedRow: row };
 	};
 
-	const saveTestingSession = (values: HoseTestingSessionValues) => {
+	const saveTestingSession = (
+		values: HoseTestingSessionValues,
+		options?: { closeModalOnSuccess?: boolean },
+	) => {
 		return (async () => {
-			if (!departmentId) {
-				setToastMessage("Unable to determine department. Please refresh and try again.");
-				return false;
-			}
-
-			const targetRows = activeRows.filter((row) => {
-				if (!row.id) {
+			try {
+				if (!departmentId) {
+					setToastMessage("Unable to determine department. Please refresh and try again.");
 					return false;
 				}
 
-				const hoseStatus = values.hoseStatuses[row.id] ?? "untested";
-				return hoseStatus === "passed" || hoseStatus === "failed";
-			});
-
-			if (targetRows.length === 0) {
-				setToastMessage("Mark at least one hose as Passed or Failed before saving.");
-				return false;
-			}
-
-			const updateResults = await Promise.all(
-				targetRows.map(async (row) => {
+				const targetRows = activeRows.filter((row) => {
 					if (!row.id) {
-						return { ok: false, error: { message: "Missing hose id." } };
+						return false;
 					}
 
 					const hoseStatus = values.hoseStatuses[row.id] ?? "untested";
-					if (hoseStatus !== "passed" && hoseStatus !== "failed") {
-						return { ok: false };
-					}
-
-					return applyHoseTestResult({
-						testingDate: values.testingDate,
-						tester: values.tester,
-						hoseId: row.id,
-						status: hoseStatus,
-					});
-				}),
-			);
-
-			const failedUpdate = updateResults.find((result) => !result.ok);
-			if (failedUpdate) {
-				return false;
-			}
-
-			const testerLabel = values.tester.trim() || testerName || "Unknown Tester";
-			const { data: sessionInsertData, error: sessionInsertError } = await supabase
-				.from("fire_hose_testing_sessions")
-				.insert({
-					department_id: departmentId,
-					test_date: values.testingDate,
-					tester: testerLabel,
-				})
-				.select("id")
-				.single();
-
-			if (sessionInsertError || !sessionInsertData?.id) {
-				setToastMessage(sessionInsertError?.message || "Unable to save testing session history.");
-				return false;
-			}
-
-			const testingResultsPayload = targetRows
-				.filter((row): row is InventoryRow & { id: string } => Boolean(row.id))
-				.map((row) => {
-					const hoseStatus = values.hoseStatuses[row.id] ?? "untested";
-					return {
-						testing_session_id: sessionInsertData.id,
-						department_id: departmentId,
-						hose_id: row.id,
-						inventory_number: row.inventoryNumber ?? "",
-						test_date: values.testingDate,
-						tester: testerLabel,
-						result: hoseStatus === "failed" ? "fail" : "pass",
-					};
+					return hoseStatus === "passed" || hoseStatus === "failed";
 				});
 
-			const { error: resultsInsertError } = await supabase
-				.from("fire_hose_testing_results")
-				.insert(testingResultsPayload);
+				if (targetRows.length === 0) {
+					setToastMessage("Mark at least one hose as Passed or Failed before saving.");
+					return false;
+				}
 
-			if (resultsInsertError) {
-				setToastMessage(resultsInsertError.message || "Unable to save hose test result history.");
-				return false;
+				const updateResults = await Promise.all(
+					targetRows.map(async (row) => {
+						if (!row.id) {
+							return { ok: false, error: { message: "Missing hose id." } };
+						}
+
+						const hoseStatus = values.hoseStatuses[row.id] ?? "untested";
+						if (hoseStatus !== "passed" && hoseStatus !== "failed") {
+							return { ok: false };
+						}
+
+						return applyHoseTestResult({
+							testingDate: values.testingDate,
+							tester: values.tester,
+							hoseId: row.id,
+							status: hoseStatus,
+						});
+					}),
+				);
+
+				const failedUpdate = updateResults.find((result) => !result.ok);
+				if (failedUpdate) {
+					return false;
+				}
+
+				for (const row of targetRows) {
+					const expectedNextTestDate = addOneYearIso(values.testingDate);
+
+					const { data: verifiedHoseRow, error: verifiedHoseRowError } = await supabase
+						.from("fire_hose")
+						.select("id, inventory_number, next_test_date")
+						.eq("id", row.id)
+						.eq("department_id", departmentId)
+						.single();
+
+					if (verifiedHoseRowError || !verifiedHoseRow) {
+						const message =
+							verifiedHoseRowError?.message ||
+							`Unable to verify saved hose row for ${row.inventoryNumber ?? row.id}.`;
+						setToastMessage(message);
+						console.error("[hose-test][save-session] post-save readback failed", {
+							expectedHoseId: row.id,
+							expectedInventoryNumber: row.inventoryNumber ?? null,
+							error: {
+								code: verifiedHoseRowError?.code ?? null,
+								message: verifiedHoseRowError?.message ?? null,
+								details: verifiedHoseRowError?.details ?? null,
+								hint: verifiedHoseRowError?.hint ?? null,
+							},
+						});
+						return false;
+					}
+
+					console.log("[hose-test][save-session] post-save hose readback", {
+						hoseId: verifiedHoseRow.id,
+						inventoryNumber: verifiedHoseRow.inventory_number,
+						next_test_date: verifiedHoseRow.next_test_date,
+					});
+
+					const mismatchDetails: string[] = [];
+					if (verifiedHoseRow.id !== row.id) {
+						mismatchDetails.push(`id expected ${row.id} got ${verifiedHoseRow.id}`);
+					}
+					if ((verifiedHoseRow.next_test_date ?? null) !== expectedNextTestDate) {
+						mismatchDetails.push(
+							`next_test_date expected ${expectedNextTestDate} got ${verifiedHoseRow.next_test_date ?? "null"}`,
+						);
+					}
+
+					if (mismatchDetails.length > 0) {
+						const message = `Hose ${row.inventoryNumber ?? row.id} verification mismatch: ${mismatchDetails.join("; ")}`;
+						setToastMessage(message);
+						console.error("[hose-test][save-session] post-save mismatch", {
+							expected: {
+								hoseId: row.id,
+								inventoryNumber: row.inventoryNumber ?? null,
+								next_test_date: expectedNextTestDate,
+							},
+							actual: {
+								hoseId: verifiedHoseRow.id,
+								inventoryNumber: verifiedHoseRow.inventory_number,
+								next_test_date: verifiedHoseRow.next_test_date,
+							},
+						});
+						return false;
+					}
+				}
+
+				const testerLabel = values.tester.trim() || testerName || "Unknown Tester";
+				const { data: sessionInsertData, error: sessionInsertError } = await supabase
+					.from("fire_hose_testing_sessions")
+					.insert({
+						department_id: departmentId,
+						test_date: values.testingDate,
+						tester: testerLabel,
+					})
+					.select("id")
+					.single();
+
+				if (sessionInsertError || !sessionInsertData?.id) {
+					setToastMessage(sessionInsertError?.message || "Unable to save testing session history.");
+					return false;
+				}
+
+				const testingResultsPayload = targetRows
+					.filter((row): row is InventoryRow & { id: string } => Boolean(row.id))
+					.map((row) => {
+						const hoseStatus = values.hoseStatuses[row.id] ?? "untested";
+						return {
+							testing_session_id: sessionInsertData.id,
+							department_id: departmentId,
+							hose_id: row.id,
+							inventory_number: row.inventoryNumber ?? "",
+							test_date: values.testingDate,
+							tester: testerLabel,
+							result: hoseStatus === "failed" ? "fail" : "pass",
+						};
+					});
+
+				const { error: resultsInsertError } = await supabase
+					.from("fire_hose_testing_results")
+					.insert(testingResultsPayload);
+
+				if (resultsInsertError) {
+					setToastMessage(resultsInsertError.message || "Unable to save hose test result history.");
+					console.error("[hose-test] fire_hose_testing_results insert failed", {
+						testingSessionId: sessionInsertData.id,
+						testingResultsPayload,
+						error: resultsInsertError,
+					});
+					return false;
+				}
+
+				const { data: insertedResults, error: insertedResultsError } = await supabase
+					.from("fire_hose_testing_results")
+					.select("hose_id, result, tester, testing_session_id")
+					.eq("testing_session_id", sessionInsertData.id)
+					.eq("department_id", departmentId);
+
+				if (insertedResultsError) {
+					setToastMessage(insertedResultsError.message || "Unable to verify saved hose test results.");
+					console.error("[hose-test] fire_hose_testing_results verification query failed", {
+						testingSessionId: sessionInsertData.id,
+						error: insertedResultsError,
+					});
+					return false;
+				}
+
+				const expectedByHoseId = new Map(
+					testingResultsPayload.map((record) => [record.hose_id, record.result]),
+				);
+
+				if ((insertedResults ?? []).length !== testingResultsPayload.length) {
+					const message = "Saved hose testing result count does not match tested hose count.";
+					setToastMessage(message);
+					console.error("[hose-test] results count mismatch", {
+						testingSessionId: sessionInsertData.id,
+						expectedCount: testingResultsPayload.length,
+						actualCount: (insertedResults ?? []).length,
+						insertedResults,
+					});
+					return false;
+				}
+
+				const invalidResult = (insertedResults ?? []).find((resultRow) => {
+					const expected = expectedByHoseId.get(resultRow.hose_id);
+					const testerMatches = resultRow.tester === testerLabel;
+					const sessionMatches = resultRow.testing_session_id === sessionInsertData.id;
+					return expected !== resultRow.result || !testerMatches || !sessionMatches;
+				});
+
+				if (invalidResult) {
+					const message = "Saved hose testing results did not match expected values.";
+					setToastMessage(message);
+					console.error("[hose-test] results verification mismatch", {
+						testingSessionId: sessionInsertData.id,
+						invalidResult,
+						expectedByHoseId: Object.fromEntries(expectedByHoseId),
+					});
+					return false;
+				}
+
+				await refreshFireHoseRows();
+				router.refresh();
+				if (options?.closeModalOnSuccess ?? true) {
+					setIsTestingModalOpen(false);
+				}
+				setToastMessage(`Successfully tested ${targetRows.length} hoses.`);
+				return true;
+			} catch (err) {
+				console.error("START HOSE TEST ERROR", err);
+				const message =
+					err instanceof Error
+						? err.message
+						: typeof err === "string"
+							? err
+							: JSON.stringify(err);
+				setToastMessage(message || "Unexpected Start Hose Test error.");
+				throw err;
 			}
-
-			await refreshFireHoseRows();
-			router.refresh();
-			setIsTestingModalOpen(false);
-			setToastMessage(`Successfully tested ${targetRows.length} hoses.`);
-			return true;
 		})();
 	};
 
-	const createDeficienciesForFailedHoses = (
+	const createDeficienciesForFailedHoses = async (
 		failedHoses: Array<{ id: string; inventoryNumber: string }>,
+		values: HoseTestingSessionValues,
 	) => {
 		if (failedHoses.length === 0) {
-			return;
+			return false;
+		}
+
+		const saved = await saveTestingSession(values, { closeModalOnSuccess: false });
+		if (!saved) {
+			return false;
 		}
 
 		const params = new URLSearchParams();
@@ -695,6 +1004,7 @@ export default function InventoryCategoryWorkspace({
 
 		setIsTestingModalOpen(false);
 		router.push(`/deficiencies/report?${params.toString()}`);
+		return true;
 	};
 
 	const saveQuickTestResult = async (values: {
@@ -703,15 +1013,20 @@ export default function InventoryCategoryWorkspace({
 		hoseId: string;
 		status: "passed" | "failed";
 	}) => {
-		const result = await applyHoseTestResult(values);
-		if (!result.ok) {
-			return false;
-		}
+		try {
+			const result = await applyHoseTestResult(values);
+			if (!result.ok) {
+				return false;
+			}
 
-		await refreshFireHoseRows();
-		router.refresh();
-		setToastMessage(`Marked ${values.hoseId} as ${values.status === "passed" ? "PASS" : "FAIL"}.`);
-		return true;
+			await refreshFireHoseRows();
+			router.refresh();
+			setToastMessage(`Marked ${values.hoseId} as ${values.status === "passed" ? "PASS" : "FAIL"}.`);
+			return true;
+		} catch (err) {
+			console.error("START HOSE TEST ERROR", err);
+			throw err;
+		}
 	};
 
 	const saveHose = (values: HoseFormValues) => {
@@ -779,41 +1094,73 @@ export default function InventoryCategoryWorkspace({
 			return;
 		}
 
-		setInventoryRows((current) =>
-			current.map((row) => {
-				if (rowIdentifier(row) !== editRowKey) {
-					return row;
-				}
+		if (!departmentId || !editingRow?.id) {
+			setToastMessage("Unable to update hose: missing hose id or department.");
+			return;
+		}
 
-				return {
-					...row,
-					inventoryNumber: values.inventoryNumber,
-					hoseSize: values.hoseSize,
-					length: values.boosterReelHose ? "N/A (Booster Reel Hose)" : values.length,
-					inServiceDate: formatMonthYear(values.inServiceDate),
-					status: row.status || "Ready",
-				};
-			}),
-		);
+		const updatePayload = {
+			inventory_number: values.inventoryNumber.trim(),
+			hose_size: parseHoseSize(values.hoseSize),
+			hose_length: values.boosterReelHose ? null : parseLengthFeet(values.length),
+			booster_reel: values.boosterReelHose,
+			in_service_date: normalizeDateValue(values.inServiceDate),
+		};
 
+		const { data: updatedHose, error: updateError } = await supabase
+			.from("fire_hose")
+			.update(updatePayload)
+			.eq("id", editingRow.id)
+			.eq("department_id", departmentId)
+			.select("id")
+			.single();
+
+		if (updateError || !updatedHose || updatedHose.id !== editingRow.id) {
+			console.error("[fire-hose][edit] update mismatch", {
+				expectedHoseId: editingRow.id,
+				actualRow: updatedHose ?? null,
+				error: updateError ?? null,
+				payload: updatePayload,
+			});
+			setToastMessage(updateError?.message || "Unable to update hose.");
+			return;
+		}
+
+		await refreshFireHoseRows();
 		setIsModalOpen(false);
 		setEditRowKey(null);
 		})();
 	};
 
 	const retireEditingHose = () => {
-		if (!editRowKey) {
-			return;
-		}
+		void (async () => {
+			if (!editRowKey || !departmentId || !editingRow?.id) {
+				setToastMessage("Unable to retire hose: missing hose id or department.");
+				return;
+			}
 
-		setInventoryRows((current) =>
-			current.map((row) =>
-				rowIdentifier(row) === editRowKey ? { ...row, retired: "true" } : row,
-			),
-		);
+			const { data: retiredRow, error: retireError } = await supabase
+				.from("fire_hose")
+				.update({ status: "Out of Service" })
+				.eq("id", editingRow.id)
+				.eq("department_id", departmentId)
+				.select("id, status")
+				.single();
 
-		setIsModalOpen(false);
-		setEditRowKey(null);
+			if (retireError || !retiredRow || retiredRow.id !== editingRow.id) {
+				console.error("[fire-hose][retire] update mismatch", {
+					expectedHoseId: editingRow.id,
+					actualRow: retiredRow ?? null,
+					error: retireError ?? null,
+				});
+				setToastMessage(retireError?.message || "Unable to retire hose.");
+				return;
+			}
+
+			await refreshFireHoseRows();
+			setIsModalOpen(false);
+			setEditRowKey(null);
+		})();
 	};
 
 	return (
@@ -1072,7 +1419,10 @@ export default function InventoryCategoryWorkspace({
 								editingRow.length === "N/A (Booster Reel Hose)"
 									? "25 ft"
 									: editingRow.length ?? "25 ft",
-							inServiceDate: toDateInputValue(editingRow.inServiceDate),
+							inServiceDate:
+								typeof editingRow.inServiceDateRaw === "string" && editingRow.inServiceDateRaw.trim().length > 0
+									? editingRow.inServiceDateRaw
+									: toDateInputValue(editingRow.inServiceDate),
 							boosterReelHose: editingRow.length === "N/A (Booster Reel Hose)",
 						}
 						: undefined

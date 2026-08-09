@@ -24,7 +24,10 @@ interface HoseTestingSessionModalProps {
 	departmentName?: string;
 	onClose: () => void;
 	onSave: (values: HoseTestingSessionValues) => Promise<boolean>;
-	onCreateDeficiencies: (failedHoses: HoseTestingItem[]) => void;
+	onCreateDeficiencies: (
+		failedHoses: HoseTestingItem[],
+		values: HoseTestingSessionValues,
+	) => Promise<boolean>;
 	onQuickMark: (values: {
 		testingDate: string;
 		tester: string;
@@ -52,6 +55,7 @@ export default function HoseTestingSessionModal({
 	const [hoseStatuses, setHoseStatuses] = useState<Record<string, HoseTestingStatus>>({});
 	const [sessionStep, setSessionStep] = useState<"testing" | "summary">("testing");
 	const [isFinishing, setIsFinishing] = useState(false);
+	const [isCreatingDeficiencies, setIsCreatingDeficiencies] = useState(false);
 	const [mode, setMode] = useState<"session" | "quick">("session");
 	const [quickInput, setQuickInput] = useState("");
 	const [quickSelectedHoseId, setQuickSelectedHoseId] = useState("");
@@ -69,6 +73,7 @@ export default function HoseTestingSessionModal({
 		setHoseStatuses(Object.fromEntries(hoses.map((hose) => [hose.id, "untested"])));
 		setSessionStep("testing");
 		setIsFinishing(false);
+		setIsCreatingDeficiencies(false);
 		setMode("session");
 		setQuickInput("");
 		setQuickSelectedHoseId("");
@@ -109,25 +114,6 @@ export default function HoseTestingSessionModal({
 		setQuickSelectedHoseId("");
 	}, [mode, quickInput, quickMatches]);
 
-	if (!isOpen) {
-		return null;
-	}
-
-	const toggleStatus = (hoseId: string, target: "passed" | "failed") => {
-		setHoseStatuses((current) => {
-			const existing = current[hoseId] ?? "untested";
-			const next = existing === target ? "untested" : target;
-
-			return {
-				...current,
-				[hoseId]: next,
-			};
-		});
-	};
-
-	const quickSelectedHose = hoses.find((hose) => hose.id === quickSelectedHoseId) ?? null;
-	const quickRemainingCount = Math.max(0, hoses.length - quickTouchedIds.length);
-
 	const summaryRows = useMemo(
 		() =>
 			hoses.map((hose) => ({
@@ -151,6 +137,25 @@ export default function HoseTestingSessionModal({
 		() => summaryRows.filter((row) => row.status === "untested"),
 		[summaryRows],
 	);
+
+	if (!isOpen) {
+		return null;
+	}
+
+	const toggleStatus = (hoseId: string, target: "passed" | "failed") => {
+		setHoseStatuses((current) => {
+			const existing = current[hoseId] ?? "untested";
+			const next = existing === target ? "untested" : target;
+
+			return {
+				...current,
+				[hoseId]: next,
+			};
+		});
+	};
+
+	const quickSelectedHose = hoses.find((hose) => hose.id === quickSelectedHoseId) ?? null;
+	const quickRemainingCount = Math.max(0, hoses.length - quickTouchedIds.length);
 
 	const formatSummaryDate = (isoDate: string) => {
 		if (!isoDate) {
@@ -256,49 +261,86 @@ export default function HoseTestingSessionModal({
 	};
 
 	const finishSession = async () => {
-		setIsFinishing(true);
-		const saved = await onSave({
-			testingDate,
-			tester,
-			hoseStatuses,
-		});
-		setIsFinishing(false);
+		try {
+			setIsFinishing(true);
+			const saved = await onSave({
+				testingDate,
+				tester,
+				hoseStatuses,
+			});
+			setIsFinishing(false);
 
-		if (!saved) {
-			return;
+			if (!saved) {
+				return;
+			}
+
+			setSessionStep("testing");
+		} catch (err) {
+			setIsFinishing(false);
+			console.error("START HOSE TEST ERROR", err);
+			throw err;
 		}
+	};
 
-		setSessionStep("testing");
+	const saveThenCreateDeficiencies = async () => {
+		try {
+			if (failedRows.length === 0) {
+				return;
+			}
+
+			setIsCreatingDeficiencies(true);
+			const saved = await onCreateDeficiencies(failedRows, {
+				testingDate,
+				tester,
+				hoseStatuses,
+			});
+			setIsCreatingDeficiencies(false);
+
+			if (!saved) {
+				return;
+			}
+
+			setSessionStep("testing");
+		} catch (err) {
+			setIsCreatingDeficiencies(false);
+			console.error("START HOSE TEST ERROR", err);
+			throw err;
+		}
 	};
 
 	const handleQuickMark = async (status: "passed" | "failed") => {
-		if (!quickSelectedHoseId) {
-			return;
+		try {
+			if (!quickSelectedHoseId) {
+				return;
+			}
+
+			const saved = await onQuickMark({
+				testingDate,
+				tester,
+				hoseId: quickSelectedHoseId,
+				status,
+			});
+
+			if (!saved) {
+				return;
+			}
+
+			setQuickTouchedIds((current) =>
+				current.includes(quickSelectedHoseId) ? current : [...current, quickSelectedHoseId],
+			);
+
+			if (status === "passed") {
+				setQuickPassedCount((current) => current + 1);
+			} else {
+				setQuickFailedCount((current) => current + 1);
+			}
+
+			setQuickInput("");
+			setQuickSelectedHoseId("");
+		} catch (err) {
+			console.error("START HOSE TEST ERROR", err);
+			throw err;
 		}
-
-		const saved = await onQuickMark({
-			testingDate,
-			tester,
-			hoseId: quickSelectedHoseId,
-			status,
-		});
-
-		if (!saved) {
-			return;
-		}
-
-		setQuickTouchedIds((current) =>
-			current.includes(quickSelectedHoseId) ? current : [...current, quickSelectedHoseId],
-		);
-
-		if (status === "passed") {
-			setQuickPassedCount((current) => current + 1);
-		} else {
-			setQuickFailedCount((current) => current + 1);
-		}
-
-		setQuickInput("");
-		setQuickSelectedHoseId("");
 	};
 
 	return (
@@ -516,11 +558,11 @@ export default function HoseTestingSessionModal({
 									</button>
 									<button
 										type="button"
-										disabled={failedRows.length === 0}
-										onClick={() => onCreateDeficiencies(failedRows)}
+										disabled={failedRows.length === 0 || isFinishing || isCreatingDeficiencies}
+										onClick={() => void saveThenCreateDeficiencies()}
 										className="rounded-lg border border-red-500/40 bg-red-500/20 px-3 py-2 text-xs font-semibold text-red-100 transition hover:bg-red-500/30 disabled:cursor-not-allowed disabled:opacity-60"
 									>
-										Create Deficiencies
+										{isCreatingDeficiencies ? "Saving..." : "Create Deficiencies"}
 									</button>
 									<button
 										type="button"

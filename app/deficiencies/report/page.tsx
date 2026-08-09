@@ -258,6 +258,7 @@ export default function ReportDeficiencyPage() {
     }
 
     const now = new Date().toISOString();
+    const isFireHoseDeficiency = inventoryCategory.trim().toLowerCase() === "fire-hose";
     const payload = {
       id: deficiencyId,
       category_id: formState.categoryId,
@@ -269,7 +270,17 @@ export default function ReportDeficiencyPage() {
       created_at: now,
       status: openStatusId,
       photo_path: uploadedPhotoPath,
+      fire_hose_id: isFireHoseDeficiency && inventoryItemId ? inventoryItemId : null,
     };
+
+    console.log("[fire-hose][deficiency-create] payload", JSON.stringify(payload, null, 2));
+    console.log("[fire-hose][deficiency-create] context", {
+      inventoryCategory,
+      inventoryItemId,
+      isFireHoseDeficiency,
+      currentUrl: typeof window !== "undefined" ? window.location.href : null,
+      searchParams: searchParams.toString(),
+    });
 
     const insertResult = await supabase.from("deficiencies").insert(payload).select("id").single();
 
@@ -289,11 +300,25 @@ export default function ReportDeficiencyPage() {
       member_id: null,
     });
 
-    if (inventoryCategory.trim().toLowerCase() === "fire-hose" && inventoryItemId) {
-      await supabase
+    if (isFireHoseDeficiency && inventoryItemId) {
+      const { data: updatedHose, error: hoseUpdateError } = await supabase
         .from("fire_hose")
         .update({ status: "Out of Service" })
-        .eq("id", inventoryItemId);
+        .eq("id", inventoryItemId)
+        .select("id, status")
+        .single();
+
+      if (hoseUpdateError || !updatedHose || updatedHose.id !== inventoryItemId) {
+        const message = hoseUpdateError?.message || "Failed to update expected fire hose row.";
+        console.error("[fire-hose][deficiency-create] update mismatch", {
+          expectedHoseId: inventoryItemId,
+          actualRow: updatedHose ?? null,
+          error: hoseUpdateError ?? null,
+        });
+        setErrorMessage(message);
+        setIsSubmitting(false);
+        return;
+      }
     }
 
     setIsSubmitting(false);

@@ -115,6 +115,18 @@ export default async function FireHoseInventoryPage() {
 
 		console.log("[fire-hose][trace] supabase response", { data, error });
 		console.log("[fire-hose][trace] data.length", Array.isArray(data) ? data.length : null);
+		console.log(
+			"[fire-hose][trace] raw next_test_date values",
+			JSON.stringify(
+				Array.isArray(data)
+					? data.map((row) => ({
+						id: row.id,
+						inventory_number: row.inventory_number,
+						next_test_date: row.next_test_date,
+					}))
+					: null,
+			),
+		);
 
 		if (error) {
 			console.error("[fire-hose] initial load failed", {
@@ -132,6 +144,7 @@ export default async function FireHoseInventoryPage() {
 			inventoryNumber: row.inventory_number,
 			hoseSize: formatHoseSize(row.hose_size),
 			length: row.booster_reel ? "N/A (Booster Reel Hose)" : `${row.hose_length ?? "-"} ft`,
+			inServiceDateRaw: row.in_service_date ?? "",
 			inServiceDate: formatMonthYear(row.in_service_date),
 			nextTestDate: formatNextTestDate(row.next_test_date),
 			deficiencyStatus: "None",
@@ -139,6 +152,16 @@ export default async function FireHoseInventoryPage() {
 		}));
 
 		console.log("[fire-hose][trace] mapped rows", rows);
+		console.log(
+			"[fire-hose][trace] mapped nextTestDate values",
+			JSON.stringify(
+				rows.map((row) => ({
+					id: row.id,
+					inventoryNumber: row.inventoryNumber,
+					nextTestDate: row.nextTestDate,
+				})),
+			),
+		);
 	}
 
 	return (
