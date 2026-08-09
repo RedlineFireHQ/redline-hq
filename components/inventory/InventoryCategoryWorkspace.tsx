@@ -1,8 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import HoseFormModal, { HoseFormValues } from "@/components/inventory/HoseFormModal";
+import HoseTestingSessionModal, {
+	HoseTestingSessionValues,
+} from "@/components/inventory/HoseTestingSessionModal";
 import { supabase } from "@/lib/supabase";
 
 type ReadinessTone = "success" | "warning" | "danger";
@@ -40,6 +44,7 @@ interface InventoryCategoryWorkspaceProps {
 	columns: InventoryColumn[];
 	rows: InventoryRow[];
 	departmentId?: string | null;
+	departmentName?: string | null;
 	searchKeys?: string[];
 	initialError?: string | null;
 }
@@ -97,9 +102,11 @@ export default function InventoryCategoryWorkspace({
 	columns,
 	rows,
 	departmentId: initialDepartmentId = null,
+	departmentName = null,
 	searchKeys = ["inventoryNumber", "hoseSize", "length"],
 	initialError = null,
 }: InventoryCategoryWorkspaceProps) {
+	const router = useRouter();
 	const scoreWidth = `${Math.max(0, Math.min(100, readinessScore))}%`;
 	const [departmentId, setDepartmentId] = useState<string | null>(initialDepartmentId);
 	const [activeReadinessFilter, setActiveReadinessFilter] = useState<ReadinessItem["filter"]>("all");
@@ -109,9 +116,15 @@ export default function InventoryCategoryWorkspace({
 	const [selectedHoseSizeFilter, setSelectedHoseSizeFilter] = useState("All");
 	const [selectedTestingStatusFilter, setSelectedTestingStatusFilter] = useState("All");
 	const [isModalOpen, setIsModalOpen] = useState(false);
+	const [isTestingModalOpen, setIsTestingModalOpen] = useState(false);
 	const [editRowKey, setEditRowKey] = useState<string | null>(null);
+	const [testerName, setTesterName] = useState("");
 	const [toastMessage, setToastMessage] = useState<string | null>(initialError);
 	const [toastVisible, setToastVisible] = useState(Boolean(initialError));
+
+	useEffect(() => {
+		console.log("[fire-hose][trace] InventoryCategoryWorkspace rows prop", rows);
+	}, [rows]);
 
 	useEffect(() => {
 		setDepartmentId(initialDepartmentId);
@@ -159,6 +172,43 @@ export default function InventoryCategoryWorkspace({
 			isMounted = false;
 		};
 	}, [departmentId]);
+
+	useEffect(() => {
+		let isMounted = true;
+
+		const loadTesterName = async () => {
+			const {
+				data: { user },
+			} = await supabase.auth.getUser();
+
+			const email = user?.email?.trim();
+			if (!email || !isMounted) {
+				return;
+			}
+
+			const { data } = await supabase
+				.from("members")
+				.select("first_name, last_name")
+				.eq("email", email)
+				.maybeSingle();
+
+			if (!isMounted) {
+				return;
+			}
+
+			const firstName =
+				typeof data?.first_name === "string" ? data.first_name.trim() : "";
+			const lastName = typeof data?.last_name === "string" ? data.last_name.trim() : "";
+			const fullName = `${firstName} ${lastName}`.trim();
+			setTesterName(fullName || email);
+		};
+
+		void loadTesterName();
+
+		return () => {
+			isMounted = false;
+		};
+	}, []);
 
 	useEffect(() => {
 		if (!toastMessage) {
@@ -279,6 +329,36 @@ export default function InventoryCategoryWorkspace({
 		return parsed.toLocaleDateString("en-US", { month: "short", year: "numeric" });
 	};
 
+	const formatNextTestDate = (value: string | null | undefined) => {
+		if (!value) {
+			return "Pending";
+		}
+
+		const parsed = new Date(value);
+		if (Number.isNaN(parsed.getTime())) {
+			return value;
+		}
+
+		const today = new Date();
+		today.setHours(0, 0, 0, 0);
+
+		if (parsed.getTime() < today.getTime()) {
+			return "Overdue";
+		}
+
+		return parsed.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+	};
+
+	const addOneYearIso = (isoDate: string) => {
+		const parsed = new Date(`${isoDate}T00:00:00`);
+		if (Number.isNaN(parsed.getTime())) {
+			return isoDate;
+		}
+
+		parsed.setFullYear(parsed.getFullYear() + 1);
+		return parsed.toISOString().split("T")[0];
+	};
+
 	const openAddModal = () => {
 		setEditRowKey(null);
 		setIsModalOpen(true);
@@ -342,6 +422,7 @@ export default function InventoryCategoryWorkspace({
 		hose_length: number | null;
 		booster_reel: boolean;
 		in_service_date: string;
+		next_test_date: string | null;
 		status: string;
 	}): InventoryRow => ({
 		id: row.id,
@@ -349,7 +430,7 @@ export default function InventoryCategoryWorkspace({
 		hoseSize: formatHoseSize(row.hose_size),
 		length: row.booster_reel ? "N/A (Booster Reel Hose)" : `${row.hose_length ?? "-"} ft`,
 		inServiceDate: formatMonthYear(row.in_service_date),
-		nextTestDate: "Pending",
+		nextTestDate: formatNextTestDate(row.next_test_date),
 		deficiencyStatus: "None",
 		status: row.status,
 	});
@@ -361,7 +442,9 @@ export default function InventoryCategoryWorkspace({
 
 		const { data, error } = await supabase
 			.from("fire_hose")
-			.select("id, inventory_number, hose_size, hose_length, booster_reel, in_service_date, status")
+			.select(
+				"id, inventory_number, hose_size, hose_length, booster_reel, in_service_date, next_test_date, status",
+			)
 			.eq("department_id", departmentId)
 			.order("created_at", { ascending: false });
 
@@ -378,6 +461,257 @@ export default function InventoryCategoryWorkspace({
 	const openEditModal = (row: InventoryRow) => {
 		setEditRowKey(rowIdentifier(row));
 		setIsModalOpen(true);
+	};
+
+	const reportEditingHoseDeficiency = () => {
+		if (!editingRow) {
+			return;
+		}
+
+		const params = new URLSearchParams();
+		params.set("returnTo", "/inventory/fire-hose");
+		params.set("inventoryCategory", "fire-hose");
+		params.set("inventoryItemId", editingRow.id ?? "");
+		params.set("inventoryItemLabel", editingRow.inventoryNumber ?? "");
+		params.set("apparatusId", editingRow.apparatusId ?? "station-supply");
+
+		router.push(`/deficiencies/report?${params.toString()}`);
+	};
+
+	const openTestingSession = () => {
+		setIsTestingModalOpen(true);
+	};
+
+	const hasActiveDeficiencyForHose = async (inventoryNumber: string) => {
+		const normalizedInventoryNumber = inventoryNumber.trim().toLowerCase();
+		if (!normalizedInventoryNumber) {
+			return false;
+		}
+
+		const { data, error } = await supabase
+			.from("deficiencies")
+			.select("description, location, status_info:deficiency_statuses!fk_deficiencies_status(name)")
+			.limit(500);
+
+		if (error) {
+			console.error("[fire-hose] failed to check active deficiencies", error);
+			return false;
+		}
+
+		return (data ?? []).some((record) => {
+			const statusInfoRecord = Array.isArray(record.status_info)
+				? record.status_info[0]
+				: record.status_info;
+			const normalizedStatusName =
+				typeof statusInfoRecord?.name === "string"
+					? statusInfoRecord.name.trim().toLowerCase()
+					: "";
+
+			const isActive =
+				normalizedStatusName.length > 0 &&
+				normalizedStatusName !== "resolved" &&
+				normalizedStatusName !== "closed";
+
+			if (!isActive) {
+				return false;
+			}
+
+			const description = typeof record.description === "string" ? record.description : "";
+			const location = typeof record.location === "string" ? record.location : "";
+			const searchableText = `${description} ${location}`.toLowerCase();
+
+			return searchableText.includes(normalizedInventoryNumber);
+		});
+	};
+
+	const applyHoseTestResult = async (values: {
+		testingDate: string;
+		tester: string;
+		hoseId: string;
+		status: "passed" | "failed";
+	}) => {
+		if (!departmentId) {
+			setToastMessage("Unable to determine department. Please refresh and try again.");
+			return { ok: false };
+		}
+
+		const row = activeRows.find((candidate) => candidate.id === values.hoseId);
+		if (!row?.id) {
+			setToastMessage("Selected hose could not be found.");
+			return { ok: false };
+		}
+
+		if (values.status === "passed") {
+			const nextTestDate = addOneYearIso(values.testingDate);
+			const hasActiveDeficiency = await hasActiveDeficiencyForHose(
+				row.inventoryNumber ?? "",
+			);
+			const passStatus = hasActiveDeficiency ? "Out of Service" : "Ready";
+
+			const { error } = await supabase
+				.from("fire_hose")
+				.update({
+					last_test_date: values.testingDate,
+					next_test_date: nextTestDate,
+					status: passStatus,
+				})
+				.eq("id", row.id)
+				.eq("department_id", departmentId);
+
+			if (error) {
+				setToastMessage(error.message || "Unable to save hose test results.");
+				return { ok: false };
+			}
+
+			return { ok: true };
+		}
+
+		const { error } = await supabase
+			.from("fire_hose")
+			.update({
+				last_test_date: values.testingDate,
+				status: "Out of Service",
+			})
+			.eq("id", row.id)
+			.eq("department_id", departmentId);
+
+		if (error) {
+			setToastMessage(error.message || "Unable to save hose test results.");
+			return { ok: false };
+		}
+
+		return { ok: true, failedRow: row };
+	};
+
+	const saveTestingSession = (values: HoseTestingSessionValues) => {
+		return (async () => {
+			if (!departmentId) {
+				setToastMessage("Unable to determine department. Please refresh and try again.");
+				return false;
+			}
+
+			const targetRows = activeRows.filter((row) => {
+				if (!row.id) {
+					return false;
+				}
+
+				const hoseStatus = values.hoseStatuses[row.id] ?? "untested";
+				return hoseStatus === "passed" || hoseStatus === "failed";
+			});
+
+			if (targetRows.length === 0) {
+				setToastMessage("Mark at least one hose as Passed or Failed before saving.");
+				return false;
+			}
+
+			const updateResults = await Promise.all(
+				targetRows.map(async (row) => {
+					if (!row.id) {
+						return { ok: false, error: { message: "Missing hose id." } };
+					}
+
+					const hoseStatus = values.hoseStatuses[row.id] ?? "untested";
+					if (hoseStatus !== "passed" && hoseStatus !== "failed") {
+						return { ok: false };
+					}
+
+					return applyHoseTestResult({
+						testingDate: values.testingDate,
+						tester: values.tester,
+						hoseId: row.id,
+						status: hoseStatus,
+					});
+				}),
+			);
+
+			const failedUpdate = updateResults.find((result) => !result.ok);
+			if (failedUpdate) {
+				return false;
+			}
+
+			const testerLabel = values.tester.trim() || testerName || "Unknown Tester";
+			const { data: sessionInsertData, error: sessionInsertError } = await supabase
+				.from("fire_hose_testing_sessions")
+				.insert({
+					department_id: departmentId,
+					test_date: values.testingDate,
+					tester: testerLabel,
+				})
+				.select("id")
+				.single();
+
+			if (sessionInsertError || !sessionInsertData?.id) {
+				setToastMessage(sessionInsertError?.message || "Unable to save testing session history.");
+				return false;
+			}
+
+			const testingResultsPayload = targetRows
+				.filter((row): row is InventoryRow & { id: string } => Boolean(row.id))
+				.map((row) => {
+					const hoseStatus = values.hoseStatuses[row.id] ?? "untested";
+					return {
+						testing_session_id: sessionInsertData.id,
+						department_id: departmentId,
+						hose_id: row.id,
+						inventory_number: row.inventoryNumber ?? "",
+						test_date: values.testingDate,
+						tester: testerLabel,
+						result: hoseStatus === "failed" ? "fail" : "pass",
+					};
+				});
+
+			const { error: resultsInsertError } = await supabase
+				.from("fire_hose_testing_results")
+				.insert(testingResultsPayload);
+
+			if (resultsInsertError) {
+				setToastMessage(resultsInsertError.message || "Unable to save hose test result history.");
+				return false;
+			}
+
+			await refreshFireHoseRows();
+			router.refresh();
+			setIsTestingModalOpen(false);
+			setToastMessage(`Successfully tested ${targetRows.length} hoses.`);
+			return true;
+		})();
+	};
+
+	const createDeficienciesForFailedHoses = (
+		failedHoses: Array<{ id: string; inventoryNumber: string }>,
+	) => {
+		if (failedHoses.length === 0) {
+			return;
+		}
+
+		const params = new URLSearchParams();
+		params.set("returnTo", "/inventory/fire-hose");
+		params.set("inventoryCategory", "fire-hose");
+		params.set("apparatusId", "station-supply");
+		params.set("failedHoseIds", failedHoses.map((hose) => hose.id).join(","));
+		params.set("failedIndex", "0");
+		params.set("inventoryItemId", failedHoses[0].id);
+		params.set("inventoryItemLabel", failedHoses[0].inventoryNumber);
+
+		setIsTestingModalOpen(false);
+		router.push(`/deficiencies/report?${params.toString()}`);
+	};
+
+	const saveQuickTestResult = async (values: {
+		testingDate: string;
+		tester: string;
+		hoseId: string;
+		status: "passed" | "failed";
+	}) => {
+		const result = await applyHoseTestResult(values);
+		if (!result.ok) {
+			return false;
+		}
+
+		await refreshFireHoseRows();
+		router.refresh();
+		setToastMessage(`Marked ${values.hoseId} as ${values.status === "passed" ? "PASS" : "FAIL"}.`);
+		return true;
 	};
 
 	const saveHose = (values: HoseFormValues) => {
@@ -534,6 +868,7 @@ export default function InventoryCategoryWorkspace({
 						</div>
 
 						<div className="mt-4">
+							<div className="flex flex-col items-start gap-2">
 							{actions.map((action) =>
 								action.label === "Report Deficiency" && action.href ? (
 									<Link
@@ -545,6 +880,14 @@ export default function InventoryCategoryWorkspace({
 									</Link>
 								) : null,
 							)}
+								<button
+									type="button"
+									onClick={openTestingSession}
+									className="inline-flex rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+								>
+									Start Hose Test
+								</button>
+							</div>
 						</div>
 					</div>
 
@@ -740,6 +1083,25 @@ export default function InventoryCategoryWorkspace({
 				}}
 				onSave={saveHose}
 				onRetire={editingRow ? retireEditingHose : undefined}
+				onReportDeficiency={editingRow ? reportEditingHoseDeficiency : undefined}
+			/>
+
+			<HoseTestingSessionModal
+				isOpen={isTestingModalOpen}
+				defaultTester={testerName}
+				departmentName={departmentName ?? "Department"}
+				hoses={activeRows
+					.filter((row) => Boolean(row.id))
+					.map((row) => ({
+						id: row.id,
+						inventoryNumber: row.inventoryNumber ?? "-",
+						hoseSize: row.hoseSize ?? "-",
+						length: row.length ?? "-",
+					}))}
+				onClose={() => setIsTestingModalOpen(false)}
+				onSave={saveTestingSession}
+				onCreateDeficiencies={createDeficienciesForFailedHoses}
+				onQuickMark={saveQuickTestResult}
 			/>
 		</div>
 	);

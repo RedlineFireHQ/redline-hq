@@ -18,6 +18,7 @@ interface HoseFormModalProps {
 	onClose: () => void;
 	onSave: (values: HoseFormValues) => void;
 	onRetire?: () => void;
+	onReportDeficiency?: () => void;
 }
 
 const EXTENDED_HOSE_SIZE_OPTIONS = ["1\"", "1.5\"", "1.75\"", "2\"", "2.5\"", "3\"", "4\"", "5\"", "6\""];
@@ -38,6 +39,7 @@ export default function HoseFormModal({
 	onClose,
 	onSave,
 	onRetire,
+	onReportDeficiency,
 }: HoseFormModalProps) {
 	const [formValues, setFormValues] = useState<HoseFormValues>(() => ({
 		...EMPTY_VALUES,
@@ -213,7 +215,16 @@ export default function HoseFormModal({
 				</label>
 
 				<div className="mt-6 flex flex-wrap items-center justify-between gap-2">
-					<div>
+					<div className="flex flex-wrap items-center gap-2">
+						{mode === "edit" && onReportDeficiency && (
+							<button
+								type="button"
+								onClick={onReportDeficiency}
+								className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+							>
+								Report Deficiency
+							</button>
+						)}
 						{mode === "edit" && onRetire && (
 							<button
 								type="button"

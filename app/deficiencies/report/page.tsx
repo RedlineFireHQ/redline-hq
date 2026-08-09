@@ -29,6 +29,13 @@ const initialFormState: ReportFormState = {
   photo: null,
 };
 
+const STATION_SUPPLY_OPTION: SelectOption = {
+  id: "station-supply",
+  label: "Station Supply",
+};
+
+const FIRE_HOSE_CATEGORY_TOKEN = "fire hose";
+
 function getRecordString(record: Record<string, unknown>, keys: string[]): string {
   for (const key of keys) {
     const value = record[key];
@@ -55,8 +62,23 @@ export default function ReportDeficiencyPage() {
 
   const returnToParam = searchParams.get("returnTo");
   const apparatusIdParam = searchParams.get("apparatusId");
+  const inventoryCategoryParam = searchParams.get("inventoryCategory");
+  const inventoryItemIdParam = searchParams.get("inventoryItemId");
+  const inventoryItemLabelParam = searchParams.get("inventoryItemLabel");
+  const failedHoseIdsParam = searchParams.get("failedHoseIds");
+  const failedIndexParam = searchParams.get("failedIndex");
   const safeReturnTo =
     typeof returnToParam === "string" && returnToParam.startsWith("/") ? returnToParam : null;
+
+  const inventoryCategory = typeof inventoryCategoryParam === "string" ? inventoryCategoryParam : "";
+  const inventoryItemId = typeof inventoryItemIdParam === "string" ? inventoryItemIdParam : "";
+  const inventoryItemLabel = typeof inventoryItemLabelParam === "string" ? inventoryItemLabelParam : "";
+  const failedHoseIds =
+    typeof failedHoseIdsParam === "string" && failedHoseIdsParam.trim().length > 0
+      ? failedHoseIdsParam.split(",").map((value) => value.trim()).filter(Boolean)
+      : [];
+  const failedIndexCandidate = Number.parseInt(failedIndexParam ?? "0", 10);
+  const failedIndex = Number.isFinite(failedIndexCandidate) ? Math.max(0, failedIndexCandidate) : 0;
 
   const [formState, setFormState] = useState<ReportFormState>({
     ...initialFormState,
@@ -69,8 +91,60 @@ export default function ReportDeficiencyPage() {
   const [isLoadingOptions, setIsLoadingOptions] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [resolvedInventoryItemLabel, setResolvedInventoryItemLabel] = useState(inventoryItemLabel);
 
   const backHref = safeReturnTo ?? "/deficiencies";
+
+  useEffect(() => {
+    setResolvedInventoryItemLabel(inventoryItemLabel);
+  }, [inventoryItemLabel]);
+
+  useEffect(() => {
+    if (inventoryCategory.trim().toLowerCase() !== "fire-hose") {
+      return;
+    }
+
+    if (!inventoryItemId || inventoryItemLabel) {
+      return;
+    }
+
+    let isMounted = true;
+
+    async function loadInventoryLabel() {
+      const { data, error } = await supabase
+        .from("fire_hose")
+        .select("inventory_number")
+        .eq("id", inventoryItemId)
+        .maybeSingle();
+
+      if (!isMounted || error) {
+        return;
+      }
+
+      const nextLabel = typeof data?.inventory_number === "string" ? data.inventory_number : "";
+      setResolvedInventoryItemLabel(nextLabel);
+    }
+
+    void loadInventoryLabel();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [inventoryCategory, inventoryItemId, inventoryItemLabel]);
+
+  useEffect(() => {
+    if (inventoryCategory.trim().toLowerCase() !== "fire-hose") {
+      return;
+    }
+
+    setFormState((current) => ({
+      ...current,
+      description: "",
+      location: "",
+      photo: null,
+      apparatusId: current.apparatusId || STATION_SUPPLY_OPTION.id,
+    }));
+  }, [inventoryCategory, inventoryItemId]);
 
   const canSubmit = useMemo(() => {
     return (
@@ -121,6 +195,20 @@ export default function ReportDeficiencyPage() {
       setPriorities((prioritiesResult.data ?? []).map((record) => normalizeOption(record as Record<string, unknown>)));
       setApparatusOptions((apparatusResult.data ?? []).map((record) => normalizeOption(record as Record<string, unknown>)));
 
+      if (inventoryCategory.trim().toLowerCase() === "fire-hose") {
+        const fireHoseCategory = (categoriesResult.data ?? [])
+          .map((record) => normalizeOption(record as Record<string, unknown>))
+          .find((option) => option.label.trim().toLowerCase().includes(FIRE_HOSE_CATEGORY_TOKEN));
+
+        if (fireHoseCategory) {
+          setFormState((current) => ({
+            ...current,
+            categoryId: current.categoryId || fireHoseCategory.id,
+            apparatusId: current.apparatusId || STATION_SUPPLY_OPTION.id,
+          }));
+        }
+      }
+
       const resolvedOpenStatus = (statusesResult.data ?? []).find((statusRow) => {
         const status = statusRow as Record<string, unknown>;
         return typeof status.name === "string" && status.name.trim().toLowerCase() === "open";
@@ -136,7 +224,7 @@ export default function ReportDeficiencyPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [inventoryCategory]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -174,7 +262,7 @@ export default function ReportDeficiencyPage() {
       id: deficiencyId,
       category_id: formState.categoryId,
       priority: formState.priorityId,
-      apparatus_id: formState.apparatusId,
+      apparatus_id: formState.apparatusId === STATION_SUPPLY_OPTION.id ? null : formState.apparatusId,
       description: formState.description.trim(),
       location: formState.location.trim() || null,
       reported_at: now,
@@ -201,7 +289,40 @@ export default function ReportDeficiencyPage() {
       member_id: null,
     });
 
+    if (inventoryCategory.trim().toLowerCase() === "fire-hose" && inventoryItemId) {
+      await supabase
+        .from("fire_hose")
+        .update({ status: "Out of Service" })
+        .eq("id", inventoryItemId);
+    }
+
     setIsSubmitting(false);
+
+    if (
+      inventoryCategory.trim().toLowerCase() === "fire-hose" &&
+      failedHoseIds.length > 0 &&
+      failedIndex < failedHoseIds.length - 1
+    ) {
+      const nextIndex = failedIndex + 1;
+      const nextHoseId = failedHoseIds[nextIndex];
+      const params = new URLSearchParams();
+
+      if (safeReturnTo) {
+        params.set("returnTo", safeReturnTo);
+      }
+
+      if (apparatusIdParam) {
+        params.set("apparatusId", apparatusIdParam);
+      }
+
+      params.set("inventoryCategory", "fire-hose");
+      params.set("inventoryItemId", nextHoseId);
+      params.set("failedHoseIds", failedHoseIds.join(","));
+      params.set("failedIndex", String(nextIndex));
+
+      router.push(`/deficiencies/report?${params.toString()}`);
+      return;
+    }
 
     if (safeReturnTo) {
       router.push(safeReturnTo);
@@ -236,6 +357,15 @@ export default function ReportDeficiencyPage() {
             ) : null}
 
             <div className="grid gap-5 md:grid-cols-2">
+              {inventoryCategory.trim().toLowerCase() === "fire-hose" && resolvedInventoryItemLabel ? (
+                <label className="block md:col-span-2">
+                  <span className="mb-2 block text-sm font-semibold text-zinc-200">Inventory Item</span>
+                  <div className="w-full rounded-xl border border-white/10 bg-[#151515] px-4 py-3 text-sm text-zinc-300">
+                    {resolvedInventoryItemLabel}
+                  </div>
+                </label>
+              ) : null}
+
               <label className="block md:col-span-2">
                 <span className="mb-2 block text-sm font-semibold text-zinc-200">Apparatus</span>
                 <select
@@ -244,7 +374,7 @@ export default function ReportDeficiencyPage() {
                   className="w-full rounded-xl border border-white/10 bg-[#151515] px-4 py-3 text-sm text-white"
                 >
                   <option value="">Select apparatus</option>
-                  {apparatusOptions.map((option) => (
+                  {[STATION_SUPPLY_OPTION, ...apparatusOptions].map((option) => (
                     <option key={option.id} value={option.id}>{option.label}</option>
                   ))}
                 </select>
