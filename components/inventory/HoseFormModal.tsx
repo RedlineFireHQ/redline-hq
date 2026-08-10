@@ -17,6 +17,7 @@ interface HoseFormModalProps {
 	initialValues?: HoseFormValues;
 	onClose: () => void;
 	onSave: (values: HoseFormValues) => void;
+	onViewTestingHistory?: () => void;
 	onRetire?: () => void;
 	onDelete?: () => void;
 	canDelete?: boolean;
@@ -60,6 +61,7 @@ export default function HoseFormModal({
 	initialValues,
 	onClose,
 	onSave,
+	onViewTestingHistory,
 	onRetire,
 	onDelete,
 	canDelete = false,
@@ -228,6 +230,16 @@ export default function HoseFormModal({
 								className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
 							>
 								Report Deficiency
+							</button>
+						)}
+
+						{mode === "edit" && onViewTestingHistory && (
+							<button
+								type="button"
+								onClick={onViewTestingHistory}
+								className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+							>
+								View Testing History →
 							</button>
 						)}
 

@@ -72,6 +72,28 @@ function formatHoseSize(value: number | string | null) {
 	return "-";
 }
 
+function compareInventoryNumbers(left: string | null | undefined, right: string | null | undefined) {
+	const leftValue = typeof left === "string" ? left.trim() : "";
+	const rightValue = typeof right === "string" ? right.trim() : "";
+
+	if (!leftValue && !rightValue) {
+		return 0;
+	}
+
+	if (!leftValue) {
+		return 1;
+	}
+
+	if (!rightValue) {
+		return -1;
+	}
+
+	return leftValue.localeCompare(rightValue, undefined, {
+		numeric: true,
+		sensitivity: "base",
+	});
+}
+
 export default async function FireHoseInventoryPage() {
 	const supabase = await createSupabaseServerClient();
 	const currentMember = await getCurrentMember(supabase);
@@ -182,7 +204,11 @@ export default async function FireHoseInventoryPage() {
 			}
 		}
 
-		rows = (data ?? []).map((row) => {
+		const sortedRows = [...(data ?? [])].sort((leftRow, rightRow) =>
+			compareInventoryNumbers(leftRow.inventory_number, rightRow.inventory_number),
+		);
+
+		rows = sortedRows.map((row) => {
 			const hasActiveDeficiency = hasActiveDeficiencyByHoseId[row.id] === true;
 			return {
 				id: row.id,

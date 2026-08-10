@@ -54,14 +54,14 @@ interface InventoryCategoryWorkspaceProps {
 
 function readinessRowClasses(tone: ReadinessTone) {
 	if (tone === "success") {
-		return "border-green-700/40 bg-green-900/20 hover:bg-green-900/30 text-green-200";
+		return "cursor-pointer border-green-700/40 bg-green-900/20 hover:bg-green-900/30 text-green-200";
 	}
 
 	if (tone === "warning") {
-		return "border-amber-700/40 bg-amber-900/20 hover:bg-amber-900/30 text-amber-200";
+		return "cursor-pointer border-amber-700/40 bg-amber-900/20 hover:bg-amber-900/30 text-amber-200";
 	}
 
-	return "border-red-700/40 bg-red-900/20 hover:bg-red-900/30 text-red-200";
+	return "cursor-pointer border-red-700/40 bg-red-900/20 hover:bg-red-900/30 text-red-200";
 }
 
 function quickActionClasses(tone: ActionTone) {
@@ -366,6 +366,9 @@ export default function InventoryCategoryWorkspace({
 		selectedTestingStatusFilter,
 	]);
 
+	const hasAnyInventoryRows = inventoryRows.length > 0;
+	const hasVisibleRows = filteredRows.length > 0;
+
 	const hoseSizeOptions = useMemo(
 		() => [
 			"All",
@@ -636,6 +639,14 @@ export default function InventoryCategoryWorkspace({
 	const openEditModal = (row: InventoryRow) => {
 		setEditRowKey(rowIdentifier(row));
 		setIsModalOpen(true);
+	};
+
+	const viewEditingHoseTestingHistory = () => {
+		if (!editingRow?.id) {
+			return;
+		}
+
+		router.push(`/inventory/fire-hose/testing-history?hoseId=${encodeURIComponent(editingRow.id)}`);
 	};
 
 	const reportEditingHoseDeficiency = () => {
@@ -1381,6 +1392,7 @@ export default function InventoryCategoryWorkspace({
 								<button
 									key={item.label}
 									type="button"
+									aria-pressed={activeReadinessFilter === item.filter}
 									onClick={() =>
 										setActiveReadinessFilter((current) =>
 											current === item.filter ? "all" : item.filter,
@@ -1398,7 +1410,7 @@ export default function InventoryCategoryWorkspace({
 						</div>
 
 						<div className="mt-4">
-							<div className="flex flex-col items-start gap-2">
+							<div className="flex flex-wrap items-start gap-2">
 							{actions.map((action) =>
 								action.label === "Report Deficiency" && action.href ? (
 									<Link
@@ -1410,6 +1422,12 @@ export default function InventoryCategoryWorkspace({
 									</Link>
 								) : null,
 							)}
+								<Link
+									href="/inventory/fire-hose/testing-history"
+									className="inline-flex rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+								>
+									View Testing History →
+								</Link>
 								<button
 									type="button"
 									onClick={openTestingSession}
@@ -1454,6 +1472,33 @@ export default function InventoryCategoryWorkspace({
 
 					{filters.length > 0 && (
 						<div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:min-w-[520px]">
+							{title === "Fire Hose" ? (
+								<div className="flex flex-wrap gap-2 sm:col-span-3">
+									<button
+										type="button"
+										onClick={() => setSelectedStatusFilter("All")}
+										className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+											selectedStatusFilter === "Retired"
+												? "border-white/15 bg-neutral-900 text-white hover:bg-neutral-800"
+												: "border-red-500/40 bg-red-600 text-white hover:bg-red-700"
+										}`}
+									>
+										Active Hoses
+									</button>
+									<button
+										type="button"
+										onClick={() => setSelectedStatusFilter("Retired")}
+										className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+											selectedStatusFilter === "Retired"
+												? "border-red-500/40 bg-red-600 text-white hover:bg-red-700"
+												: "border-white/15 bg-neutral-900 text-white hover:bg-neutral-800"
+										}`}
+									>
+										Retired Hoses
+									</button>
+								</div>
+							) : null}
+
 							{filters.includes("Status") && (
 								<select
 									value={selectedStatusFilter}
@@ -1536,17 +1581,48 @@ export default function InventoryCategoryWorkspace({
 						</thead>
 
 						<tbody>
-							{filteredRows.length === 0 && (
+							{!hasAnyInventoryRows ? (
 								<tr>
 									<td
 										colSpan={columns.length}
-										className="border-b border-white/5 px-4 py-8 text-center text-sm text-neutral-400"
+										className="border-b border-white/5 px-4 py-10"
 									>
-										No fire hose has been added yet.
+										<div className="flex flex-col items-start gap-4 text-left sm:items-center sm:text-center">
+											<div>
+												<p className="text-lg font-bold text-white">No Fire Hose Inventory</p>
+												<p className="mt-2 max-w-2xl text-sm text-neutral-400">
+													Add your department's hose inventory to begin tracking testing, deficiencies, and readiness.
+												</p>
+											</div>
+
+											<div className="flex flex-wrap gap-3">
+												{actions.some((action) => action.label === "+ Add Hose") ? (
+													<button
+														type="button"
+														onClick={openAddModal}
+														className="inline-flex rounded-lg border border-red-500/40 bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-700"
+													>
+														Add Hose
+													</button>
+												) : null}
+											</div>
+										</div>
 									</td>
 								</tr>
-							)}
-							{filteredRows.map((row) => {
+							) : !hasVisibleRows ? (
+								<tr>
+									<td
+										colSpan={columns.length}
+										className="border-b border-white/5 px-4 py-10"
+									>
+										<div className="flex flex-col items-start gap-2 text-left sm:items-center sm:text-center">
+											<p className="text-lg font-bold text-white">No Hoses Found</p>
+											<p className="max-w-2xl text-sm text-neutral-400">No hoses currently match this filter.</p>
+										</div>
+									</td>
+								</tr>
+							) : (
+								filteredRows.map((row) => {
 								const rowKey = row.id ?? row.inventoryNumber ?? row.serialNumber ?? `${row.hoseSize}-${row.length}`;
 
 								return (
@@ -1585,7 +1661,8 @@ export default function InventoryCategoryWorkspace({
 									})}
 								</tr>
 								);
-							})}
+							})
+							)}
 						</tbody>
 					</table>
 				</div>
@@ -1620,6 +1697,7 @@ export default function InventoryCategoryWorkspace({
 				onDelete={editingRow && canDeleteHose ? deleteEditingHose : undefined}
 				canDelete={canDeleteHose}
 				onReportDeficiency={editingRow ? reportEditingHoseDeficiency : undefined}
+				onViewTestingHistory={editingRow ? viewEditingHoseTestingHistory : undefined}
 			/>
 
 			<HoseTestingSessionModal
