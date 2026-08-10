@@ -29,14 +29,14 @@ export default function ResolveDeficiencyButton({
 	const [isResolving, setIsResolving] = useState(false);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 	const [isResolvedState, setIsResolvedState] = useState(isResolved);
-	const [createMaintenanceAfterResolve, setCreateMaintenanceAfterResolve] = useState(true);
+	const [createMaintenanceAfterResolve, setCreateMaintenanceAfterResolve] = useState(false);
 
 	async function openModal() {
 		setIsLoadingContext(true);
 		setErrorMessage(null);
 		setRepairNotes("");
 		setSelectedResolvedByMemberId("");
-		setCreateMaintenanceAfterResolve(true);
+		setCreateMaintenanceAfterResolve(false);
 		setIsModalOpen(true);
 
 		const [{ data: members, error: membersError }, { data: statuses, error: statusesError }] =

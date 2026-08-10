@@ -25,7 +25,7 @@ export default function ResolveDeficiencyPage() {
   const [isLoadingContext, setIsLoadingContext] = useState(true);
   const [isResolving, setIsResolving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [createMaintenanceAfterResolve, setCreateMaintenanceAfterResolve] = useState(true);
+  const [createMaintenanceAfterResolve, setCreateMaintenanceAfterResolve] = useState(false);
 
   useEffect(() => {
     let isMounted = true;

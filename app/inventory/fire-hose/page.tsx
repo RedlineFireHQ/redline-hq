@@ -3,20 +3,6 @@ import InventoryCategoryWorkspace from "@/components/inventory/InventoryCategory
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentMember } from "@/lib/current-member";
 
-const readinessItems = [
-	{
-		label: "• 9 Hose Tests Due",
-		filter: "tests-due" as const,
-		tone: "warning" as const,
-	},
-	{
-		label: "• 2 Open Deficiencies",
-		filter: "deficiencies" as const,
-		tone: "warning" as const,
-	},
-	{ label: "• 1 Out of Service", filter: "out-of-service" as const, tone: "danger" as const },
-];
-
 const quickActions = [
 	{ label: "+ Add Hose", tone: "primary" as const },
 	{ label: "Report Deficiency", href: "/deficiencies/report", tone: "danger" as const },
@@ -90,11 +76,16 @@ export default async function FireHoseInventoryPage() {
 	const supabase = await createSupabaseServerClient();
 	const currentMember = await getCurrentMember(supabase);
 	const departmentId = currentMember?.departmentId ?? null;
+	const canDeleteHose = currentMember?.role === "administrator";
 	console.log("[fire-hose][trace] departmentId", departmentId);
 	let departmentName: string | null = null;
 
 	let rows: Array<Record<string, string>> = [];
 	let initialError: string | null = null;
+	let testsDueCount = 0;
+	let openDeficienciesCount = 0;
+	let outOfServiceCount = 0;
+	let readinessScore = 100;
 
 	if (departmentId) {
 		const { data: departmentData } = await supabase
@@ -139,17 +130,94 @@ export default async function FireHoseInventoryPage() {
 			initialError = error.message || "Unable to load fire hose records.";
 		}
 
-		rows = (data ?? []).map((row) => ({
-			id: row.id,
-			inventoryNumber: row.inventory_number,
-			hoseSize: formatHoseSize(row.hose_size),
-			length: row.booster_reel ? "N/A (Booster Reel Hose)" : `${row.hose_length ?? "-"} ft`,
-			inServiceDateRaw: row.in_service_date ?? "",
-			inServiceDate: formatMonthYear(row.in_service_date),
-			nextTestDate: formatNextTestDate(row.next_test_date),
-			deficiencyStatus: "None",
-			status: row.status,
-		}));
+		const hoseIds = (data ?? [])
+			.filter((row) => row.status !== "Retired")
+			.map((row) => row.id)
+			.filter((id): id is string => typeof id === "string" && id.length > 0);
+
+		const hasActiveDeficiencyByHoseId: Record<string, boolean> = {};
+		const linkedDeficiencyCountByHoseId: Record<string, number> = {};
+		const activeDeficiencyCountByHoseId: Record<string, number> = {};
+
+		if (hoseIds.length > 0) {
+			const { data: deficiencyRows, error: deficiencyRowsError } = await supabase
+				.from("deficiencies")
+				.select("id, fire_hose_id, status_info:deficiency_statuses!fk_deficiencies_status(active)")
+				.in("fire_hose_id", hoseIds);
+
+			if (deficiencyRowsError) {
+				console.error("[fire-hose] failed to load deficiency rows by fire_hose_id", {
+					table: "deficiencies",
+					select: "id, fire_hose_id, status_info:deficiency_statuses!fk_deficiencies_status(active)",
+					filter: { fire_hose_id: hoseIds },
+					error: {
+						code: deficiencyRowsError.code ?? null,
+						message: deficiencyRowsError.message ?? null,
+						details: deficiencyRowsError.details ?? null,
+						hint: deficiencyRowsError.hint ?? null,
+					},
+				});
+			} else {
+				for (const deficiencyRow of deficiencyRows ?? []) {
+					const fireHoseId = deficiencyRow.fire_hose_id;
+					if (typeof fireHoseId !== "string" || fireHoseId.length === 0) {
+						continue;
+					}
+
+					linkedDeficiencyCountByHoseId[fireHoseId] =
+						(linkedDeficiencyCountByHoseId[fireHoseId] ?? 0) + 1;
+
+					const statusInfo = Array.isArray(deficiencyRow.status_info)
+						? deficiencyRow.status_info[0]
+						: deficiencyRow.status_info;
+					const isActive = statusInfo?.active === true;
+
+					if (isActive) {
+						activeDeficiencyCountByHoseId[fireHoseId] =
+							(activeDeficiencyCountByHoseId[fireHoseId] ?? 0) + 1;
+						hasActiveDeficiencyByHoseId[fireHoseId] = true;
+						openDeficienciesCount += 1;
+					}
+				}
+			}
+		}
+
+		rows = (data ?? []).map((row) => {
+			const hasActiveDeficiency = hasActiveDeficiencyByHoseId[row.id] === true;
+			return {
+				id: row.id,
+				inventoryNumber: row.inventory_number,
+				hoseSize: formatHoseSize(row.hose_size),
+				length: row.booster_reel ? "N/A (Booster Reel Hose)" : `${row.hose_length ?? "-"} ft`,
+				inServiceDateRaw: row.in_service_date ?? "",
+				inServiceDate: formatMonthYear(row.in_service_date),
+				nextTestDate: formatNextTestDate(row.next_test_date),
+				deficiencyStatus: hasActiveDeficiency ? "Active" : "None",
+				hasActiveDeficiency: hasActiveDeficiency ? "true" : "false",
+				status: row.status,
+			};
+		});
+
+		const activeRows = rows.filter((row) => row.status !== "Retired");
+
+		testsDueCount = activeRows.filter(
+			(row) => row.status === "Testing Due" || row.nextTestDate === "Overdue",
+		).length;
+		outOfServiceCount = activeRows.filter((row) => row.status === "Out of Service").length;
+
+		const readyCount = activeRows.filter((row) => row.status === "Ready").length;
+		const activeCount = activeRows.length;
+		readinessScore = activeCount > 0 ? Math.round((readyCount / activeCount) * 100) : 100;
+
+		for (const row of rows) {
+			console.log("[fire-hose][deficiency-state]", {
+				inventoryNumber: row.inventoryNumber,
+				fireHoseId: row.id,
+				linkedDeficiencyCount: linkedDeficiencyCountByHoseId[row.id] ?? 0,
+				activeDeficiencyCount: activeDeficiencyCountByHoseId[row.id] ?? 0,
+				hasActiveDeficiency: row.hasActiveDeficiency === "true",
+			});
+		}
 
 		console.log("[fire-hose][trace] mapped rows", rows);
 		console.log(
@@ -164,12 +232,30 @@ export default async function FireHoseInventoryPage() {
 		);
 	}
 
+	const readinessItems = [
+		{
+			label: `• ${testsDueCount} Hose Tests Due`,
+			filter: "tests-due" as const,
+			tone: "warning" as const,
+		},
+		{
+			label: `• ${openDeficienciesCount} Open Deficiencies`,
+			filter: "deficiencies" as const,
+			tone: "warning" as const,
+		},
+		{
+			label: `• ${outOfServiceCount} Out of Service`,
+			filter: "out-of-service" as const,
+			tone: "danger" as const,
+		},
+	];
+
 	return (
 		<PageLayout>
 			<InventoryCategoryWorkspace
 				title="Fire Hose"
 				subtitle="Manage department fire hose inventory."
-				readinessScore={96}
+				readinessScore={readinessScore}
 				readinessLabel="READY"
 				readinessMessage="Fire hose inventory is operational."
 				readinessItems={readinessItems}
@@ -180,6 +266,7 @@ export default async function FireHoseInventoryPage() {
 				rows={rows}
 				departmentId={departmentId}
 				departmentName={departmentName}
+				canDeleteHose={canDeleteHose}
 				searchKeys={["inventoryNumber", "hoseSize", "length"]}
 				initialError={initialError}
 			/>

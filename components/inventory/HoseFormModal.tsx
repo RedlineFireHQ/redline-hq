@@ -18,6 +18,8 @@ interface HoseFormModalProps {
 	onClose: () => void;
 	onSave: (values: HoseFormValues) => void;
 	onRetire?: () => void;
+	onDelete?: () => void;
+	canDelete?: boolean;
 	onReportDeficiency?: () => void;
 }
 
@@ -59,6 +61,8 @@ export default function HoseFormModal({
 	onClose,
 	onSave,
 	onRetire,
+	onDelete,
+	canDelete = false,
 	onReportDeficiency,
 }: HoseFormModalProps) {
 	const [formValues, setFormValues] = useState<HoseFormValues>({
@@ -234,6 +238,16 @@ export default function HoseFormModal({
 								className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200 transition hover:bg-red-500/20"
 							>
 								Retire Hose
+							</button>
+						)}
+
+						{mode === "edit" && canDelete && onDelete && (
+							<button
+								type="button"
+								onClick={onDelete}
+								className="ml-1 rounded-lg border border-red-700/60 bg-red-900/20 px-3 py-2 text-xs font-semibold text-red-100 transition hover:bg-red-900/30"
+							>
+								Delete Hose
 							</button>
 						)}
 					</div>

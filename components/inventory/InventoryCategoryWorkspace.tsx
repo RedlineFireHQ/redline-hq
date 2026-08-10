@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import HoseFormModal, { HoseFormValues } from "@/components/inventory/HoseFormModal";
 import HoseTestingSessionModal, {
 	HoseTestingSessionValues,
 } from "@/components/inventory/HoseTestingSessionModal";
 import { supabase } from "@/lib/supabase";
+
+const HOSE_TESTING_RESUME_STORAGE_KEY = "fire-hose-testing-resume";
 
 type ReadinessTone = "success" | "warning" | "danger";
 type ActionTone = "primary" | "secondary" | "danger";
@@ -47,6 +49,7 @@ interface InventoryCategoryWorkspaceProps {
 	departmentName?: string | null;
 	searchKeys?: string[];
 	initialError?: string | null;
+	canDeleteHose?: boolean;
 }
 
 function readinessRowClasses(tone: ReadinessTone) {
@@ -86,7 +89,15 @@ function statusPillClasses(status: string) {
 		return "border-red-700/40 bg-red-900/20 text-red-300";
 	}
 
+	if (status === "Retired") {
+		return "border-neutral-600/40 bg-neutral-800 text-neutral-300";
+	}
+
 	return "border-white/15 bg-neutral-900 text-neutral-200";
+}
+
+function rowHasActiveDeficiency(row: InventoryRow) {
+	return row.hasActiveDeficiency === "true" || row.deficiencyStatus === "Active";
 }
 
 export default function InventoryCategoryWorkspace({
@@ -105,8 +116,11 @@ export default function InventoryCategoryWorkspace({
 	departmentName = null,
 	searchKeys = ["inventoryNumber", "hoseSize", "length"],
 	initialError = null,
+	canDeleteHose = false,
 }: InventoryCategoryWorkspaceProps) {
 	const router = useRouter();
+	const searchParams = useSearchParams();
+	const resumeTestingSummary = searchParams.get("resumeTestingSummary") === "1";
 	const scoreWidth = `${Math.max(0, Math.min(100, readinessScore))}%`;
 	const [departmentId, setDepartmentId] = useState<string | null>(initialDepartmentId);
 	const [activeReadinessFilter, setActiveReadinessFilter] = useState<ReadinessItem["filter"]>("all");
@@ -119,6 +133,9 @@ export default function InventoryCategoryWorkspace({
 	const [isTestingModalOpen, setIsTestingModalOpen] = useState(false);
 	const [editRowKey, setEditRowKey] = useState<string | null>(null);
 	const [testerName, setTesterName] = useState("");
+	const [resumeTestingValues, setResumeTestingValues] = useState<HoseTestingSessionValues | null>(
+		null,
+	);
 	const [toastMessage, setToastMessage] = useState<string | null>(initialError);
 	const [toastVisible, setToastVisible] = useState(Boolean(initialError));
 
@@ -215,6 +232,63 @@ export default function InventoryCategoryWorkspace({
 	}, []);
 
 	useEffect(() => {
+		if (!resumeTestingSummary || isTestingModalOpen) {
+			return;
+		}
+
+		if (!departmentId) {
+			return;
+		}
+
+		if (typeof window === "undefined") {
+			return;
+		}
+
+		const raw = window.sessionStorage.getItem(HOSE_TESTING_RESUME_STORAGE_KEY);
+		if (!raw) {
+			router.replace("/inventory/fire-hose");
+			return;
+		}
+
+		let isMounted = true;
+
+		const resumeTestingFlow = async () => {
+			try {
+				const parsed = JSON.parse(raw) as HoseTestingSessionValues;
+				if (
+					typeof parsed.testingDate === "string" &&
+					typeof parsed.tester === "string" &&
+					parsed.hoseStatuses &&
+					typeof parsed.hoseStatuses === "object"
+				) {
+					await refreshFireHoseRows();
+					if (!isMounted) {
+						return;
+					}
+
+					setResumeTestingValues(parsed);
+					setIsTestingModalOpen(true);
+				}
+			} catch {
+				// Ignore malformed resume payload and continue to normal page load.
+			} finally {
+				if (!isMounted) {
+					return;
+				}
+
+				window.sessionStorage.removeItem(HOSE_TESTING_RESUME_STORAGE_KEY);
+				router.replace("/inventory/fire-hose");
+			}
+		};
+
+		void resumeTestingFlow();
+
+		return () => {
+			isMounted = false;
+		};
+	}, [departmentId, isTestingModalOpen, resumeTestingSummary, router]);
+
+	useEffect(() => {
 		if (!toastMessage) {
 			return;
 		}
@@ -228,12 +302,15 @@ export default function InventoryCategoryWorkspace({
 	}, [toastMessage]);
 
 	const activeRows = useMemo(
-		() => inventoryRows.filter((row) => row.retired !== "true"),
+		() => inventoryRows.filter((row) => row.retired !== "true" && row.status !== "Retired"),
 		[inventoryRows],
 	);
 
 	const filteredRows = useMemo(() => {
-		let workingRows = activeRows;
+		let workingRows =
+			selectedStatusFilter === "Retired"
+				? inventoryRows.filter((row) => row.status === "Retired")
+				: activeRows;
 
 		if (searchTerm.trim().length > 0) {
 			const normalized = searchTerm.trim().toLowerCase();
@@ -273,7 +350,7 @@ export default function InventoryCategoryWorkspace({
 		}
 
 		if (activeReadinessFilter === "deficiencies") {
-			return workingRows.filter((row) => row.deficiencyStatus === "Active");
+			return workingRows.filter((row) => rowHasActiveDeficiency(row));
 		}
 
 		console.log("WORKING ROWS", workingRows);
@@ -281,6 +358,7 @@ export default function InventoryCategoryWorkspace({
 	}, [
 		activeReadinessFilter,
 		activeRows,
+		inventoryRows,
 		searchKeys,
 		searchTerm,
 		selectedHoseSizeFilter,
@@ -430,33 +508,41 @@ export default function InventoryCategoryWorkspace({
 		next_test_date: string | null;
 		status: string;
 		},
-		deficiencyStatusByHoseId: Record<string, string>,
-	): InventoryRow => ({
-		id: row.id,
-		inventoryNumber: row.inventory_number,
-		hoseSize: formatHoseSize(row.hose_size),
-		length: row.booster_reel ? "N/A (Booster Reel Hose)" : `${row.hose_length ?? "-"} ft`,
+		hasActiveDeficiencyByHoseId: Record<string, boolean>,
+	): InventoryRow => {
+		const hasActiveDeficiency = hasActiveDeficiencyByHoseId[row.id] === true;
+		return {
+			id: row.id,
+			inventoryNumber: row.inventory_number,
+			hoseSize: formatHoseSize(row.hose_size),
+			length: row.booster_reel ? "N/A (Booster Reel Hose)" : `${row.hose_length ?? "-"} ft`,
 			inServiceDateRaw: row.in_service_date ?? "",
-		inServiceDate: formatMonthYear(row.in_service_date),
-		nextTestDate: formatNextTestDate(row.next_test_date),
-		deficiencyStatus: deficiencyStatusByHoseId[row.id] ?? "None",
-		status: row.status,
-	});
+			inServiceDate: formatMonthYear(row.in_service_date),
+			nextTestDate: formatNextTestDate(row.next_test_date),
+			deficiencyStatus: hasActiveDeficiency ? "Active" : "None",
+			hasActiveDeficiency: hasActiveDeficiency ? "true" : "false",
+			status: row.status,
+		};
+	};
 
 	const buildDeficiencyStatusByHoseId = async (hoseIds: string[]) => {
 		if (hoseIds.length === 0) {
-			return {} as Record<string, string>;
+			return {
+				hasActiveDeficiencyByHoseId: {} as Record<string, boolean>,
+				linkedDeficiencyCountByHoseId: {} as Record<string, number>,
+				activeDeficiencyCountByHoseId: {} as Record<string, number>,
+			};
 		}
 
 		const { data: deficiencyRows, error: deficiencyRowsError } = await supabase
 			.from("deficiencies")
-			.select("id, fire_hose_id, status_info:deficiency_statuses!fk_deficiencies_status(name)")
+			.select("id, fire_hose_id, status_info:deficiency_statuses!fk_deficiencies_status(active)")
 			.in("fire_hose_id", hoseIds);
 
 		if (deficiencyRowsError) {
 			console.error("[fire-hose] failed to load deficiency rows by fire_hose_id", {
 				table: "deficiencies",
-				select: "id, fire_hose_id, status_info:deficiency_statuses!fk_deficiencies_status(name)",
+				select: "id, fire_hose_id, status_info:deficiency_statuses!fk_deficiencies_status(active)",
 				filter: { fire_hose_id: hoseIds },
 				error: {
 					code: deficiencyRowsError.code ?? null,
@@ -465,24 +551,42 @@ export default function InventoryCategoryWorkspace({
 					hint: deficiencyRowsError.hint ?? null,
 				},
 			});
-			return {};
+			return {
+				hasActiveDeficiencyByHoseId: {},
+				linkedDeficiencyCountByHoseId: {},
+				activeDeficiencyCountByHoseId: {},
+			};
 		}
 
-		const deficiencyStatusByHoseId: Record<string, string> = {};
+		const hasActiveDeficiencyByHoseId: Record<string, boolean> = {};
+		const linkedDeficiencyCountByHoseId: Record<string, number> = {};
+		const activeDeficiencyCountByHoseId: Record<string, number> = {};
 		for (const deficiencyRow of deficiencyRows ?? []) {
 			const fireHoseId = deficiencyRow.fire_hose_id;
+			if (typeof fireHoseId !== "string" || fireHoseId.length === 0) {
+				continue;
+			}
+
+			linkedDeficiencyCountByHoseId[fireHoseId] =
+				(linkedDeficiencyCountByHoseId[fireHoseId] ?? 0) + 1;
+
 			const statusInfo = Array.isArray(deficiencyRow.status_info)
 				? deficiencyRow.status_info[0]
 				: deficiencyRow.status_info;
-			const statusName = typeof statusInfo?.name === "string" ? statusInfo.name.trim().toLowerCase() : "";
-			const isUnresolved = statusName !== "resolved" && statusName !== "closed";
+			const isActive = statusInfo?.active === true;
 
-			if (typeof fireHoseId === "string" && isUnresolved) {
-				deficiencyStatusByHoseId[fireHoseId] = "Active";
+			if (isActive) {
+				activeDeficiencyCountByHoseId[fireHoseId] =
+					(activeDeficiencyCountByHoseId[fireHoseId] ?? 0) + 1;
+				hasActiveDeficiencyByHoseId[fireHoseId] = true;
 			}
 		}
 
-		return deficiencyStatusByHoseId;
+		return {
+			hasActiveDeficiencyByHoseId,
+			linkedDeficiencyCountByHoseId,
+			activeDeficiencyCountByHoseId,
+		};
 	};
 
 	const refreshFireHoseRows = async () => {
@@ -506,13 +610,27 @@ export default function InventoryCategoryWorkspace({
 		}
 
 		const normalizedRows = data ?? [];
-		const deficiencyStatusByHoseId = await buildDeficiencyStatusByHoseId(
+		const deficiencyState = await buildDeficiencyStatusByHoseId(
 			normalizedRows
 				.map((row) => row.id)
 				.filter((id): id is string => typeof id === "string" && id.length > 0),
 		);
 
-		setInventoryRows(normalizedRows.map((row) => mapFireHoseRow(row, deficiencyStatusByHoseId)));
+		for (const row of normalizedRows) {
+			console.log("[fire-hose][deficiency-state]", {
+				inventoryNumber: row.inventory_number,
+				fireHoseId: row.id,
+				linkedDeficiencyCount: deficiencyState.linkedDeficiencyCountByHoseId[row.id] ?? 0,
+				activeDeficiencyCount: deficiencyState.activeDeficiencyCountByHoseId[row.id] ?? 0,
+				hasActiveDeficiency: deficiencyState.hasActiveDeficiencyByHoseId[row.id] === true,
+			});
+		}
+
+		setInventoryRows(
+			normalizedRows.map((row) =>
+				mapFireHoseRow(row, deficiencyState.hasActiveDeficiencyByHoseId),
+			),
+		);
 	};
 
 	const openEditModal = (row: InventoryRow) => {
@@ -537,6 +655,7 @@ export default function InventoryCategoryWorkspace({
 
 	const openTestingSession = () => {
 		try {
+			setResumeTestingValues(null);
 			setIsTestingModalOpen(true);
 		} catch (err) {
 			console.error("START HOSE TEST ERROR", err);
@@ -551,7 +670,7 @@ export default function InventoryCategoryWorkspace({
 
 		const { data: deficiencyRows, error: deficiencyRowsError } = await supabase
 			.from("deficiencies")
-			.select("id, status_info:deficiency_statuses!fk_deficiencies_status(name)")
+			.select("id, status_info:deficiency_statuses!fk_deficiencies_status(active)")
 			.eq("fire_hose_id", hoseId);
 
 		if (deficiencyRowsError) {
@@ -569,12 +688,8 @@ export default function InventoryCategoryWorkspace({
 			const statusInfoRecord = Array.isArray(record.status_info)
 				? record.status_info[0]
 				: record.status_info;
-			const normalizedStatusName =
-				typeof statusInfoRecord?.name === "string"
-					? statusInfoRecord.name.trim().toLowerCase()
-					: "";
 
-			return normalizedStatusName !== "resolved" && normalizedStatusName !== "closed";
+			return statusInfoRecord?.active === true;
 		});
 	};
 
@@ -754,7 +869,10 @@ export default function InventoryCategoryWorkspace({
 
 	const saveTestingSession = (
 		values: HoseTestingSessionValues,
-		options?: { closeModalOnSuccess?: boolean },
+		options?: {
+			closeModalOnSuccess?: boolean;
+			allowFailedHosesWithoutDeficiencies?: boolean;
+		},
 	) => {
 		return (async () => {
 			try {
@@ -775,6 +893,26 @@ export default function InventoryCategoryWorkspace({
 				if (targetRows.length === 0) {
 					setToastMessage("Mark at least one hose as Passed or Failed before saving.");
 					return false;
+				}
+
+				if (!(options?.allowFailedHosesWithoutDeficiencies ?? false)) {
+					const failedRows = targetRows.filter((row) => {
+						if (!row.id) {
+							return false;
+						}
+
+						return values.hoseStatuses[row.id] === "failed";
+					});
+
+					for (const failedRow of failedRows) {
+						const hasActiveDeficiency = await hasActiveDeficiencyForHose(failedRow.id);
+						if (hasActiveDeficiency !== true) {
+							setToastMessage(
+								"Failed hoses require deficiencies. Use Create Deficiencies from the summary to continue.",
+							);
+							return false;
+						}
+					}
 				}
 
 				const updateResults = await Promise.all(
@@ -988,13 +1126,16 @@ export default function InventoryCategoryWorkspace({
 			return false;
 		}
 
-		const saved = await saveTestingSession(values, { closeModalOnSuccess: false });
+		const saved = await saveTestingSession(values, {
+			closeModalOnSuccess: false,
+			allowFailedHosesWithoutDeficiencies: true,
+		});
 		if (!saved) {
 			return false;
 		}
 
 		const params = new URLSearchParams();
-		params.set("returnTo", "/inventory/fire-hose");
+		params.set("returnTo", "/inventory/fire-hose?resumeTestingSummary=1");
 		params.set("inventoryCategory", "fire-hose");
 		params.set("apparatusId", "station-supply");
 		params.set("failedHoseIds", failedHoses.map((hose) => hose.id).join(","));
@@ -1002,31 +1143,13 @@ export default function InventoryCategoryWorkspace({
 		params.set("inventoryItemId", failedHoses[0].id);
 		params.set("inventoryItemLabel", failedHoses[0].inventoryNumber);
 
+		if (typeof window !== "undefined") {
+			window.sessionStorage.setItem(HOSE_TESTING_RESUME_STORAGE_KEY, JSON.stringify(values));
+		}
+
 		setIsTestingModalOpen(false);
 		router.push(`/deficiencies/report?${params.toString()}`);
 		return true;
-	};
-
-	const saveQuickTestResult = async (values: {
-		testingDate: string;
-		tester: string;
-		hoseId: string;
-		status: "passed" | "failed";
-	}) => {
-		try {
-			const result = await applyHoseTestResult(values);
-			if (!result.ok) {
-				return false;
-			}
-
-			await refreshFireHoseRows();
-			router.refresh();
-			setToastMessage(`Marked ${values.hoseId} as ${values.status === "passed" ? "PASS" : "FAIL"}.`);
-			return true;
-		} catch (err) {
-			console.error("START HOSE TEST ERROR", err);
-			throw err;
-		}
 	};
 
 	const saveHose = (values: HoseFormValues) => {
@@ -1067,7 +1190,7 @@ export default function InventoryCategoryWorkspace({
 				department_id: departmentId,
 				inventory_number: values.inventoryNumber.trim(),
 				hose_size: parseHoseSize(values.hoseSize),
-				hose_length: values.boosterReelHose ? null : parseLengthFeet(values.length),
+				hose_length: values.boosterReelHose ? 0 : parseLengthFeet(values.length),
 				booster_reel: values.boosterReelHose,
 				in_service_date: normalizedInServiceDate,
 				status: "Ready",
@@ -1102,7 +1225,7 @@ export default function InventoryCategoryWorkspace({
 		const updatePayload = {
 			inventory_number: values.inventoryNumber.trim(),
 			hose_size: parseHoseSize(values.hoseSize),
-			hose_length: values.boosterReelHose ? null : parseLengthFeet(values.length),
+			hose_length: values.boosterReelHose ? 0 : parseLengthFeet(values.length),
 			booster_reel: values.boosterReelHose,
 			in_service_date: normalizeDateValue(values.inServiceDate),
 		};
@@ -1139,21 +1262,81 @@ export default function InventoryCategoryWorkspace({
 				return;
 			}
 
+			const hoseLabel = editingRow.inventoryNumber ?? editingRow.id;
+			const confirmed = window.confirm(
+				`Retire Hose #${hoseLabel}?\n\nThis hose will be removed from active inventory but retained in your records and testing history.`,
+			);
+
+			if (!confirmed) {
+				return;
+			}
+
 			const { data: retiredRow, error: retireError } = await supabase
 				.from("fire_hose")
-				.update({ status: "Out of Service" })
+				.update({ status: "Retired" })
 				.eq("id", editingRow.id)
 				.eq("department_id", departmentId)
 				.select("id, status")
 				.single();
 
-			if (retireError || !retiredRow || retiredRow.id !== editingRow.id) {
+			if (
+				retireError ||
+				!retiredRow ||
+				retiredRow.id !== editingRow.id ||
+				retiredRow.status !== "Retired"
+			) {
 				console.error("[fire-hose][retire] update mismatch", {
 					expectedHoseId: editingRow.id,
+					expectedStatus: "Retired",
 					actualRow: retiredRow ?? null,
 					error: retireError ?? null,
 				});
 				setToastMessage(retireError?.message || "Unable to retire hose.");
+				return;
+			}
+
+			await refreshFireHoseRows();
+			setIsModalOpen(false);
+			setEditRowKey(null);
+		})();
+	};
+
+	const deleteEditingHose = () => {
+		void (async () => {
+			if (!canDeleteHose) {
+				setToastMessage("Only administrators can delete hoses.");
+				return;
+			}
+
+			if (!departmentId || !editingRow?.id) {
+				setToastMessage("Unable to delete hose: missing hose id or department.");
+				return;
+			}
+
+			const hoseLabel = editingRow.inventoryNumber ?? editingRow.id;
+			const confirmed = window.confirm(
+				`Delete Hose #${hoseLabel}?\n\nThis permanently removes this hose and its associated records. This action cannot be undone.`,
+			);
+
+			if (!confirmed) {
+				return;
+			}
+
+			const { data: deletedRow, error: deleteError } = await supabase
+				.from("fire_hose")
+				.delete()
+				.eq("id", editingRow.id)
+				.eq("department_id", departmentId)
+				.select("id")
+				.single();
+
+			if (deleteError || !deletedRow || deletedRow.id !== editingRow.id) {
+				console.error("[fire-hose][delete] delete mismatch", {
+					expectedHoseId: editingRow.id,
+					actualRow: deletedRow ?? null,
+					error: deleteError ?? null,
+				});
+				setToastMessage(deleteError?.message || "Unable to delete hose.");
 				return;
 			}
 
@@ -1281,6 +1464,7 @@ export default function InventoryCategoryWorkspace({
 									<option>Ready</option>
 									<option>Testing Due</option>
 									<option>Out of Service</option>
+									{title === "Fire Hose" ? <option>Retired</option> : null}
 								</select>
 							)}
 
@@ -1433,6 +1617,8 @@ export default function InventoryCategoryWorkspace({
 				}}
 				onSave={saveHose}
 				onRetire={editingRow ? retireEditingHose : undefined}
+				onDelete={editingRow && canDeleteHose ? deleteEditingHose : undefined}
+				canDelete={canDeleteHose}
 				onReportDeficiency={editingRow ? reportEditingHoseDeficiency : undefined}
 			/>
 
@@ -1440,6 +1626,7 @@ export default function InventoryCategoryWorkspace({
 				isOpen={isTestingModalOpen}
 				defaultTester={testerName}
 				departmentName={departmentName ?? "Department"}
+				resumeValues={resumeTestingValues}
 				hoses={activeRows
 					.filter((row) => Boolean(row.id))
 					.map((row) => ({
@@ -1447,11 +1634,14 @@ export default function InventoryCategoryWorkspace({
 						inventoryNumber: row.inventoryNumber ?? "-",
 						hoseSize: row.hoseSize ?? "-",
 						length: row.length ?? "-",
+						hasActiveDeficiency: rowHasActiveDeficiency(row),
 					}))}
-				onClose={() => setIsTestingModalOpen(false)}
+				onClose={() => {
+					setIsTestingModalOpen(false);
+					setResumeTestingValues(null);
+				}}
 				onSave={saveTestingSession}
 				onCreateDeficiencies={createDeficienciesForFailedHoses}
-				onQuickMark={saveQuickTestResult}
 			/>
 		</div>
 	);

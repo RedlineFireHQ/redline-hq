@@ -237,6 +237,44 @@ export default function ReportDeficiencyPage() {
     setIsSubmitting(true);
     setErrorMessage(null);
 
+    const isFireHoseDeficiency = inventoryCategory.trim().toLowerCase() === "fire-hose";
+
+    const routeToNextStep = (insertedDeficiencyId?: string) => {
+      if (isFireHoseDeficiency && failedHoseIds.length > 0 && failedIndex < failedHoseIds.length - 1) {
+        const nextIndex = failedIndex + 1;
+        const nextHoseId = failedHoseIds[nextIndex];
+        const params = new URLSearchParams();
+
+        if (safeReturnTo) {
+          params.set("returnTo", safeReturnTo);
+        }
+
+        if (apparatusIdParam) {
+          params.set("apparatusId", apparatusIdParam);
+        }
+
+        params.set("inventoryCategory", "fire-hose");
+        params.set("inventoryItemId", nextHoseId);
+        params.set("failedHoseIds", failedHoseIds.join(","));
+        params.set("failedIndex", String(nextIndex));
+
+        router.push(`/deficiencies/report?${params.toString()}`);
+        return;
+      }
+
+      if (safeReturnTo) {
+        router.push(safeReturnTo);
+        return;
+      }
+
+      if (insertedDeficiencyId) {
+        router.push(`/operations/deficiencies/${insertedDeficiencyId}`);
+        return;
+      }
+
+      router.push("/deficiencies");
+    };
+
     const deficiencyId = crypto.randomUUID();
     let uploadedPhotoPath: string | null = null;
 
@@ -258,7 +296,6 @@ export default function ReportDeficiencyPage() {
     }
 
     const now = new Date().toISOString();
-    const isFireHoseDeficiency = inventoryCategory.trim().toLowerCase() === "fire-hose";
     const payload = {
       id: deficiencyId,
       category_id: formState.categoryId,
@@ -323,38 +360,7 @@ export default function ReportDeficiencyPage() {
 
     setIsSubmitting(false);
 
-    if (
-      inventoryCategory.trim().toLowerCase() === "fire-hose" &&
-      failedHoseIds.length > 0 &&
-      failedIndex < failedHoseIds.length - 1
-    ) {
-      const nextIndex = failedIndex + 1;
-      const nextHoseId = failedHoseIds[nextIndex];
-      const params = new URLSearchParams();
-
-      if (safeReturnTo) {
-        params.set("returnTo", safeReturnTo);
-      }
-
-      if (apparatusIdParam) {
-        params.set("apparatusId", apparatusIdParam);
-      }
-
-      params.set("inventoryCategory", "fire-hose");
-      params.set("inventoryItemId", nextHoseId);
-      params.set("failedHoseIds", failedHoseIds.join(","));
-      params.set("failedIndex", String(nextIndex));
-
-      router.push(`/deficiencies/report?${params.toString()}`);
-      return;
-    }
-
-    if (safeReturnTo) {
-      router.push(safeReturnTo);
-      return;
-    }
-
-    router.push(`/operations/deficiencies/${insertedDeficiencyId}`);
+    routeToNextStep(insertedDeficiencyId);
   }
 
   return (

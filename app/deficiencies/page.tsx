@@ -10,6 +10,10 @@ type Deficiency = {
 	deficiency_number: string | null;
 	description: string | null;
 	location: string | null;
+	fire_hose_id: string | null;
+	fire_hose: {
+		inventory_number: string | null;
+	} | null;
 	apparatus: {
 		name: string | null;
 	} | null;
@@ -131,10 +135,40 @@ function normalizeDeficiencyRelation(value: unknown): { name: string | null } | 
 	return null;
 }
 
+function normalizeFireHoseRelation(
+	value: unknown,
+): { inventory_number: string | null } | null {
+	if (Array.isArray(value)) {
+		const first = value[0] as Record<string, unknown> | undefined;
+		if (!first) {
+			return null;
+		}
+
+		const inventoryNumber = first.inventory_number;
+		return {
+			inventory_number:
+				typeof inventoryNumber === "string" ? inventoryNumber : null,
+		};
+	}
+
+	if (value && typeof value === "object") {
+		const relation = value as Record<string, unknown>;
+		const inventoryNumber = relation.inventory_number;
+
+		return {
+			inventory_number:
+				typeof inventoryNumber === "string" ? inventoryNumber : null,
+		};
+	}
+
+	return null;
+}
+
 function normalizeDeficienciesData(data: unknown[] | null): Deficiency[] {
 	return (data ?? []).map((record) => {
 		const row = record as Record<string, unknown>;
 		const idValue = row.id;
+		const fireHoseIdValue = row.fire_hose_id;
 
 		return {
 			id: typeof idValue === "string" ? idValue : String(idValue ?? ""),
@@ -142,6 +176,8 @@ function normalizeDeficienciesData(data: unknown[] | null): Deficiency[] {
 				typeof row.deficiency_number === "string" ? row.deficiency_number : null,
 			description: typeof row.description === "string" ? row.description : null,
 			location: typeof row.location === "string" ? row.location : null,
+			fire_hose_id: typeof fireHoseIdValue === "string" ? fireHoseIdValue : null,
+			fire_hose: normalizeFireHoseRelation(row.fire_hose),
 			apparatus: normalizeDeficiencyRelation(row.apparatus),
 			priority: normalizeDeficiencyRelation(row.priority),
 			status: normalizeDeficiencyRelation(row.status),
@@ -156,7 +192,7 @@ async function fetchDeficiencies() {
 	const result = await supabase
 		.from("deficiencies")
 		.select(
-			"id, deficiency_number, description, reported_at, priority:deficiency_priorities!fk_deficiencies_priority(name), status:deficiency_statuses!fk_deficiencies_status(name), apparatus:apparatus!fk_deficiencies_apparatus(name)"
+			"id, deficiency_number, description, reported_at, fire_hose_id, fire_hose:fire_hose_id(inventory_number), priority:deficiency_priorities!fk_deficiencies_priority(name), status:deficiency_statuses!fk_deficiencies_status(name), apparatus:apparatus!fk_deficiencies_apparatus(name)"
 		)
 		.order("reported_at", { ascending: false });
 
@@ -318,6 +354,7 @@ export default function DeficienciesPage() {
 			const searchableFields = [
 				deficiency.deficiency_number ?? "",
 				deficiency.apparatus?.name ?? "",
+				deficiency.fire_hose?.inventory_number ?? "",
 				deficiency.description ?? "",
 				deficiency.location ?? "",
 			];
@@ -874,7 +911,18 @@ export default function DeficienciesPage() {
 												{deficiency.deficiency_number ?? "Unassigned"}
 											</td>
 											<td className="px-6 py-4 text-zinc-300">
-												{deficiency.apparatus?.name ?? "Unknown Apparatus"}
+														{deficiency.apparatus?.name ? (
+															deficiency.apparatus.name
+														) : deficiency.fire_hose_id ? (
+															<div>
+																<p>Station Supply</p>
+																<p>
+																	Fire Hose - {deficiency.fire_hose?.inventory_number ?? "Unknown"}
+																</p>
+															</div>
+														) : (
+															"Unknown Apparatus"
+														)}
 											</td>
 											<td className="px-6 py-4 text-zinc-300">
 												{deficiency.description ?? "No description provided."}
