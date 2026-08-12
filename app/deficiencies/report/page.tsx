@@ -35,6 +35,55 @@ const STATION_SUPPLY_OPTION: SelectOption = {
 };
 
 const FIRE_HOSE_CATEGORY_TOKEN = "fire hose";
+const SCBA_CATEGORY_TOKEN = "scba";
+const HOSE_CATEGORY_TOKEN = "hose";
+const INVENTORY_CATEGORY_TOKEN = "inventory";
+
+function getInventoryEquipmentTypeLabel(normalizedInventoryCategory: string) {
+  if (normalizedInventoryCategory === "fire-hose") {
+    return "Fire Hose";
+  }
+
+  if (normalizedInventoryCategory === "scba-cylinders") {
+    return "SCBA Cylinder";
+  }
+
+  if (normalizedInventoryCategory === "scba-packs") {
+    return "SCBA Pack";
+  }
+
+  return "";
+}
+
+function resolveInventoryCategoryOption(
+  options: SelectOption[],
+  normalizedInventoryCategory: string,
+) {
+  const normalizedOptions = options.map((option) => ({
+    option,
+    normalizedLabel: option.label.trim().toLowerCase(),
+  }));
+
+  if (normalizedInventoryCategory === "fire-hose") {
+    return (
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes(FIRE_HOSE_CATEGORY_TOKEN))?.option ??
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes(HOSE_CATEGORY_TOKEN))?.option ??
+      null
+    );
+  }
+
+  if (normalizedInventoryCategory === "scba-cylinders" || normalizedInventoryCategory === "scba-packs") {
+    return (
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes("scba cylinder"))?.option ??
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes("scba pack"))?.option ??
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes(SCBA_CATEGORY_TOKEN))?.option ??
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes(INVENTORY_CATEGORY_TOKEN))?.option ??
+      null
+    );
+  }
+
+  return null;
+}
 
 function getRecordString(record: Record<string, unknown>, keys: string[]): string {
   for (const key of keys) {
@@ -56,6 +105,32 @@ function normalizeOption(record: Record<string, unknown>): SelectOption {
   return { id, label };
 }
 
+async function resolveCurrentReporter() {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const email = user?.email?.trim();
+  if (!email) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("members")
+    .select("id")
+    .eq("email", email)
+    .maybeSingle();
+
+  if (error || !data) {
+    return null;
+  }
+
+  const row = data as Record<string, unknown>;
+  const memberId = typeof row.id === "string" ? row.id : "";
+
+  return memberId ? { memberId } : null;
+}
+
 export default function ReportDeficiencyPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -73,6 +148,12 @@ export default function ReportDeficiencyPage() {
   const inventoryCategory = typeof inventoryCategoryParam === "string" ? inventoryCategoryParam : "";
   const inventoryItemId = typeof inventoryItemIdParam === "string" ? inventoryItemIdParam : "";
   const inventoryItemLabel = typeof inventoryItemLabelParam === "string" ? inventoryItemLabelParam : "";
+  const normalizedInventoryCategory = inventoryCategory.trim().toLowerCase();
+  const inventoryEquipmentTypeLabel = getInventoryEquipmentTypeLabel(normalizedInventoryCategory);
+  const isInventoryDeficiencyLaunch =
+    normalizedInventoryCategory === "fire-hose" ||
+    normalizedInventoryCategory === "scba-cylinders" ||
+    normalizedInventoryCategory === "scba-packs";
   const failedHoseIds =
     typeof failedHoseIdsParam === "string" && failedHoseIdsParam.trim().length > 0
       ? failedHoseIdsParam.split(",").map((value) => value.trim()).filter(Boolean)
@@ -100,7 +181,11 @@ export default function ReportDeficiencyPage() {
   }, [inventoryItemLabel]);
 
   useEffect(() => {
-    if (inventoryCategory.trim().toLowerCase() !== "fire-hose") {
+    if (
+      normalizedInventoryCategory !== "fire-hose" &&
+      normalizedInventoryCategory !== "scba-cylinders" &&
+      normalizedInventoryCategory !== "scba-packs"
+    ) {
       return;
     }
 
@@ -111,17 +196,40 @@ export default function ReportDeficiencyPage() {
     let isMounted = true;
 
     async function loadInventoryLabel() {
+      let inventoryTable = "fire_hose";
+      let selectColumn = "inventory_number";
+
+      if (normalizedInventoryCategory === "scba-cylinders") {
+        inventoryTable = "scba_cylinders";
+        selectColumn = "cylinder_number";
+      }
+
+      if (normalizedInventoryCategory === "scba-packs") {
+        inventoryTable = "scba_packs";
+        selectColumn = "pack_number";
+      }
+
       const { data, error } = await supabase
-        .from("fire_hose")
-        .select("inventory_number")
+        .from(inventoryTable)
+        .select(selectColumn)
         .eq("id", inventoryItemId)
         .maybeSingle();
 
-      if (!isMounted || error) {
+      if (!isMounted || error || !data || typeof data !== "object") {
         return;
       }
 
-      const nextLabel = typeof data?.inventory_number === "string" ? data.inventory_number : "";
+      const record = data as unknown as Record<string, unknown>;
+      let nextLabel = "";
+
+      if (normalizedInventoryCategory === "scba-cylinders") {
+        nextLabel = typeof record.cylinder_number === "string" ? record.cylinder_number : "";
+      } else if (normalizedInventoryCategory === "scba-packs") {
+        nextLabel = typeof record.pack_number === "string" ? record.pack_number : "";
+      } else {
+        nextLabel = typeof record.inventory_number === "string" ? record.inventory_number : "";
+      }
+
       setResolvedInventoryItemLabel(nextLabel);
     }
 
@@ -130,10 +238,10 @@ export default function ReportDeficiencyPage() {
     return () => {
       isMounted = false;
     };
-  }, [inventoryCategory, inventoryItemId, inventoryItemLabel]);
+  }, [normalizedInventoryCategory, inventoryItemId, inventoryItemLabel]);
 
   useEffect(() => {
-    if (inventoryCategory.trim().toLowerCase() !== "fire-hose") {
+    if (!isInventoryDeficiencyLaunch) {
       return;
     }
 
@@ -144,7 +252,7 @@ export default function ReportDeficiencyPage() {
       photo: null,
       apparatusId: current.apparatusId || STATION_SUPPLY_OPTION.id,
     }));
-  }, [inventoryCategory, inventoryItemId]);
+  }, [isInventoryDeficiencyLaunch, inventoryItemId]);
 
   const canSubmit = useMemo(() => {
     return (
@@ -195,18 +303,20 @@ export default function ReportDeficiencyPage() {
       setPriorities((prioritiesResult.data ?? []).map((record) => normalizeOption(record as Record<string, unknown>)));
       setApparatusOptions((apparatusResult.data ?? []).map((record) => normalizeOption(record as Record<string, unknown>)));
 
-      if (inventoryCategory.trim().toLowerCase() === "fire-hose") {
-        const fireHoseCategory = (categoriesResult.data ?? [])
-          .map((record) => normalizeOption(record as Record<string, unknown>))
-          .find((option) => option.label.trim().toLowerCase().includes(FIRE_HOSE_CATEGORY_TOKEN));
+      if (isInventoryDeficiencyLaunch) {
+        const categoryOptions = (categoriesResult.data ?? []).map((record) =>
+          normalizeOption(record as Record<string, unknown>)
+        );
+        const resolvedInventoryCategory = resolveInventoryCategoryOption(
+          categoryOptions,
+          normalizedInventoryCategory,
+        );
 
-        if (fireHoseCategory) {
-          setFormState((current) => ({
-            ...current,
-            categoryId: current.categoryId || fireHoseCategory.id,
-            apparatusId: current.apparatusId || STATION_SUPPLY_OPTION.id,
-          }));
-        }
+        setFormState((current) => ({
+          ...current,
+          categoryId: current.categoryId || resolvedInventoryCategory?.id || "",
+          apparatusId: current.apparatusId || STATION_SUPPLY_OPTION.id,
+        }));
       }
 
       const resolvedOpenStatus = (statusesResult.data ?? []).find((statusRow) => {
@@ -224,10 +334,16 @@ export default function ReportDeficiencyPage() {
     return () => {
       isMounted = false;
     };
-  }, [inventoryCategory]);
+  }, [isInventoryDeficiencyLaunch, normalizedInventoryCategory]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    const reporter = await resolveCurrentReporter();
+    if (!reporter) {
+      setErrorMessage("Unable to determine your Redline HQ member identity.");
+      return;
+    }
 
     if (!canSubmit) {
       setErrorMessage("Complete all required fields before submitting.");
@@ -237,7 +353,9 @@ export default function ReportDeficiencyPage() {
     setIsSubmitting(true);
     setErrorMessage(null);
 
-    const isFireHoseDeficiency = inventoryCategory.trim().toLowerCase() === "fire-hose";
+    const isFireHoseDeficiency = normalizedInventoryCategory === "fire-hose";
+    const isScbaCylinderDeficiency = normalizedInventoryCategory === "scba-cylinders";
+    const isScbaPackDeficiency = normalizedInventoryCategory === "scba-packs";
 
     const routeToNextStep = (insertedDeficiencyId?: string) => {
       if (isFireHoseDeficiency && failedHoseIds.length > 0 && failedIndex < failedHoseIds.length - 1) {
@@ -307,7 +425,10 @@ export default function ReportDeficiencyPage() {
       created_at: now,
       status: openStatusId,
       photo_path: uploadedPhotoPath,
+      reported_by: reporter.memberId,
       fire_hose_id: isFireHoseDeficiency && inventoryItemId ? inventoryItemId : null,
+      scba_cylinder_id: isScbaCylinderDeficiency && inventoryItemId ? inventoryItemId : null,
+      scba_pack_id: isScbaPackDeficiency && inventoryItemId ? inventoryItemId : null,
     };
 
     console.log("[fire-hose][deficiency-create] payload", JSON.stringify(payload, null, 2));
@@ -334,23 +455,34 @@ export default function ReportDeficiencyPage() {
       deficiency_id: insertedDeficiencyId,
       event_type: "Reported",
       event_description: "Deficiency reported.",
-      member_id: null,
+      member_id: reporter.memberId,
     });
 
-    if (isFireHoseDeficiency && inventoryItemId) {
-      const { data: updatedHose, error: hoseUpdateError } = await supabase
-        .from("fire_hose")
+    if ((isFireHoseDeficiency || isScbaCylinderDeficiency || isScbaPackDeficiency) && inventoryItemId) {
+      let inventoryTable = "fire_hose";
+
+      if (isScbaCylinderDeficiency) {
+        inventoryTable = "scba_cylinders";
+      }
+
+      if (isScbaPackDeficiency) {
+        inventoryTable = "scba_packs";
+      }
+
+      const { data: updatedRow, error: rowUpdateError } = await supabase
+        .from(inventoryTable)
         .update({ status: "Out of Service" })
         .eq("id", inventoryItemId)
         .select("id, status")
         .single();
 
-      if (hoseUpdateError || !updatedHose || updatedHose.id !== inventoryItemId) {
-        const message = hoseUpdateError?.message || "Failed to update expected fire hose row.";
-        console.error("[fire-hose][deficiency-create] update mismatch", {
-          expectedHoseId: inventoryItemId,
-          actualRow: updatedHose ?? null,
-          error: hoseUpdateError ?? null,
+      if (rowUpdateError || !updatedRow || updatedRow.id !== inventoryItemId) {
+        const message = rowUpdateError?.message || "Failed to update expected inventory row.";
+        console.error("[deficiency-create] update mismatch", {
+          expectedId: inventoryItemId,
+          actualRow: updatedRow ?? null,
+          error: rowUpdateError ?? null,
+          inventoryTable,
         });
         setErrorMessage(message);
         setIsSubmitting(false);
@@ -388,11 +520,23 @@ export default function ReportDeficiencyPage() {
             ) : null}
 
             <div className="grid gap-5 md:grid-cols-2">
-              {inventoryCategory.trim().toLowerCase() === "fire-hose" && resolvedInventoryItemLabel ? (
+              {(normalizedInventoryCategory === "fire-hose" ||
+                normalizedInventoryCategory === "scba-cylinders" ||
+                normalizedInventoryCategory === "scba-packs") &&
+              resolvedInventoryItemLabel ? (
                 <label className="block md:col-span-2">
                   <span className="mb-2 block text-sm font-semibold text-zinc-200">Inventory Item</span>
                   <div className="w-full rounded-xl border border-white/10 bg-[#151515] px-4 py-3 text-sm text-zinc-300">
                     {resolvedInventoryItemLabel}
+                  </div>
+                </label>
+              ) : null}
+
+              {isInventoryDeficiencyLaunch && inventoryEquipmentTypeLabel ? (
+                <label className="block">
+                  <span className="mb-2 block text-sm font-semibold text-zinc-200">Equipment Type</span>
+                  <div className="w-full rounded-xl border border-white/10 bg-[#151515] px-4 py-3 text-sm text-zinc-300">
+                    {inventoryEquipmentTypeLabel}
                   </div>
                 </label>
               ) : null}
@@ -416,6 +560,7 @@ export default function ReportDeficiencyPage() {
                 <select
                   value={formState.categoryId}
                   onChange={(event) => setFormState((current) => ({ ...current, categoryId: event.target.value }))}
+                  disabled={isInventoryDeficiencyLaunch}
                   className="w-full rounded-xl border border-white/10 bg-[#151515] px-4 py-3 text-sm text-white"
                 >
                   <option value="">Select category</option>

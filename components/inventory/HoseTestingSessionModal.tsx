@@ -4,10 +4,20 @@ import { useEffect, useMemo, useState } from "react";
 
 export type HoseTestingStatus = "untested" | "passed" | "failed";
 
+export type HoseTestingSessionTesterOption = {
+	id: string;
+	label: string;
+};
+
 export type HoseTestingSessionValues = {
 	testingDate: string;
-	tester: string;
+	testerMode: "member" | "external";
+	memberId: string;
+	externalTesterName: string;
+	externalTesterCompany: string;
+	sessionNotes: string;
 	hoseStatuses: Record<string, HoseTestingStatus>;
+	hoseNotes: Record<string, string>;
 };
 
 type HoseTestingItem = {
@@ -15,13 +25,16 @@ type HoseTestingItem = {
 	inventoryNumber: string;
 	hoseSize: string;
 	length: string;
+	currentStatus: string;
 	hasActiveDeficiency?: boolean;
 };
 
 interface HoseTestingSessionModalProps {
 	isOpen: boolean;
 	hoses: HoseTestingItem[];
-	defaultTester: string;
+	testerOptions: HoseTestingSessionTesterOption[];
+	defaultTesterOptionId?: string;
+	initialMode?: "session" | "quick";
 	departmentName?: string;
 	onClose: () => void;
 	onSave: (values: HoseTestingSessionValues) => Promise<boolean>;
@@ -36,20 +49,44 @@ function todayIsoDate() {
 	return new Date().toISOString().split("T")[0];
 }
 
+function statusBadgeClasses(status: string) {
+	if (status === "Ready") {
+		return "border-green-700/40 bg-green-900/20 text-green-300";
+	}
+
+	if (status === "Test Due") {
+		return "border-amber-700/40 bg-amber-900/20 text-amber-300";
+	}
+
+	if (status === "Out of Service") {
+		return "border-red-700/40 bg-red-900/20 text-red-300";
+	}
+
+	if (status === "Retired") {
+		return "border-neutral-600/40 bg-neutral-800 text-neutral-300";
+	}
+
+	return "border-white/15 bg-neutral-900 text-neutral-200";
+}
+
 export default function HoseTestingSessionModal({
 	isOpen,
 	hoses,
-	defaultTester,
-	departmentName = "Department",
+	testerOptions,
+	defaultTesterOptionId = "",
+	initialMode = "session",
 	onClose,
 	onSave,
 	onCreateDeficiencies,
 	resumeValues = null,
 }: HoseTestingSessionModalProps) {
 	const [testingDate, setTestingDate] = useState(todayIsoDate());
-	const [tester, setTester] = useState("");
+	const [selectedTesterOption, setSelectedTesterOption] = useState("");
+	const [externalTesterName, setExternalTesterName] = useState("");
+	const [externalTesterCompany, setExternalTesterCompany] = useState("");
+	const [sessionNotes, setSessionNotes] = useState("");
 	const [hoseStatuses, setHoseStatuses] = useState<Record<string, HoseTestingStatus>>({});
-	const [sessionStep, setSessionStep] = useState<"testing" | "summary">("testing");
+	const [hoseNotes, setHoseNotes] = useState<Record<string, string>>({});
 	const [isFinishing, setIsFinishing] = useState(false);
 	const [isCreatingDeficiencies, setIsCreatingDeficiencies] = useState(false);
 	const [mode, setMode] = useState<"session" | "quick">("session");
@@ -63,29 +100,57 @@ export default function HoseTestingSessionModal({
 
 		if (resumeValues) {
 			setTestingDate(resumeValues.testingDate || todayIsoDate());
-			setTester(resumeValues.tester || defaultTester);
+			setSelectedTesterOption(
+				resumeValues.testerMode === "member" && resumeValues.memberId
+					? resumeValues.memberId
+					: resumeValues.testerMode === "external"
+						? "external"
+						: defaultTesterOptionId,
+			);
+			setExternalTesterName(resumeValues.externalTesterName || "");
+			setExternalTesterCompany(resumeValues.externalTesterCompany || "");
+			setSessionNotes(resumeValues.sessionNotes || "");
 			setHoseStatuses(
 				Object.fromEntries(
 					hoses.map((hose) => [hose.id, resumeValues.hoseStatuses[hose.id] ?? "untested"]),
 				),
 			);
-			setSessionStep("summary");
+			setHoseNotes(
+				Object.fromEntries(
+					hoses.map((hose) => [hose.id, resumeValues.hoseNotes[hose.id] ?? ""]),
+				),
+			);
 		} else {
 			setTestingDate(todayIsoDate());
-			setTester(defaultTester);
+			setSelectedTesterOption(defaultTesterOptionId || "");
+			setExternalTesterName("");
+			setExternalTesterCompany("");
+			setSessionNotes("");
 			setHoseStatuses(Object.fromEntries(hoses.map((hose) => [hose.id, "untested"])));
-			setSessionStep("testing");
+			setHoseNotes(Object.fromEntries(hoses.map((hose) => [hose.id, ""])));
 		}
 
 		setIsFinishing(false);
 		setIsCreatingDeficiencies(false);
-		setMode("session");
+		setMode(initialMode);
 		setQuickInput("");
 		setQuickSelectedHoseId("");
-	}, [isOpen, resumeValues]);
+	}, [defaultTesterOptionId, hoses, initialMode, isOpen, resumeValues]);
+
+	const isExternalTester = selectedTesterOption === "external";
 
 	const selectedCount = useMemo(
 		() => Object.values(hoseStatuses).filter((status) => status !== "untested").length,
+		[hoseStatuses],
+	);
+
+	const passCount = useMemo(
+		() => Object.values(hoseStatuses).filter((status) => status === "passed").length,
+		[hoseStatuses],
+	);
+
+	const failCount = useMemo(
+		() => Object.values(hoseStatuses).filter((status) => status === "failed").length,
 		[hoseStatuses],
 	);
 
@@ -125,66 +190,18 @@ export default function HoseTestingSessionModal({
 		[hoseStatuses, hoses],
 	);
 
-	const passedRows = useMemo(
-		() => summaryRows.filter((row) => row.status === "passed"),
-		[summaryRows],
-	);
-
 	const failedRows = useMemo(
 		() => summaryRows.filter((row) => row.status === "failed"),
 		[summaryRows],
 	);
 
-	const untestedRows = useMemo(
-		() => summaryRows.filter((row) => row.status === "untested"),
-		[summaryRows],
-	);
-
-	const quickPassedCount = useMemo(
-		() => Object.values(hoseStatuses).filter((status) => status === "passed").length,
-		[hoseStatuses],
-	);
-
-	const quickFailedCount = useMemo(
-		() => Object.values(hoseStatuses).filter((status) => status === "failed").length,
-		[hoseStatuses],
-	);
-
-	const failedRowsMissingDeficiency = useMemo(
-		() => failedRows.filter((row) => !row.hasActiveDeficiency),
-		[failedRows],
-	);
-
-	const hasBlockingFailedHoses = failedRowsMissingDeficiency.length > 0;
-	const createDeficienciesDisabled =
-		failedRowsMissingDeficiency.length === 0 || isFinishing || isCreatingDeficiencies;
-	const finishDisabled = selectedCount === 0 || !testingDate || isFinishing || hasBlockingFailedHoses;
-
-	useEffect(() => {
-		if (!isOpen || sessionStep !== "summary") {
-			return;
-		}
-
-		for (const row of failedRows) {
-			console.log("[hose-test][summary-deficiency-check]", {
-				inventoryNumber: row.inventoryNumber,
-				fireHoseId: row.id,
-				hasActiveDeficiency: row.hasActiveDeficiency === true,
-			});
-		}
-
-		console.log("[hose-test][summary-blocker]", {
-			failedRowsMissingDeficiency: failedRowsMissingDeficiency.map((row) => ({
-				inventoryNumber: row.inventoryNumber,
-				fireHoseId: row.id,
-			})),
-			hasBlockingFailedHoses,
-		});
-	}, [failedRows, failedRowsMissingDeficiency, hasBlockingFailedHoses, isOpen, sessionStep]);
-
 	if (!isOpen) {
 		return null;
 	}
+
+	const setAllStatuses = (target: "passed" | "failed" | "untested") => {
+		setHoseStatuses(Object.fromEntries(hoses.map((hose) => [hose.id, target])));
+	};
 
 	const toggleStatus = (hoseId: string, target: "passed" | "failed") => {
 		setHoseStatuses((current) => {
@@ -199,150 +216,30 @@ export default function HoseTestingSessionModal({
 	};
 
 	const quickSelectedHose = hoses.find((hose) => hose.id === quickSelectedHoseId) ?? null;
-	const quickRemainingCount = Math.max(0, hoses.length - quickPassedCount - quickFailedCount);
+	const quickRemainingCount = Math.max(0, hoses.length - passCount - failCount);
 
-	const formatSummaryDate = (isoDate: string) => {
-		if (!isoDate) {
-			return "-";
-		}
+	const buildValues = (): HoseTestingSessionValues => ({
+		testingDate,
+		testerMode: selectedTesterOption === "external" ? "external" : "member",
+		memberId: selectedTesterOption === "external" ? "" : selectedTesterOption,
+		externalTesterName,
+		externalTesterCompany,
+		sessionNotes,
+		hoseStatuses,
+		hoseNotes,
+	});
 
-		const parsed = new Date(`${isoDate}T00:00:00`);
-		if (Number.isNaN(parsed.getTime())) {
-			return isoDate;
-		}
-
-		return parsed.toLocaleDateString("en-US", {
-			month: "long",
-			day: "numeric",
-			year: "numeric",
-		});
-	};
-
-	const createPrintHtml = () => {
-		const reportDate = formatSummaryDate(testingDate);
-		const detailRows = summaryRows
-			.map((row) => {
-				const resultLabel =
-					row.status === "passed" ? "PASS" : row.status === "failed" ? "FAIL" : "NOT TESTED";
-
-				return `<tr><td>${row.inventoryNumber}</td><td>${row.hoseSize}</td><td>${row.length}</td><td>${resultLabel}</td></tr>`;
-			})
-			.join("");
-
-		return `<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>Fire Hose Testing Summary</title>
-  <style>
-    body { font-family: "Helvetica Neue", Arial, sans-serif; color: #111; margin: 24px; }
-    h1, h2 { margin: 0; }
-    .muted { color: #555; }
-    .section { margin-top: 20px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    th, td { border-bottom: 1px solid #ddd; padding: 8px; text-align: left; font-size: 13px; }
-    th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: #444; }
-    .summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 10px; }
-    .summary-item { border: 1px solid #e3e3e3; border-radius: 8px; padding: 10px; }
-    .footer { margin-top: 28px; font-size: 12px; color: #666; }
-  </style>
-</head>
-<body>
-  <h1>REDLINE HQ</h1>
-  <h2 style="margin-top:8px;">Fire Hose Testing Summary</h2>
-  <div class="section muted">
-    <div>${departmentName}</div>
-    <div>Testing Date: ${reportDate}</div>
-    <div>Tester: ${tester || "-"}</div>
-  </div>
-
-  <div class="section">
-    <h2 style="font-size:16px;">Summary</h2>
-    <div class="summary-grid">
-      <div class="summary-item"><div class="muted">Total Hoses</div><div>${summaryRows.length}</div></div>
-      <div class="summary-item"><div class="muted">Passed</div><div>${passedRows.length}</div></div>
-      <div class="summary-item"><div class="muted">Failed</div><div>${failedRows.length}</div></div>
-      <div class="summary-item"><div class="muted">Untested</div><div>${untestedRows.length}</div></div>
-    </div>
-  </div>
-
-  <div class="section">
-    <h2 style="font-size:16px;">Detailed Inventory</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>Inventory #</th>
-          <th>Hose Size</th>
-          <th>Length</th>
-          <th>Result</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${detailRows}
-      </tbody>
-    </table>
-  </div>
-
-  <div class="footer">
-    <div>Generated by Redline HQ</div>
-    <div>Less Paperwork. More Readiness.</div>
-  </div>
-</body>
-</html>`;
-	};
-
-	const printSummary = () => {
-		const printWindow = window.open("", "_blank", "noopener,noreferrer,width=1024,height=768");
-		if (!printWindow) {
-			return;
-		}
-
-		printWindow.document.open();
-		printWindow.document.write(createPrintHtml());
-		printWindow.document.close();
-		printWindow.focus();
-		printWindow.print();
-	};
-
-	const finishSession = async () => {
+	const saveSession = async () => {
 		try {
-			const failedHoses = summaryRows.filter((row) => row.status === "failed");
-			const failedRowsMissingDeficiency = failedHoses.filter(
-				(row) => row.hasActiveDeficiency !== true,
-			);
-			const hasBlockingFailedHoses = failedRowsMissingDeficiency.length > 0;
-
-			console.log("[hose-test][finish-runtime-guard]", {
-				failedHoses: failedHoses.map((row) => ({
-					inventoryNumber: row.inventoryNumber,
-					id: row.id,
-					hasActiveDeficiency: row.hasActiveDeficiency,
-				})),
-				failedRowsMissingDeficiency: failedRowsMissingDeficiency.map((row) => ({
-					inventoryNumber: row.inventoryNumber,
-					id: row.id,
-					hasActiveDeficiency: row.hasActiveDeficiency,
-				})),
-				hasBlockingFailedHoses,
-			});
-
-			if (hasBlockingFailedHoses) {
-				return;
-			}
-
 			setIsFinishing(true);
-			const saved = await onSave({
-				testingDate,
-				tester,
-				hoseStatuses,
-			});
+			const saved = await onSave(buildValues());
 			setIsFinishing(false);
 
 			if (!saved) {
 				return;
 			}
 
-			setSessionStep("testing");
+			onClose();
 		} catch (err) {
 			setIsFinishing(false);
 			console.error("START HOSE TEST ERROR", err);
@@ -350,26 +247,23 @@ export default function HoseTestingSessionModal({
 		}
 	};
 
-	const saveThenCreateDeficiencies = async () => {
+	const saveAndCreateDeficiencies = async () => {
 		try {
-			if (failedRowsMissingDeficiency.length === 0) {
+			if (failedRows.length === 0) {
 				return;
 			}
 
 			setIsCreatingDeficiencies(true);
 			const saved = await onCreateDeficiencies(
-				failedRowsMissingDeficiency.map((row) => ({
+				failedRows.map((row) => ({
 					id: row.id,
 					inventoryNumber: row.inventoryNumber,
 					hoseSize: row.hoseSize,
 					length: row.length,
+					currentStatus: row.currentStatus,
 					hasActiveDeficiency: row.hasActiveDeficiency,
 				})),
-				{
-				testingDate,
-				tester,
-				hoseStatuses,
-				},
+				buildValues(),
 			);
 			setIsCreatingDeficiencies(false);
 
@@ -377,7 +271,7 @@ export default function HoseTestingSessionModal({
 				return;
 			}
 
-			setSessionStep("testing");
+			onClose();
 		} catch (err) {
 			setIsCreatingDeficiencies(false);
 			console.error("START HOSE TEST ERROR", err);
@@ -399,43 +293,22 @@ export default function HoseTestingSessionModal({
 		setQuickSelectedHoseId("");
 	};
 
-	if (isOpen && sessionStep === "summary") {
-		console.log("[hose-test][summary-render-state]", {
-			summaryRows: summaryRows.map((row) => ({
-				inventoryNumber: row.inventoryNumber,
-				id: row.id,
-				status: row.status,
-				hasActiveDeficiency: row.hasActiveDeficiency,
-				deficiencyStatus: (row as { deficiencyStatus?: string }).deficiencyStatus,
-			})),
-			failedRows: failedRows.map((row) => ({
-				inventoryNumber: row.inventoryNumber,
-				id: row.id,
-				status: row.status,
-				hasActiveDeficiency: row.hasActiveDeficiency,
-				deficiencyStatus: (row as { deficiencyStatus?: string }).deficiencyStatus,
-			})),
-			failedRowsMissingDeficiency: failedRowsMissingDeficiency.map((row) => ({
-				inventoryNumber: row.inventoryNumber,
-				id: row.id,
-				hasActiveDeficiency: row.hasActiveDeficiency,
-				deficiencyStatus: (row as { deficiencyStatus?: string }).deficiencyStatus,
-			})),
-			hasBlockingFailedHoses,
-			selectedCount,
-			testingDate,
-			isFinishing,
-			isCreatingDeficiencies,
-			createDeficienciesDisabled,
-			finishDisabled,
-		});
-	}
-
 	return (
 		<div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 px-4 py-6">
-			<div className="max-h-[calc(100vh-3rem)] w-full max-w-4xl overflow-y-auto rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-6">
-				<div className="flex items-center justify-between">
-					<h3 className="text-xl font-black text-white">Fire Hose Testing Session</h3>
+			<div className="max-h-[calc(100vh-3rem)] w-full max-w-6xl overflow-y-auto rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-6 shadow-[0_30px_90px_rgba(0,0,0,0.5)]">
+				<div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+					<div>
+						<p className="text-sm font-semibold uppercase tracking-[0.3em] text-red-500">Fire Hose</p>
+						<h3 className="mt-2 text-3xl font-black tracking-tight text-white">Session Testing</h3>
+						<p className="mt-2 text-sm text-neutral-400">Set shared test details once, mark each hose, and save all selected hoses in one submit.</p>
+					</div>
+
+					<div className="rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3 text-xs text-neutral-300">
+						<p className="uppercase tracking-[0.16em] text-neutral-500">Selected Hoses</p>
+						<p className="mt-1 text-lg font-semibold text-white">{selectedCount}</p>
+						<p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-green-300">Pass {passCount}</p>
+						<p className="text-[11px] uppercase tracking-[0.14em] text-red-300">Fail {failCount}</p>
+					</div>
 				</div>
 
 				<div className="mt-4 flex items-center gap-2">
@@ -463,211 +336,208 @@ export default function HoseTestingSessionModal({
 					</button>
 				</div>
 
-				{sessionStep === "summary" ? (
-					<div className="mt-4 rounded-lg border border-white/10 bg-[#1b1b1b] p-4">
-						<h4 className="text-lg font-black text-white">Fire Hose Testing Summary</h4>
-						<div className="mt-4 grid gap-3 md:grid-cols-2">
-							<div>
-								<p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">Testing Date</p>
-								<p className="mt-1 text-sm text-neutral-200">{formatSummaryDate(testingDate)}</p>
-							</div>
-							<div>
-								<p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">Tester</p>
-								<p className="mt-1 text-sm text-neutral-200">{tester || "-"}</p>
-							</div>
-						</div>
-
-						<div className="mt-4 grid grid-cols-3 gap-3 border-y border-white/10 py-4">
-							<div>
-								<p className="text-xs uppercase tracking-[0.14em] text-neutral-500">Passed</p>
-								<p className="text-lg font-semibold text-green-200">{passedRows.length}</p>
-							</div>
-							<div>
-								<p className="text-xs uppercase tracking-[0.14em] text-neutral-500">Failed</p>
-								<p className="text-lg font-semibold text-red-200">{failedRows.length}</p>
-							</div>
-							<div>
-								<p className="text-xs uppercase tracking-[0.14em] text-neutral-500">Untested</p>
-								<p className="text-lg font-semibold text-amber-200">{untestedRows.length}</p>
-							</div>
-						</div>
-
-						<div className="mt-4 space-y-4">
-							<div>
-								<p className="text-xs font-semibold uppercase tracking-[0.14em] text-green-300">Passed</p>
-								<div className="mt-2 space-y-1">
-									{passedRows.map((row) => (
-										<div key={row.id} className="rounded-md border border-green-700/30 bg-green-900/10 px-3 py-2 text-sm text-green-100">
-											✓ {row.inventoryNumber} {"  "}{row.hoseSize} {"  "}{row.length}
-										</div>
-									))}
-									{passedRows.length === 0 ? <p className="text-xs text-neutral-500">No passed hoses.</p> : null}
-								</div>
-							</div>
-
-							<div>
-								<p className="text-xs font-semibold uppercase tracking-[0.14em] text-red-300">Failed</p>
-								<div className="mt-2 space-y-1">
-									{failedRows.map((row) => (
-										<div key={row.id} className="rounded-md border border-red-700/30 bg-red-900/10 px-3 py-2 text-sm text-red-100">
-											✗ {row.inventoryNumber} {"  "}{row.hoseSize} {"  "}{row.length}
-										</div>
-									))}
-									{failedRows.length === 0 ? <p className="text-xs text-neutral-500">No failed hoses.</p> : null}
-								</div>
-							</div>
-
-							<div>
-								<p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-300">Untested</p>
-								<div className="mt-2 space-y-1">
-									{untestedRows.map((row) => (
-										<div key={row.id} className="rounded-md border border-amber-700/30 bg-amber-900/10 px-3 py-2 text-sm text-amber-100">
-											○ {row.inventoryNumber} {"  "}{row.hoseSize} {"  "}{row.length}
-										</div>
-									))}
-									{untestedRows.length === 0 ? <p className="text-xs text-neutral-500">No untested hoses.</p> : null}
-								</div>
-							</div>
-						</div>
-
-						<div className="mt-6 flex flex-wrap items-center justify-end gap-2">
-							{hasBlockingFailedHoses ? (
-								<p className="mr-auto text-xs font-semibold uppercase tracking-[0.12em] text-amber-300">
-									Failed hoses require deficiencies before finishing.
-								</p>
-							) : null}
-							<button
-								type="button"
-								onClick={() => setSessionStep("testing")}
-								className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
-							>
-								{mode === "quick" ? "Back to Quick Test" : "Back to Testing"}
-							</button>
-							<button
-								type="button"
-								onClick={printSummary}
-								className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
-							>
-								Print Summary
-							</button>
-							<button
-								type="button"
-								disabled={createDeficienciesDisabled}
-								onClick={() => void saveThenCreateDeficiencies()}
-								className="rounded-lg border border-red-500/40 bg-red-500/20 px-3 py-2 text-xs font-semibold text-red-100 transition hover:bg-red-500/30 disabled:cursor-not-allowed disabled:opacity-60"
-							>
-								{isCreatingDeficiencies ? "Saving..." : "Create Deficiencies"}
-							</button>
-							<button
-								type="button"
-								disabled={finishDisabled}
-								onClick={() => void finishSession()}
-								className="rounded-lg border border-red-500/40 bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
-							>
-								{isFinishing ? "Finishing..." : "Finish"}
-							</button>
-						</div>
-					</div>
-				) : mode === "session" ? (
+				{mode === "session" ? (
 					<>
-						<div className="mt-4 grid gap-3 md:grid-cols-3">
-					<label className="grid gap-1.5">
-						<span className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">
-							Testing Date
-						</span>
-						<input
-							type="date"
-							value={testingDate}
-							onChange={(event) => setTestingDate(event.target.value)}
-							className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
-						/>
-					</label>
+						<section className="mt-5 rounded-xl border border-white/10 bg-[#1b1b1b] p-4">
+							<div className="grid gap-4 md:grid-cols-2">
+								<label className="block">
+									<span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-neutral-300">Test Date *</span>
+									<input
+										type="date"
+										value={testingDate}
+										onChange={(event) => setTestingDate(event.target.value)}
+										className="w-full rounded-lg border border-white/10 bg-[#141414] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
+									/>
+								</label>
 
-					<label className="grid gap-1.5 md:col-span-2">
-						<span className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">Tester</span>
-						<input
-							type="text"
-							value={tester}
-							onChange={(event) => setTester(event.target.value)}
-							placeholder="Tester name"
-							className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white placeholder:text-neutral-500 focus:border-red-500/50 focus:outline-none"
-						/>
-					</label>
-				</div>
-
-						<div className="mt-4 rounded-lg border border-white/10 bg-[#1b1b1b] p-4">
-					<div className="flex items-center justify-between gap-3">
-						<p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">Hoses</p>
-						<p className="text-xs text-neutral-500">Tap PASS or FAIL. Tap again to clear back to Untested.</p>
-					</div>
-
-					<div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
-						{hoses.map((hose) => {
-							const status = hoseStatuses[hose.id] ?? "untested";
-							const isPassed = status === "passed";
-							const isFailed = status === "failed";
-
-							return (
-							<label
-								key={hose.id}
-								className="flex items-center justify-between gap-3 rounded-md border border-white/10 px-3 py-2 text-sm text-neutral-200"
-							>
-								<span className="font-semibold text-white">{hose.inventoryNumber}</span>
-								<span className="text-neutral-400">{hose.hoseSize}</span>
-								<span className="text-neutral-400">{hose.length}</span>
-								<div className="ml-auto flex items-center gap-2">
-									<button
-										type="button"
-										onClick={() => toggleStatus(hose.id, "passed")}
-										className={`inline-flex items-center justify-center rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
-											isPassed
-												? "border-green-700/40 bg-green-900/20 text-green-200"
-												: "border-white/10 bg-neutral-900 text-neutral-300 hover:bg-neutral-800"
-										}`}
+								<label className="block">
+									<span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-neutral-300">Tested By *</span>
+									<select
+										value={selectedTesterOption}
+										onChange={(event) => setSelectedTesterOption(event.target.value)}
+										className="w-full rounded-lg border border-white/10 bg-[#141414] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
 									>
-										🟢 PASS
-									</button>
-									<button
-										type="button"
-										onClick={() => toggleStatus(hose.id, "failed")}
-										className={`inline-flex items-center justify-center rounded-md border px-2.5 py-1.5 text-xs font-semibold transition ${
-											isFailed
-												? "border-red-700/40 bg-red-900/20 text-red-200"
-												: "border-white/10 bg-neutral-900 text-neutral-300 hover:bg-neutral-800"
-										}`}
-									>
-										🔴 FAIL
-									</button>
-								</div>
+										<option value="">Select department member</option>
+										{testerOptions.map((option) => (
+											<option key={option.id} value={option.id}>{option.label}</option>
+										))}
+										<option value="external">External Tester</option>
+									</select>
+								</label>
+
+								{isExternalTester ? (
+									<>
+										<label className="block">
+											<span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-neutral-300">Tester Name *</span>
+											<input
+												value={externalTesterName}
+												onChange={(event) => setExternalTesterName(event.target.value)}
+												placeholder="External tester name"
+												className="w-full rounded-lg border border-white/10 bg-[#141414] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
+											/>
+										</label>
+
+										<label className="block">
+											<span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-neutral-300">Company / Organization</span>
+											<input
+												value={externalTesterCompany}
+												onChange={(event) => setExternalTesterCompany(event.target.value)}
+												placeholder="External company or organization"
+												className="w-full rounded-lg border border-white/10 bg-[#141414] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
+											/>
+										</label>
+									</>
+								) : null}
+							</div>
+
+							<label className="mt-4 block">
+								<span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-neutral-300">Session Notes</span>
+								<textarea
+									rows={2}
+									value={sessionNotes}
+									onChange={(event) => setSessionNotes(event.target.value)}
+									placeholder="Optional notes applied to each selected hose history entry"
+									className="w-full rounded-lg border border-white/10 bg-[#141414] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
+								/>
 							</label>
-							);
-						})}
-					</div>
+						</section>
 
-					<p className="mt-3 text-sm font-semibold text-neutral-200">Selected: {selectedCount} hoses</p>
-				</div>
+						<section className="mt-5 rounded-xl border border-white/10 bg-[#1b1b1b] p-4">
+							<div className="flex flex-wrap items-center gap-2">
+								<button
+									type="button"
+									onClick={() => setAllStatuses("passed")}
+									className="rounded-lg border border-emerald-500/30 bg-emerald-900/20 px-3 py-2 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-900/30"
+								>
+									Select All Pass
+								</button>
+								<button
+									type="button"
+									onClick={() => setAllStatuses("failed")}
+									className="rounded-lg border border-red-500/30 bg-red-900/20 px-3 py-2 text-xs font-semibold text-red-100 transition hover:bg-red-900/30"
+								>
+									Select All Fail
+								</button>
+								<button
+									type="button"
+									onClick={() => setAllStatuses("untested")}
+									className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+								>
+									Clear All
+								</button>
+							</div>
 
-						<div className="mt-6 flex flex-wrap items-center justify-end gap-2">
-					<button
-						type="button"
-						onClick={onClose}
-						className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
-					>
-						Cancel
-					</button>
-					<button
-						type="button"
-						disabled={selectedCount === 0 || !testingDate}
-						onClick={() => setSessionStep("summary")}
-						className="rounded-lg border border-red-500/40 bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
-					>
-						Save Test Session
-					</button>
-				</div>
+							<div className="mt-4 overflow-x-auto">
+								<table className="min-w-full border-separate border-spacing-0 text-left">
+									<thead>
+										<tr>
+											{["Hose", "Current Status", "Result", "Hose Note"].map((label) => (
+												<th
+													key={label}
+													scope="col"
+													className="border-b border-white/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500"
+												>
+													{label}
+												</th>
+											))}
+										</tr>
+									</thead>
+
+									<tbody>
+										{hoses.map((hose) => {
+											const status = hoseStatuses[hose.id] ?? "untested";
+
+											return (
+												<tr key={hose.id} className="transition hover:bg-white/5">
+													<td className="border-b border-white/5 px-4 py-3 text-sm text-white">
+														<div>
+															<p className="font-semibold">{hose.inventoryNumber}</p>
+															<p className="text-xs text-neutral-400">{hose.hoseSize} • {hose.length}</p>
+															{hose.hasActiveDeficiency ? <p className="text-xs text-red-300">Active deficiency linked</p> : null}
+														</div>
+													</td>
+													<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">
+														<span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusBadgeClasses(hose.currentStatus)}`}>
+															{hose.currentStatus}
+														</span>
+													</td>
+													<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">
+														<div className="flex flex-wrap gap-2">
+															<button
+																type="button"
+																onClick={() => toggleStatus(hose.id, "passed")}
+																className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+																	status === "passed"
+																		? "border-emerald-500/40 bg-emerald-600 text-white"
+																		: "border-emerald-500/30 bg-emerald-900/20 text-emerald-100 hover:bg-emerald-900/30"
+																}`}
+															>
+																Pass
+															</button>
+															<button
+																type="button"
+																onClick={() => toggleStatus(hose.id, "failed")}
+																className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+																	status === "failed"
+																		? "border-red-500/40 bg-red-600 text-white"
+																		: "border-red-500/30 bg-red-900/20 text-red-100 hover:bg-red-900/30"
+																}`}
+															>
+																Fail
+															</button>
+														</div>
+													</td>
+													<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">
+														<input
+															value={hoseNotes[hose.id] ?? ""}
+															onChange={(event) =>
+																setHoseNotes((current) => ({
+																	...current,
+																	[hose.id]: event.target.value,
+																}))
+															}
+															placeholder="Optional note for this hose"
+															className="w-full min-w-[220px] rounded-lg border border-white/10 bg-[#141414] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
+														/>
+													</td>
+												</tr>
+											);
+										})}
+									</tbody>
+								</table>
+							</div>
+						</section>
+
+						<div className="mt-6 flex justify-end gap-2">
+							<button
+								type="button"
+								onClick={onClose}
+								className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+							>
+								Cancel
+							</button>
+							<button
+								type="button"
+								disabled={isFinishing || selectedCount === 0 || !testingDate}
+								onClick={() => void saveSession()}
+								className="rounded-lg border border-emerald-500/40 bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-70"
+							>
+								{isFinishing ? "Saving..." : "Save Session"}
+							</button>
+							<button
+								type="button"
+								disabled={isCreatingDeficiencies || failCount === 0 || !testingDate}
+								onClick={() => void saveAndCreateDeficiencies()}
+								className="rounded-lg border border-red-500/40 bg-red-500/20 px-3 py-2 text-xs font-semibold text-red-100 transition hover:bg-red-500/30 disabled:cursor-not-allowed disabled:opacity-70"
+							>
+								{isCreatingDeficiencies ? "Saving..." : "Save + Report Failed Hoses"}
+							</button>
+						</div>
 					</>
 				) : (
-					<div className="mt-4 rounded-lg border border-white/10 bg-[#1b1b1b] p-4">
+					<section className="mt-5 rounded-xl border border-white/10 bg-[#1b1b1b] p-4">
 						<h4 className="text-lg font-black text-white">Fire Hose Quick Test</h4>
+						<p className="mt-1 text-xs text-neutral-500">Quickly mark one hose at a time, then switch to Session Mode to save or report failed hoses.</p>
 						<div className="mt-4">
 							<label className="block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">
 								Inventory Number
@@ -712,7 +582,7 @@ export default function HoseTestingSessionModal({
 								onClick={() => handleQuickMark("passed")}
 								className="rounded-lg border border-green-500/40 bg-green-600/20 px-3 py-2 text-sm font-semibold text-green-200 transition hover:bg-green-600/30 disabled:cursor-not-allowed disabled:opacity-60"
 							>
-								🟢 PASS
+								PASS
 							</button>
 							<button
 								type="button"
@@ -720,15 +590,15 @@ export default function HoseTestingSessionModal({
 								onClick={() => handleQuickMark("failed")}
 								className="rounded-lg border border-red-500/40 bg-red-600/20 px-3 py-2 text-sm font-semibold text-red-200 transition hover:bg-red-600/30 disabled:cursor-not-allowed disabled:opacity-60"
 							>
-								🔴 FAIL
+								FAIL
 							</button>
 						</div>
 
 						<div className="mt-5 border-t border-white/10 pt-4">
 							<p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">Today's Progress</p>
 							<div className="mt-2 space-y-1 text-sm text-neutral-200">
-								<p>Passed: {quickPassedCount}</p>
-								<p>Failed: {quickFailedCount}</p>
+								<p>Passed: {passCount}</p>
+								<p>Failed: {failCount}</p>
 								<p>Remaining: {quickRemainingCount}</p>
 							</div>
 						</div>
@@ -736,11 +606,10 @@ export default function HoseTestingSessionModal({
 						<div className="mt-6 flex flex-wrap items-center justify-end gap-2">
 							<button
 								type="button"
-								disabled={selectedCount === 0 || !testingDate}
-								onClick={() => setSessionStep("summary")}
+								onClick={() => setMode("session")}
 								className="rounded-lg border border-red-500/40 bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
 							>
-								Finish Quick Test
+								Review in Session Mode
 							</button>
 							<button
 								type="button"
@@ -750,7 +619,7 @@ export default function HoseTestingSessionModal({
 								Close
 							</button>
 						</div>
-					</div>
+					</section>
 				)}
 			</div>
 		</div>

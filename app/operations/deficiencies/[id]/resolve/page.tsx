@@ -12,6 +12,65 @@ type MemberOption = {
   last_name: string | null;
 };
 
+type ScbaCylinderRecord = {
+  id: string;
+  cylinder_number: string | null;
+  cylinder_type: string | null;
+  status: string | null;
+  next_hydrostatic_test_due_date: string | null;
+  service_life_end_date: string | null;
+};
+
+type ScbaPackRecord = {
+  id: string;
+  status: string | null;
+  next_flow_test_due_date: string | null;
+};
+
+function isOnOrBeforeToday(value: string | null | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) {
+    return false;
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  return parsed.getTime() <= today.getTime();
+}
+
+function getScbaCylinderRestoredStatus(cylinder: ScbaCylinderRecord) {
+  if ((cylinder.status ?? "").trim() === "Retired") {
+    return "Retired";
+  }
+
+  if (isOnOrBeforeToday(cylinder.service_life_end_date)) {
+    return "Out of Service";
+  }
+
+  if (isOnOrBeforeToday(cylinder.next_hydrostatic_test_due_date)) {
+    return "Testing Due";
+  }
+
+  return "Ready";
+}
+
+function getScbaPackRestoredStatus(pack: ScbaPackRecord) {
+  if ((pack.status ?? "").trim() === "Retired") {
+    return "Retired";
+  }
+
+  if (isOnOrBeforeToday(pack.next_flow_test_due_date)) {
+    return "Flow Test Due";
+  }
+
+  return "Ready";
+}
+
 export default function ResolveDeficiencyPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
@@ -135,7 +194,7 @@ export default function ResolveDeficiencyPage() {
 
     const { data: deficiencyLinkRow, error: deficiencyLinkError } = await supabase
       .from("deficiencies")
-      .select("fire_hose_id")
+      .select("fire_hose_id, scba_cylinder_id, scba_pack_id")
       .eq("id", deficiencyId)
       .maybeSingle();
 
@@ -194,6 +253,169 @@ export default function ResolveDeficiencyPage() {
             setIsResolving(false);
             return;
           }
+        }
+      }
+    }
+
+    if (deficiencyLinkRow?.scba_cylinder_id) {
+      const linkedCylinderId = deficiencyLinkRow.scba_cylinder_id;
+
+      const { data: linkedDeficiencies, error: linkedDeficienciesError } = await supabase
+        .from("deficiencies")
+        .select("id, status_info:deficiency_statuses!fk_deficiencies_status(name)")
+        .eq("scba_cylinder_id", linkedCylinderId);
+
+      if (linkedDeficienciesError) {
+        console.error("[scba-cylinders][deficiency-resolve] failed to read linked deficiencies", {
+          deficiencyId,
+          linkedCylinderId,
+          error: linkedDeficienciesError,
+        });
+        setErrorMessage(linkedDeficienciesError.message || "Unable to verify linked SCBA deficiencies.");
+        setIsResolving(false);
+        return;
+      }
+
+      const unresolvedCount = (linkedDeficiencies ?? []).reduce((count, row) => {
+        const statusInfo = Array.isArray(row.status_info) ? row.status_info[0] : row.status_info;
+        const statusName = typeof statusInfo?.name === "string" ? statusInfo.name.trim().toLowerCase() : "";
+        const isUnresolved = statusName !== "resolved" && statusName !== "closed";
+        return isUnresolved ? count + 1 : count;
+      }, 0);
+
+      if (unresolvedCount === 0) {
+        const { data: cylinderRow, error: cylinderError } = await supabase
+          .from("scba_cylinders")
+          .select(
+            "id, cylinder_number, cylinder_type, status, next_hydrostatic_test_due_date, service_life_end_date",
+          )
+          .eq("id", linkedCylinderId)
+          .maybeSingle();
+
+        if (cylinderError || !cylinderRow) {
+          console.error("[scba-cylinders][deficiency-resolve] failed to read linked cylinder", {
+            deficiencyId,
+            linkedCylinderId,
+            error: cylinderError,
+          });
+          setErrorMessage(cylinderError?.message || "Unable to verify linked SCBA cylinder.");
+          setIsResolving(false);
+          return;
+        }
+
+        const restoredStatus = getScbaCylinderRestoredStatus(cylinderRow as ScbaCylinderRecord);
+
+        const { data: updatedCylinderRow, error: cylinderUpdateError } = await supabase
+          .from("scba_cylinders")
+          .update({ status: restoredStatus })
+          .eq("id", linkedCylinderId)
+          .select("id, status")
+          .single();
+
+        if (
+          cylinderUpdateError ||
+          !updatedCylinderRow ||
+          updatedCylinderRow.id !== linkedCylinderId ||
+          updatedCylinderRow.status !== restoredStatus
+        ) {
+          console.error("[scba-cylinders][deficiency-resolve] status update mismatch", {
+            expectedCylinderId: linkedCylinderId,
+            expectedStatus: restoredStatus,
+            actualRow: updatedCylinderRow ?? null,
+            error: cylinderUpdateError ?? null,
+          });
+          setErrorMessage(cylinderUpdateError?.message || "Unable to update linked SCBA cylinder status.");
+          setIsResolving(false);
+          return;
+        }
+      }
+    }
+
+    if (deficiencyLinkRow?.scba_pack_id) {
+      const linkedPackId = deficiencyLinkRow.scba_pack_id;
+
+      const { data: linkedDeficiencies, error: linkedDeficienciesError } = await supabase
+        .from("deficiencies")
+        .select("id, status_info:deficiency_statuses!fk_deficiencies_status(active, name)")
+        .eq("scba_pack_id", linkedPackId);
+
+      if (linkedDeficienciesError) {
+        console.error("[scba-packs][deficiency-resolve] failed to read linked deficiencies", {
+          deficiencyId,
+          linkedPackId,
+          error: linkedDeficienciesError,
+        });
+        setErrorMessage(linkedDeficienciesError.message || "Unable to verify linked SCBA pack deficiencies.");
+        setIsResolving(false);
+        return;
+      }
+
+      const unresolvedCount = (linkedDeficiencies ?? []).reduce((count, row) => {
+        if (row.id === deficiencyId) {
+          return count;
+        }
+
+        const statusInfo = Array.isArray(row.status_info) ? row.status_info[0] : row.status_info;
+
+        const statusName = typeof statusInfo?.name === "string" ? statusInfo.name.trim().toLowerCase() : "";
+        if (statusName === "resolved" || statusName === "closed") {
+          return count;
+        }
+
+        if (statusInfo?.active === true) {
+          return count + 1;
+        }
+
+        if (statusInfo?.active === false) {
+          return count;
+        }
+
+        const isUnresolvedByName = statusName !== "resolved" && statusName !== "closed";
+        return isUnresolvedByName ? count + 1 : count;
+      }, 0);
+
+      if (unresolvedCount === 0) {
+        const { data: packRow, error: packError } = await supabase
+          .from("scba_packs")
+          .select("id, status, next_flow_test_due_date")
+          .eq("id", linkedPackId)
+          .maybeSingle();
+
+        if (packError || !packRow) {
+          console.error("[scba-packs][deficiency-resolve] failed to read linked pack", {
+            deficiencyId,
+            linkedPackId,
+            error: packError,
+          });
+          setErrorMessage(packError?.message || "Unable to verify linked SCBA pack.");
+          setIsResolving(false);
+          return;
+        }
+
+        const restoredStatus = getScbaPackRestoredStatus(packRow as ScbaPackRecord);
+
+        const { data: updatedPackRow, error: packUpdateError } = await supabase
+          .from("scba_packs")
+          .update({ status: restoredStatus })
+          .eq("id", linkedPackId)
+          .select("id, status")
+          .single();
+
+        if (
+          packUpdateError ||
+          !updatedPackRow ||
+          updatedPackRow.id !== linkedPackId ||
+          updatedPackRow.status !== restoredStatus
+        ) {
+          console.error("[scba-packs][deficiency-resolve] status update mismatch", {
+            expectedPackId: linkedPackId,
+            expectedStatus: restoredStatus,
+            actualRow: updatedPackRow ?? null,
+            error: packUpdateError ?? null,
+          });
+          setErrorMessage(packUpdateError?.message || "Unable to update linked SCBA pack status.");
+          setIsResolving(false);
+          return;
         }
       }
     }

@@ -22,7 +22,14 @@ type DeficiencyDetail = {
 	priority_id: string | null;
 	status_id: string | null;
 	apparatus_id: string | null;
+	fire_hose_id: string | null;
+	scba_cylinder_id: string | null;
+	scba_pack_id: string | null;
+	fire_hose_inventory_number: string | null;
+	scba_cylinder_number: string | null;
+	scba_pack_number: string | null;
 	apparatus: DeficiencyRelation | null;
+	category: DeficiencyRelation | null;
 	priority: DeficiencyRelation | null;
 	status: DeficiencyRelation | null;
 };
@@ -77,6 +84,9 @@ function normalizeDeficiencyDetail(data: unknown): DeficiencyDetail {
 	const statusIdValue = row.status;
 	const categoryValue = row.category_id;
 	const apparatusIdValue = row.apparatus_id;
+	const fireHoseIdValue = row.fire_hose_id;
+	const scbaCylinderIdValue = row.scba_cylinder_id;
+	const scbaPackIdValue = row.scba_pack_id;
 
 	return {
 		id: typeof row.id === "string" ? row.id : String(row.id ?? ""),
@@ -96,7 +106,21 @@ function normalizeDeficiencyDetail(data: unknown): DeficiencyDetail {
 		priority_id: typeof priorityIdValue === "string" ? priorityIdValue : null,
 		status_id: typeof statusIdValue === "string" ? statusIdValue : null,
 		apparatus_id: typeof apparatusIdValue === "string" ? apparatusIdValue : null,
+		fire_hose_id: typeof fireHoseIdValue === "string" ? fireHoseIdValue : null,
+		scba_cylinder_id: typeof scbaCylinderIdValue === "string" ? scbaCylinderIdValue : null,
+		scba_pack_id: typeof scbaPackIdValue === "string" ? scbaPackIdValue : null,
+		fire_hose_inventory_number:
+			typeof row.fire_hose_inventory_number === "string"
+				? row.fire_hose_inventory_number
+				: null,
+		scba_cylinder_number:
+			typeof row.scba_cylinder_number === "string"
+				? row.scba_cylinder_number
+				: null,
+		scba_pack_number:
+			typeof row.scba_pack_number === "string" ? row.scba_pack_number : null,
 		apparatus: normalizeDeficiencyRelation(row.apparatus_info),
+		category: normalizeDeficiencyRelation(row.category_info),
 		priority: normalizeDeficiencyRelation(row.priority_info),
 		status: normalizeDeficiencyRelation(row.status_info),
 	};
@@ -206,10 +230,34 @@ export default async function DeficiencyDetailPage({
 	const { data, error } = await supabase
 		.from("deficiencies")
 		.select(
-			"*, priority_info:deficiency_priorities!fk_deficiencies_priority(*), status_info:deficiency_statuses!fk_deficiencies_status(*), apparatus_info:apparatus!fk_deficiencies_apparatus(*)"
+			"*, fire_hose:fire_hose_id(inventory_number), scba_cylinder:scba_cylinder_id(cylinder_number), scba_pack:scba_pack_id(pack_number), category_info:deficiency_categories!fk_deficiencies_category(*), priority_info:deficiency_priorities!fk_deficiencies_priority(*), status_info:deficiency_statuses!fk_deficiencies_status(*), apparatus_info:apparatus!fk_deficiencies_apparatus(*)"
 		)
 		.eq("id", id)
 		.maybeSingle();
+
+	let normalizedDetailSource: Record<string, unknown> | null = null;
+	if (data && typeof data === "object") {
+		const row = data as Record<string, unknown>;
+		const fireHoseRelation = Array.isArray(row.fire_hose) ? row.fire_hose[0] : row.fire_hose;
+		const scbaCylinderRelation = Array.isArray(row.scba_cylinder) ? row.scba_cylinder[0] : row.scba_cylinder;
+		const scbaPackRelation = Array.isArray(row.scba_pack) ? row.scba_pack[0] : row.scba_pack;
+
+		normalizedDetailSource = {
+			...row,
+			fire_hose_inventory_number:
+				fireHoseRelation && typeof fireHoseRelation === "object"
+					? (fireHoseRelation as Record<string, unknown>).inventory_number
+					: null,
+			scba_cylinder_number:
+				scbaCylinderRelation && typeof scbaCylinderRelation === "object"
+					? (scbaCylinderRelation as Record<string, unknown>).cylinder_number
+					: null,
+			scba_pack_number:
+				scbaPackRelation && typeof scbaPackRelation === "object"
+					? (scbaPackRelation as Record<string, unknown>).pack_number
+					: null,
+		};
+	}
 
 	if (error) {
 		return (
@@ -265,12 +313,67 @@ export default async function DeficiencyDetailPage({
 		);
 	}
 
-	const deficiency = normalizeDeficiencyDetail(data);
+	const deficiency = normalizeDeficiencyDetail(normalizedDetailSource ?? data);
+	const apparatusLabel = deficiency.apparatus?.name
+		? deficiency.apparatus.name
+		: deficiency.fire_hose_id
+			? `Station Supply - Fire Hose ${deficiency.fire_hose_inventory_number ?? "Unknown"}`
+			: deficiency.scba_cylinder_id
+				? `Station Supply - SCBA Cylinder ${deficiency.scba_cylinder_number ?? "Unknown"}`
+				: deficiency.scba_pack_id
+					? `Station Supply - SCBA Pack ${deficiency.scba_pack_number ?? "Unknown"}`
+					: "Unknown Apparatus";
 	const statusName = deficiency.status?.name ?? "Unknown";
 	const priorityName = deficiency.priority?.name ?? "Not set";
+	const equipmentCategoryLabel = deficiency.fire_hose_id
+		? "Fire Hose"
+		: deficiency.scba_cylinder_id
+			? "SCBA Cylinder"
+			: deficiency.scba_pack_id
+				? "SCBA Pack"
+				: deficiency.category?.name ?? "Uncategorized";
 	const isResolved = statusName.trim().toLowerCase() === "resolved";
-	const reportedBy =
-		deficiency.reported_by ?? deficiency.reported_by_member_id ?? "Unassigned";
+	const reportedByMemberIds = Array.from(
+		new Set(
+			[deficiency.reported_by, deficiency.reported_by_member_id].filter(
+				(memberId): memberId is string => typeof memberId === "string" && memberId.length > 0,
+			),
+		),
+	);
+
+	let reportedByNameById: Record<string, string> = {};
+
+	if (reportedByMemberIds.length > 0) {
+		const { data: reportedByMembersData } = await supabase
+			.from("members")
+			.select("id, first_name, last_name")
+			.in("id", reportedByMemberIds);
+
+		reportedByNameById = (reportedByMembersData ?? []).reduce<Record<string, string>>(
+			(accumulator, memberRow) => {
+				const row = memberRow as Record<string, unknown>;
+				const idValue = row.id;
+				const memberId = typeof idValue === "string" ? idValue : "";
+
+				if (!memberId) {
+					return accumulator;
+				}
+
+				const firstName = typeof row.first_name === "string" ? row.first_name.trim() : "";
+				const lastName = typeof row.last_name === "string" ? row.last_name.trim() : "";
+				const fullName = `${firstName} ${lastName}`.trim() || memberId;
+
+				accumulator[memberId] = fullName;
+				return accumulator;
+			},
+			{},
+		);
+	}
+
+	const reportedByMemberId = deficiency.reported_by ?? deficiency.reported_by_member_id ?? null;
+	const reportedBy = reportedByMemberId
+		? reportedByNameById[reportedByMemberId] ?? reportedByMemberId
+		: "Unassigned";
 
 	let assignedMember: AssignedMember | null = null;
 
@@ -381,8 +484,13 @@ export default async function DeficiencyDetailPage({
 						<div className="rounded-xl border border-white/10 bg-[#0d0d0d] p-4">
 							<p className="text-xs uppercase tracking-[0.2em] text-zinc-500">Apparatus</p>
 							<p className="mt-2 text-sm font-semibold text-white">
-								{deficiency.apparatus?.name ?? "Unknown Apparatus"}
+								{apparatusLabel}
 							</p>
+						</div>
+
+						<div className="rounded-xl border border-white/10 bg-[#0d0d0d] p-4">
+							<p className="text-xs uppercase tracking-[0.2em] text-zinc-500">Category</p>
+							<p className="mt-2 text-sm font-semibold text-white">{equipmentCategoryLabel}</p>
 						</div>
 
 						<div className="rounded-xl border border-white/10 bg-[#0d0d0d] p-4">

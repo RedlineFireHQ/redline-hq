@@ -11,10 +11,21 @@ type Deficiency = {
 	description: string | null;
 	location: string | null;
 	fire_hose_id: string | null;
+	scba_cylinder_id: string | null;
+	scba_pack_id: string | null;
 	fire_hose: {
 		inventory_number: string | null;
 	} | null;
+	scba_cylinder: {
+		cylinder_number: string | null;
+	} | null;
+	scba_pack: {
+		pack_number: string | null;
+	} | null;
 	apparatus: {
+		name: string | null;
+	} | null;
+	category: {
 		name: string | null;
 	} | null;
 	priority: {
@@ -110,6 +121,32 @@ function normalizeApparatusOption(record: Record<string, unknown>): ApparatusOpt
 	return { id, name };
 }
 
+async function resolveCurrentReporter() {
+	const {
+		data: { user },
+	} = await supabase.auth.getUser();
+
+	const email = user?.email?.trim();
+	if (!email) {
+		return null;
+	}
+
+	const { data, error } = await supabase
+		.from("members")
+		.select("id")
+		.eq("email", email)
+		.maybeSingle();
+
+	if (error || !data) {
+		return null;
+	}
+
+	const row = data as Record<string, unknown>;
+	const memberId = typeof row.id === "string" ? row.id : "";
+
+	return memberId ? { memberId } : null;
+}
+
 function normalizeDeficiencyRelation(value: unknown): { name: string | null } | null {
 	if (Array.isArray(value)) {
 		const first = value[0] as Record<string, unknown> | undefined;
@@ -164,11 +201,71 @@ function normalizeFireHoseRelation(
 	return null;
 }
 
+function normalizeScbaCylinderRelation(
+	value: unknown,
+): { cylinder_number: string | null } | null {
+	if (Array.isArray(value)) {
+		const first = value[0] as Record<string, unknown> | undefined;
+		if (!first) {
+			return null;
+		}
+
+		const cylinderNumber = first.cylinder_number;
+		return {
+			cylinder_number:
+				typeof cylinderNumber === "string" ? cylinderNumber : null,
+		};
+	}
+
+	if (value && typeof value === "object") {
+		const relation = value as Record<string, unknown>;
+		const cylinderNumber = relation.cylinder_number;
+
+		return {
+			cylinder_number:
+				typeof cylinderNumber === "string" ? cylinderNumber : null,
+		};
+	}
+
+	return null;
+}
+
+function normalizeScbaPackRelation(
+	value: unknown,
+): { pack_number: string | null } | null {
+	if (Array.isArray(value)) {
+		const first = value[0] as Record<string, unknown> | undefined;
+		if (!first) {
+			return null;
+		}
+
+		const packNumber = first.pack_number;
+		return {
+			pack_number:
+				typeof packNumber === "string" ? packNumber : null,
+		};
+	}
+
+	if (value && typeof value === "object") {
+		const relation = value as Record<string, unknown>;
+		const packNumber = relation.pack_number;
+
+		return {
+			pack_number:
+				typeof packNumber === "string" ? packNumber : null,
+		};
+	}
+
+	return null;
+}
+
 function normalizeDeficienciesData(data: unknown[] | null): Deficiency[] {
 	return (data ?? []).map((record) => {
 		const row = record as Record<string, unknown>;
 		const idValue = row.id;
 		const fireHoseIdValue = row.fire_hose_id;
+		const scbaCylinderIdValue = row.scba_cylinder_id;
+		const scbaPackIdValue = row.scba_pack_id;
 
 		return {
 			id: typeof idValue === "string" ? idValue : String(idValue ?? ""),
@@ -177,13 +274,36 @@ function normalizeDeficienciesData(data: unknown[] | null): Deficiency[] {
 			description: typeof row.description === "string" ? row.description : null,
 			location: typeof row.location === "string" ? row.location : null,
 			fire_hose_id: typeof fireHoseIdValue === "string" ? fireHoseIdValue : null,
+			scba_cylinder_id:
+				typeof scbaCylinderIdValue === "string" ? scbaCylinderIdValue : null,
+			scba_pack_id:
+				typeof scbaPackIdValue === "string" ? scbaPackIdValue : null,
 			fire_hose: normalizeFireHoseRelation(row.fire_hose),
+			scba_cylinder: normalizeScbaCylinderRelation(row.scba_cylinder),
+			scba_pack: normalizeScbaPackRelation(row.scba_pack),
 			apparatus: normalizeDeficiencyRelation(row.apparatus),
+			category: normalizeDeficiencyRelation(row.category),
 			priority: normalizeDeficiencyRelation(row.priority),
 			status: normalizeDeficiencyRelation(row.status),
 			reported_at: typeof row.reported_at === "string" ? row.reported_at : null,
 		};
 	});
+}
+
+function getDeficiencyEquipmentCategoryLabel(deficiency: Deficiency) {
+	if (deficiency.fire_hose_id) {
+		return "Fire Hose";
+	}
+
+	if (deficiency.scba_cylinder_id) {
+		return "SCBA Cylinder";
+	}
+
+	if (deficiency.scba_pack_id) {
+		return "SCBA Pack";
+	}
+
+	return deficiency.category?.name ?? "Uncategorized";
 }
 
 type DeficiencyStatusFilter = "all" | "open" | "in progress" | "resolved";
@@ -192,7 +312,7 @@ async function fetchDeficiencies() {
 	const result = await supabase
 		.from("deficiencies")
 		.select(
-			"id, deficiency_number, description, reported_at, fire_hose_id, fire_hose:fire_hose_id(inventory_number), priority:deficiency_priorities!fk_deficiencies_priority(name), status:deficiency_statuses!fk_deficiencies_status(name), apparatus:apparatus!fk_deficiencies_apparatus(name)"
+			"id, deficiency_number, description, reported_at, fire_hose_id, scba_cylinder_id, scba_pack_id, fire_hose:fire_hose_id(inventory_number), scba_cylinder:scba_cylinder_id(cylinder_number), scba_pack:scba_pack_id(pack_number), category:deficiency_categories!fk_deficiencies_category(name), priority:deficiency_priorities!fk_deficiencies_priority(name), status:deficiency_statuses!fk_deficiencies_status(name), apparatus:apparatus!fk_deficiencies_apparatus(name)"
 		)
 		.order("reported_at", { ascending: false });
 
@@ -353,8 +473,11 @@ export default function DeficienciesPage() {
 
 			const searchableFields = [
 				deficiency.deficiency_number ?? "",
+				getDeficiencyEquipmentCategoryLabel(deficiency),
 				deficiency.apparatus?.name ?? "",
 				deficiency.fire_hose?.inventory_number ?? "",
+				deficiency.scba_cylinder?.cylinder_number ?? "",
+				deficiency.scba_pack?.pack_number ?? "",
 				deficiency.description ?? "",
 				deficiency.location ?? "",
 			];
@@ -638,6 +761,12 @@ export default function DeficienciesPage() {
 	async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
 		event.preventDefault();
 
+		const reporter = await resolveCurrentReporter();
+		if (!reporter) {
+			setSubmitErrorMessage("Unable to determine your Redline HQ member identity.");
+			return;
+		}
+
 		const formStateWithOptionalPhoto = formState as ReportFormState & {
 			photo?: File | null | string;
 		};
@@ -727,6 +856,7 @@ export default function DeficienciesPage() {
 			created_at: now,
 			status: openStatusId,
 			photo_path: uploadedPhotoPath,
+			reported_by: reporter.memberId,
 		};
 
 		console.log("Deficiency insert payload:", payload);
@@ -777,7 +907,7 @@ export default function DeficienciesPage() {
 					deficiency_id: insertedDeficiencyId,
 					event_type: "Reported",
 					event_description: "Deficiency reported.",
-					member_id: null,
+					member_id: reporter.memberId,
 				});
 
 			if (historyError) {
@@ -893,6 +1023,7 @@ export default function DeficienciesPage() {
 									<tr>
 										<th className="px-6 py-4">Deficiency #</th>
 										<th className="px-6 py-4">Apparatus</th>
+										<th className="px-6 py-4">Category</th>
 										<th className="px-6 py-4">Description</th>
 										<th className="px-6 py-4">Priority</th>
 										<th className="px-6 py-4">Status</th>
@@ -916,14 +1047,29 @@ export default function DeficienciesPage() {
 														) : deficiency.fire_hose_id ? (
 															<div>
 																<p>Station Supply</p>
+																<p>Fire Hose - {deficiency.fire_hose?.inventory_number ?? "Unknown"}</p>
+															</div>
+														) : deficiency.scba_cylinder_id ? (
+															<div>
+																<p>Station Supply</p>
 																<p>
-																	Fire Hose - {deficiency.fire_hose?.inventory_number ?? "Unknown"}
+																	SCBA Cylinder - {deficiency.scba_cylinder?.cylinder_number ?? "Unknown"}
+																</p>
+															</div>
+														) : deficiency.scba_pack_id ? (
+															<div>
+																<p>Station Supply</p>
+																<p>
+																	SCBA Pack - {deficiency.scba_pack?.pack_number ?? "Unknown"}
 																</p>
 															</div>
 														) : (
 															"Unknown Apparatus"
 														)}
 											</td>
+													<td className="px-6 py-4 text-zinc-300">
+														{getDeficiencyEquipmentCategoryLabel(deficiency)}
+													</td>
 											<td className="px-6 py-4 text-zinc-300">
 												{deficiency.description ?? "No description provided."}
 											</td>
