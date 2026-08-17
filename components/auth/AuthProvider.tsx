@@ -47,22 +47,43 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
 	const [member, setMember] = useState<MemberProfile | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
 
-	async function loadMemberByEmail(email: string | null | undefined) {
-		const normalizedEmail = email?.trim();
+	async function loadMemberProfileByIdentity(userCandidate: User | null | undefined) {
+		const authUserId = typeof userCandidate?.id === "string" ? userCandidate.id : "";
+		const normalizedEmail = userCandidate?.email?.trim();
 
-		if (!normalizedEmail) {
+		if (!authUserId && !normalizedEmail) {
 			setMember(null);
 			return;
 		}
 
-		const { data, error } = await supabase
-			.from("members")
-			.select("*")
-			.eq("email", normalizedEmail)
-			.maybeSingle();
+		let data: MemberProfile | null = null;
+		let error: unknown = null;
+
+		if (authUserId) {
+			const authUserLookup = await supabase
+				.from("members")
+				.select("*")
+				.eq("auth_user_id", authUserId)
+				.maybeSingle();
+
+			data = (authUserLookup.data as MemberProfile | null) ?? null;
+			error = authUserLookup.error;
+		}
+
+		if (!data && normalizedEmail) {
+			const emailFallbackLookup = await supabase
+				.from("members")
+				.select("*")
+				.eq("email", normalizedEmail)
+				.maybeSingle();
+
+			data = (emailFallbackLookup.data as MemberProfile | null) ?? null;
+			error = emailFallbackLookup.error;
+		}
 
 		if (error) {
-			console.error("[auth] loadMemberByEmail error", {
+			console.error("[auth] loadMemberProfileByIdentity error", {
+				authUserId,
 				email: normalizedEmail,
 				error,
 			});
@@ -70,7 +91,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
 			return;
 		}
 
-		setMember((data as MemberProfile | null) ?? null);
+		setMember(data ?? null);
 	}
 
 	useEffect(() => {
@@ -87,7 +108,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
 
 			setSession(currentSession);
 			setUser(currentSession?.user ?? null);
-			await loadMemberByEmail(currentSession?.user?.email);
+			await loadMemberProfileByIdentity(currentSession?.user);
 			setIsLoading(false);
 		}
 
@@ -98,7 +119,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
 		} = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
 			setSession(nextSession);
 			setUser(nextSession?.user ?? null);
-			await loadMemberByEmail(nextSession?.user?.email);
+			await loadMemberProfileByIdentity(nextSession?.user);
 			setIsLoading(false);
 		});
 
@@ -127,7 +148,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
 		if (!error) {
 			setSession(data.session);
 			setUser(data.user ?? null);
-			await loadMemberByEmail(data.user?.email);
+			await loadMemberProfileByIdentity(data.user);
 		}
 
 		return { error };
@@ -152,7 +173,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
 
 		setSession(refreshedSession);
 		setUser(refreshedSession?.user ?? null);
-		await loadMemberByEmail(refreshedSession?.user?.email);
+		await loadMemberProfileByIdentity(refreshedSession?.user);
 	}
 
 	const value = useMemo<AuthContextValue>(

@@ -36,23 +36,43 @@ export async function getCurrentMember(
     data: { user },
   } = await supabase.auth.getUser();
 
-  const email = user?.email?.trim();
+  const authUserId = typeof user?.id === "string" ? user.id : "";
+  const email = user?.email?.trim() ?? "";
 
-  if (!email) {
+  if (!authUserId && !email) {
     return null;
   }
 
-  const { data, error } = await supabase
-    .from("members")
-    .select("id, department_id, first_name, last_name, role")
-    .eq("email", email)
-    .maybeSingle();
+  let data: Record<string, unknown> | null = null;
+  let error: unknown = null;
+
+  if (authUserId) {
+    const authUserLookup = await supabase
+      .from("members")
+      .select("id, department_id, first_name, last_name, role")
+      .eq("auth_user_id", authUserId)
+      .maybeSingle();
+
+    data = (authUserLookup.data as Record<string, unknown> | null) ?? null;
+    error = authUserLookup.error;
+  }
+
+  if (!data && email) {
+    const emailFallbackLookup = await supabase
+      .from("members")
+      .select("id, department_id, first_name, last_name, role")
+      .eq("email", email)
+      .maybeSingle();
+
+    data = (emailFallbackLookup.data as Record<string, unknown> | null) ?? null;
+    error = emailFallbackLookup.error;
+  }
 
   if (error || !data) {
     return null;
   }
 
-  const row = data as Record<string, unknown>;
+  const row = data;
   const firstName = typeof row.first_name === "string" ? row.first_name.trim() : "";
   const lastName = typeof row.last_name === "string" ? row.last_name.trim() : "";
   const fullName = `${firstName} ${lastName}`.trim();
