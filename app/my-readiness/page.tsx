@@ -83,6 +83,33 @@ type HistoryItem = {
     | "apparatus";
 };
 
+type DeficiencyStatusRelation = {
+  name: string | null;
+  active: boolean | null;
+};
+
+type DeficiencyPriorityRelation = {
+  name: string | null;
+};
+
+type DeficiencyAssignedRow = {
+  id: string;
+  deficiency_number: string | null;
+  description: string | null;
+  assigned_to: string | null;
+  created_at: string | null;
+  reported_at: string | null;
+  status_info: DeficiencyStatusRelation | DeficiencyStatusRelation[] | null;
+  priority_info: DeficiencyPriorityRelation | DeficiencyPriorityRelation[] | null;
+};
+
+type DeficiencyAssignmentHistoryRow = {
+  deficiency_id: string;
+  member_id: string | null;
+  event_type: string | null;
+  created_at: string | null;
+};
+
 function formatDateOnly(value: string) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
@@ -144,6 +171,33 @@ function sourceLabel(source: HistoryItem["source"]) {
   return "Apparatus";
 }
 
+function normalizeDeficiencyStatus(
+  relation: DeficiencyStatusRelation | DeficiencyStatusRelation[] | null,
+) {
+  const row = Array.isArray(relation) ? relation[0] : relation;
+  if (!row) {
+    return { name: null, active: null };
+  }
+
+  return {
+    name: typeof row.name === "string" ? row.name : null,
+    active: typeof row.active === "boolean" ? row.active : null,
+  };
+}
+
+function normalizeDeficiencyPriority(
+  relation: DeficiencyPriorityRelation | DeficiencyPriorityRelation[] | null,
+) {
+  const row = Array.isArray(relation) ? relation[0] : relation;
+  if (!row) {
+    return { name: null };
+  }
+
+  return {
+    name: typeof row.name === "string" ? row.name : null,
+  };
+}
+
 export default async function MyReadinessPage() {
   const supabase = await createSupabaseServerClient();
   const currentMember = await getCurrentMember(supabase);
@@ -165,6 +219,7 @@ export default async function MyReadinessPage() {
     { data: memberQualificationsRows, error: memberQualificationsError },
     { data: roleRequiredCertificationRows, error: roleRequiredCertificationError },
     { data: roleRequiredQualificationRows, error: roleRequiredQualificationError },
+    { data: assignedDeficiencyRows, error: assignedDeficiencyRowsError },
     { data: deficiencyHistoryRows, error: deficiencyHistoryError },
     { data: maintenanceRows, error: maintenanceError },
     { data: apparatusRows, error: apparatusError },
@@ -232,6 +287,12 @@ export default async function MyReadinessPage() {
       .select("department_role_id, qualification_id")
       .eq("department_id", currentMember.departmentId),
     supabase
+      .from("deficiencies")
+      .select(
+        "id, deficiency_number, description, assigned_to, created_at, reported_at, status_info:deficiency_statuses!fk_deficiencies_status(name, active), priority_info:deficiency_priorities!fk_deficiencies_priority(name)",
+      )
+      .eq("assigned_to", currentMember.id),
+    supabase
       .from("deficiency_history")
       .select("id, event_type, event_description, created_at")
       .eq("member_id", currentMember.id)
@@ -297,6 +358,10 @@ export default async function MyReadinessPage() {
     );
   }
 
+  if (assignedDeficiencyRowsError) {
+    throw new Error(assignedDeficiencyRowsError.message || "Unable to load assigned deficiencies.");
+  }
+
   const attendance = (attendanceRows ?? []) as TrainingAttendanceRow[];
   const approvedOutside = (approvedOutsideRows ?? []) as OutsideSubmissionRow[];
   const allOutside = (allOutsideRows ?? []) as OutsideSubmissionRow[];
@@ -325,6 +390,7 @@ export default async function MyReadinessPage() {
     department_role_id: row.department_role_id,
     qualification_id: row.qualification_id,
   }));
+  const assignedDeficiencies = (assignedDeficiencyRows ?? []) as DeficiencyAssignedRow[];
 
   const attendedEventIds = Array.from(
     new Set(attendance.map((row) => row.training_event_id).filter((id) => typeof id === "string" && id.length > 0)),
@@ -438,6 +504,36 @@ export default async function MyReadinessPage() {
      };
    });
 
+  const assignedDeficiencyIds = assignedDeficiencies.map((row) => row.id).filter((id) => typeof id === "string" && id.length > 0);
+  let assignmentHistoryRows: DeficiencyAssignmentHistoryRow[] = [];
+
+  if (assignedDeficiencyIds.length > 0) {
+    const { data: assignmentRows, error: assignmentRowsError } = await supabase
+      .from("deficiency_history")
+      .select("deficiency_id, member_id, event_type, created_at")
+      .in("deficiency_id", assignedDeficiencyIds)
+      .eq("member_id", currentMember.id)
+      .eq("event_type", "Assigned")
+      .order("created_at", { ascending: false });
+
+    if (assignmentRowsError) {
+      throw new Error(assignmentRowsError.message || "Unable to load deficiency assignment history.");
+    }
+
+    assignmentHistoryRows = (assignmentRows ?? []) as DeficiencyAssignmentHistoryRow[];
+  }
+
+  const personalAssignmentStartedAtByDeficiencyId = new Map<string, string>();
+  for (const row of assignmentHistoryRows) {
+    if (!row.deficiency_id || !row.created_at) {
+      continue;
+    }
+
+    if (!personalAssignmentStartedAtByDeficiencyId.has(row.deficiency_id)) {
+      personalAssignmentStartedAtByDeficiencyId.set(row.deficiency_id, row.created_at);
+    }
+  }
+
    const currentCertifications = certificationCards.filter((row) => row.status === "current").length;
    const expiringSoonCertifications = certificationCards.filter((row) => row.status === "expiring_soon").length;
    const expiredCertifications = certificationCards.filter((row) => row.status === "expired").length;
@@ -453,6 +549,24 @@ export default async function MyReadinessPage() {
       status: row.status,
     })),
     qualificationReadiness,
+    currentMemberId: currentMember.id,
+    deficiencyItems: assignedDeficiencies.map((row) => {
+      const status = normalizeDeficiencyStatus(row.status_info);
+      const priority = normalizeDeficiencyPriority(row.priority_info);
+
+      return {
+        id: row.id,
+        deficiencyNumber: row.deficiency_number,
+        description: row.description,
+        priorityName: priority.name,
+        assignedToMemberId: row.assigned_to,
+        statusName: status.name,
+        statusActive: status.active,
+        createdAt: row.created_at,
+        reportedAt: row.reported_at,
+        personalAssignedAt: personalAssignmentStartedAtByDeficiencyId.get(row.id) ?? null,
+      };
+    }),
   });
 
   const readinessPercentDisplay = readinessScore.scorePercent ?? 0;
@@ -643,9 +757,7 @@ export default async function MyReadinessPage() {
                <p className="mt-1 text-sm font-semibold text-white">
                  {readinessScore.configured
                    ? `${requirements.length} configured`
-                   : readinessScore.configurationState === "model_incomplete"
-                     ? "Model incomplete"
-                     : "Not configured"}
+                    : "Not configured"}
                </p>
              </div>
            </div>

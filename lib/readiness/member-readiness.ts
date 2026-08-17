@@ -4,6 +4,8 @@ export type TrainingRequirementKind = "annual_hours" | "category_hours" | "topic
 
 export type ReadinessFactorCategory = "training" | "certification" | "qualification" | "other";
 
+export type DeficiencyImpactState = "no_impact" | "small_impact" | "moderate_impact" | "maximum_impact";
+
 export type ReadinessFactor = {
   id: string;
   title: string;
@@ -51,8 +53,24 @@ export type ReadinessScoreState = {
   missingQualifications: string[];
   completedRequirements: number;
   incompleteRequirements: number;
+  deficiencyPenaltyPercent: number;
+  deficiencyCategoryMaxPercent: number;
+  deficiencyImpactingCount: number;
   factors: ReadinessFactor[];
   coachItems: ReadinessCoachItem[];
+};
+
+export type DeficiencyReadinessInput = {
+  id: string;
+  deficiencyNumber: string | null;
+  description: string | null;
+  priorityName: string | null;
+  assignedToMemberId: string | null;
+  statusName: string | null;
+  statusActive: boolean | null;
+  createdAt: string | null;
+  reportedAt: string | null;
+  personalAssignedAt: string | null;
 };
 
 export type RequirementInput = {
@@ -76,6 +94,160 @@ type CertificationRequirementStatus = {
 };
 
 const QUALIFICATIONS_BUCKET_MAX = 10;
+const DEFICIENCIES_BUCKET_MAX = 10;
+
+function normalizeDeficiencyPriority(priorityName: string | null) {
+  const normalized = (priorityName ?? "").trim().toLowerCase();
+  if (normalized === "critical") {
+    return "critical" as const;
+  }
+
+  if (normalized === "high") {
+    return "high" as const;
+  }
+
+  if (normalized === "medium") {
+    return "medium" as const;
+  }
+
+  if (normalized === "low") {
+    return "low" as const;
+  }
+
+  return null;
+}
+
+export function getDeficiencyImpactState(priorityName: string | null, ageDays: number): DeficiencyImpactState {
+  const priority = normalizeDeficiencyPriority(priorityName);
+  const normalizedAgeDays = Math.max(0, Math.floor(ageDays));
+
+  if (!priority) {
+    return "no_impact";
+  }
+
+  if (priority === "critical") {
+    if (normalizedAgeDays <= 2) {
+      return "no_impact";
+    }
+
+    if (normalizedAgeDays <= 7) {
+      return "small_impact";
+    }
+
+    if (normalizedAgeDays <= 14) {
+      return "moderate_impact";
+    }
+
+    return "maximum_impact";
+  }
+
+  if (priority === "high") {
+    if (normalizedAgeDays <= 6) {
+      return "no_impact";
+    }
+
+    if (normalizedAgeDays <= 14) {
+      return "small_impact";
+    }
+
+    if (normalizedAgeDays <= 30) {
+      return "moderate_impact";
+    }
+
+    return "maximum_impact";
+  }
+
+  if (priority === "medium") {
+    if (normalizedAgeDays <= 13) {
+      return "no_impact";
+    }
+
+    if (normalizedAgeDays <= 30) {
+      return "small_impact";
+    }
+
+    if (normalizedAgeDays <= 60) {
+      return "moderate_impact";
+    }
+
+    return "maximum_impact";
+  }
+
+  if (normalizedAgeDays <= 29) {
+    return "no_impact";
+  }
+
+  if (normalizedAgeDays <= 60) {
+    return "small_impact";
+  }
+
+  if (normalizedAgeDays <= 90) {
+    return "moderate_impact";
+  }
+
+  return "maximum_impact";
+}
+
+export function getDeficiencyImpactPenaltyPercent(impactState: DeficiencyImpactState) {
+  if (impactState === "small_impact") {
+    return 2.5;
+  }
+
+  if (impactState === "moderate_impact") {
+    return 5;
+  }
+
+  if (impactState === "maximum_impact") {
+    return 10;
+  }
+
+  return 0;
+}
+
+function formatImpactStateLabel(impactState: DeficiencyImpactState) {
+  if (impactState === "small_impact") {
+    return "Small Impact";
+  }
+
+  if (impactState === "moderate_impact") {
+    return "Moderate Impact";
+  }
+
+  if (impactState === "maximum_impact") {
+    return "Maximum Impact";
+  }
+
+  return "No Impact";
+}
+
+function isDeficiencyResolved(statusName: string | null, statusActive: boolean | null) {
+  if (statusActive === false) {
+    return true;
+  }
+
+  const normalizedStatus = (statusName ?? "").trim().toLowerCase();
+  return normalizedStatus === "resolved" || normalizedStatus === "closed";
+}
+
+function parseIsoTimestamp(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function calculateDaysBetween(start: Date, end: Date) {
+  const startUtc = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
+  const endUtc = Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate());
+  const millisecondsPerDay = 24 * 60 * 60 * 1000;
+  return Math.max(0, Math.floor((endUtc - startUtc) / millisecondsPerDay));
+}
 
 export function parseHours(value: number | string | null | undefined) {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -234,6 +406,8 @@ export function buildMemberReadinessScore(input: {
   categoryNameById: Map<string, string>;
   certificationStatuses?: CertificationRequirementStatus[];
   qualificationReadiness?: QualificationReadinessInput;
+  deficiencyItems?: DeficiencyReadinessInput[];
+  currentMemberId?: string;
 }): ReadinessScoreState {
   const activeRequirements = input.requirementRows.filter((row) => row.active);
   if (activeRequirements.length === 0) {
@@ -249,6 +423,9 @@ export function buildMemberReadinessScore(input: {
       missingQualifications: [],
       completedRequirements: 0,
       incompleteRequirements: 0,
+      deficiencyPenaltyPercent: 0,
+      deficiencyCategoryMaxPercent: DEFICIENCIES_BUCKET_MAX,
+      deficiencyImpactingCount: 0,
       factors: [],
       coachItems: [],
     };
@@ -484,6 +661,71 @@ export function buildMemberReadinessScore(input: {
     });
   }
 
+  const deficiencyItems = input.deficiencyItems ?? [];
+  const activePersonalDeficiencies = deficiencyItems.filter((item) => {
+    if (!item.assignedToMemberId) {
+      return false;
+    }
+
+    if (input.currentMemberId && item.assignedToMemberId !== input.currentMemberId) {
+      return false;
+    }
+
+    return !isDeficiencyResolved(item.statusName, item.statusActive);
+  });
+
+  const now = new Date();
+  const evaluatedDeficiencies = activePersonalDeficiencies.map((item) => {
+    const personalAssignedAt =
+      parseIsoTimestamp(item.personalAssignedAt) ?? now;
+
+    const ageDays = calculateDaysBetween(personalAssignedAt, now);
+    const impactState = getDeficiencyImpactState(item.priorityName, ageDays);
+    const penaltyPercent = getDeficiencyImpactPenaltyPercent(impactState);
+
+    return {
+      ...item,
+      ageDays,
+      impactState,
+      penaltyPercent,
+    };
+  });
+
+  const impactingDeficiencies = evaluatedDeficiencies.filter((item) => item.penaltyPercent > 0);
+  const uncappedDeficiencyPenalty = impactingDeficiencies.reduce((total, item) => total + item.penaltyPercent, 0);
+  const deficiencyPenaltyPercent = Math.min(DEFICIENCIES_BUCKET_MAX, uncappedDeficiencyPenalty);
+  const deficiencyCompletionPercent = clampPercent(
+    ((DEFICIENCIES_BUCKET_MAX - deficiencyPenaltyPercent) / DEFICIENCIES_BUCKET_MAX) * 100,
+  );
+
+  if (deficiencyPenaltyPercent === 0) {
+    completedRequirements += 1;
+  } else {
+    incompleteRequirements += 1;
+  }
+
+  const highestImpactDeficiency = [...impactingDeficiencies].sort((a, b) => b.penaltyPercent - a.penaltyPercent)[0] ?? null;
+
+  const deficiencyActionNeeded = highestImpactDeficiency
+    ? `What is wrong: ${highestImpactDeficiency.deficiencyNumber ?? highestImpactDeficiency.id} (${highestImpactDeficiency.priorityName ?? "Unknown"}) has been assigned to you for ${highestImpactDeficiency.ageDays} day${highestImpactDeficiency.ageDays === 1 ? "" : "s"} and is at ${formatImpactStateLabel(highestImpactDeficiency.impactState)} (${highestImpactDeficiency.penaltyPercent.toFixed(1)}%). Why it matters: active deficiencies assigned to you reduce your personal readiness. Action: complete the repair workflow and resolve this deficiency to remove its readiness penalty.`
+    : "No action needed.";
+
+  factors.push({
+    id: "deficiencies-current-responsibility",
+    title: "Deficiencies (Current Responsibility)",
+    category: "other",
+    statusLabel: deficiencyPenaltyPercent > 0 ? "Impacting Readiness" : "No Impact",
+    appliesTo: "Current Responsible Party",
+    unitLabel: "% penalty",
+    periodLabel: "Active",
+    standardReference: "Redline Ready Deficiencies Locked Model",
+    requiredValue: "0.0% penalty",
+    currentValue: `${deficiencyPenaltyPercent.toFixed(1)}% penalty from ${impactingDeficiencies.length} active impacting deficiency${impactingDeficiencies.length === 1 ? "" : "ies"}`,
+    completionPercent: deficiencyCompletionPercent,
+    completed: deficiencyPenaltyPercent === 0,
+    actionNeeded: deficiencyActionNeeded,
+  });
+
   const coachItems: ReadinessCoachItem[] = factors
     .filter((factor) => !factor.completed)
     .map((factor) => {
@@ -517,6 +759,9 @@ export function buildMemberReadinessScore(input: {
     missingQualifications,
     completedRequirements,
     incompleteRequirements,
+    deficiencyPenaltyPercent,
+    deficiencyCategoryMaxPercent: DEFICIENCIES_BUCKET_MAX,
+    deficiencyImpactingCount: impactingDeficiencies.length,
     factors,
     coachItems,
   };
