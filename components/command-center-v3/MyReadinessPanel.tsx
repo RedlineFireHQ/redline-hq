@@ -163,7 +163,23 @@ function calculateMyReadiness(input: {
     };
   }
 
-  const scorePercent = readinessScore.scorePercent ?? 0;
+  if (readinessScore.scorePercent === null || readinessScore.remainingPercent === null) {
+    return {
+      readiness: null,
+      showPercent: false,
+      statusLabel: "NOT SCORED",
+      message: readinessScore.configurationMessage,
+      summary: [
+        { title: "Readiness Model", status: "Partially Configured", type: "warning" },
+        { title: "Current Certifications", status: `${currentCount}/${totalCertifications}`, type: totalCertifications > 0 ? "good" : "warning" },
+        { title: "Department Training Hours", status: `${input.departmentHours.toFixed(2)} hrs`, type: input.departmentHours > 0 ? "good" : "warning" },
+        { title: "Qualifications", status: "Not Scored", type: "warning" },
+      ],
+      recommendation: readinessScore.configurationMessage,
+    };
+  }
+
+  const scorePercent = readinessScore.scorePercent;
   const incompleteFactors = readinessScore.factors.filter((factor) => !factor.completed).length;
 
   return {

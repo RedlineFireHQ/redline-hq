@@ -569,9 +569,8 @@ export default async function MyReadinessPage() {
     }),
   });
 
-  const readinessPercentDisplay = readinessScore.scorePercent ?? 0;
-  const remainingPercentDisplay =
-    readinessScore.remainingPercent ?? Math.max(0, 100 - readinessPercentDisplay);
+  const readinessPercentDisplay = readinessScore.scorePercent;
+  const remainingPercentDisplay = readinessScore.remainingPercent;
 
    const historyItems: HistoryItem[] = [];
 
@@ -665,7 +664,7 @@ export default async function MyReadinessPage() {
            <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
              <div className="rounded-xl border border-white/10 bg-[#141414] p-5">
                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-red-400">My Readiness</p>
-               {readinessScore.configured ? (
+               {readinessScore.configured && readinessPercentDisplay !== null && remainingPercentDisplay !== null ? (
                  <div className="mt-2">
                    <p className="text-6xl font-black text-white">{readinessPercentDisplay}%</p>
                    <p className="mt-3 text-lg font-semibold text-white">You&apos;re {readinessPercentDisplay}% ready</p>
@@ -673,7 +672,7 @@ export default async function MyReadinessPage() {
                  </div>
                ) : (
                  <div className="mt-2">
-                   <p className="text-2xl font-black uppercase text-amber-300">Requirements Not Configured</p>
+                   <p className="text-2xl font-black uppercase text-amber-300">Readiness Not Scored</p>
                    <p className="mt-2 text-sm text-neutral-300">{readinessScore.configurationMessage}</p>
                  </div>
                )}

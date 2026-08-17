@@ -95,6 +95,69 @@ type CertificationRequirementStatus = {
 
 const QUALIFICATIONS_BUCKET_MAX = 10;
 const DEFICIENCIES_BUCKET_MAX = 10;
+const CERTIFICATION_WEIGHT_PERCENT = 40;
+const TRAINING_WEIGHT_PERCENT = 40;
+const QUALIFICATIONS_WEIGHT_PERCENT = 10;
+const DEFICIENCIES_WEIGHT_PERCENT = 10;
+
+function clampRange(value: number, minimum: number, maximum: number) {
+  if (!Number.isFinite(value)) {
+    return minimum;
+  }
+
+  return Math.max(minimum, Math.min(maximum, value));
+}
+
+function roundToTenths(value: number) {
+  return Math.round(value * 10) / 10;
+}
+
+function getAverageCategoryCompletionPercent(factors: ReadinessFactor[], category: ReadinessFactorCategory) {
+  const categoryFactors = factors.filter((factor) => factor.category === category);
+  if (categoryFactors.length === 0) {
+    return 0;
+  }
+
+  const totalCompletionPercent = categoryFactors.reduce((total, factor) => total + factor.completionPercent, 0);
+  return clampRange(totalCompletionPercent / categoryFactors.length, 0, 100);
+}
+
+export function calculateQualificationsBucketScore(completedRequiredQualifications: number, totalRequiredQualifications: number) {
+  if (totalRequiredQualifications <= 0) {
+    return null;
+  }
+
+  const safeCompletedRequiredQualifications = clampRange(
+    completedRequiredQualifications,
+    0,
+    totalRequiredQualifications,
+  );
+
+  const qualificationRatio = safeCompletedRequiredQualifications / totalRequiredQualifications;
+  return clampRange(qualificationRatio * QUALIFICATIONS_BUCKET_MAX, 0, QUALIFICATIONS_BUCKET_MAX);
+}
+
+export function calculateOverallReadinessScorePercent(input: {
+  certificationsCategoryPercent: number;
+  trainingCategoryPercent: number;
+  qualificationsCategoryPercent: number;
+  deficienciesCategoryPercent: number;
+}) {
+  const certificationsContribution =
+    clampRange(input.certificationsCategoryPercent, 0, 100) * (CERTIFICATION_WEIGHT_PERCENT / 100);
+  const trainingContribution =
+    clampRange(input.trainingCategoryPercent, 0, 100) * (TRAINING_WEIGHT_PERCENT / 100);
+  const qualificationsContribution =
+    clampRange(input.qualificationsCategoryPercent, 0, 100) * (QUALIFICATIONS_WEIGHT_PERCENT / 100);
+  const deficienciesContribution =
+    clampRange(input.deficienciesCategoryPercent, 0, 100) * (DEFICIENCIES_WEIGHT_PERCENT / 100);
+
+  return clampRange(
+    certificationsContribution + trainingContribution + qualificationsContribution + deficienciesContribution,
+    0,
+    100,
+  );
+}
 
 function normalizeDeficiencyPriority(priorityName: string | null) {
   const normalized = (priorityName ?? "").trim().toLowerCase();
@@ -588,10 +651,12 @@ export function buildMemberReadinessScore(input: {
   let qualificationsScore: number | null = null;
   let qualificationsStatus: ReadinessScoreState["qualificationsStatus"] = "not_configured";
   let missingQualifications: string[] = [];
+  let qualificationsConfigurationMessage = "";
 
   const qualificationReadiness = input.qualificationReadiness;
   if (!qualificationReadiness || !qualificationReadiness.hasAssignedRole) {
     qualificationsStatus = "no_role";
+    qualificationsConfigurationMessage = "Assign a current role before qualifications readiness can be scored.";
     incompleteRequirements += 1;
     factors.push({
       id: "qualifications-current-role",
@@ -610,6 +675,7 @@ export function buildMemberReadinessScore(input: {
     });
   } else if (qualificationReadiness.requiredQualifications.length === 0) {
     qualificationsStatus = "not_configured";
+    qualificationsConfigurationMessage = "No required qualifications are configured for your current role.";
     incompleteRequirements += 1;
     factors.push({
       id: "qualifications-current-role",
@@ -629,9 +695,18 @@ export function buildMemberReadinessScore(input: {
   } else {
     missingQualifications = qualificationReadiness.missingQualifications;
     qualificationsStatus = missingQualifications.length === 0 ? "complete" : "missing";
+    const completedRequiredQualifications = Math.max(
+      0,
+      qualificationReadiness.requiredQualifications.length - missingQualifications.length,
+    );
+    qualificationsScore = calculateQualificationsBucketScore(
+      completedRequiredQualifications,
+      qualificationReadiness.requiredQualifications.length,
+    );
     const completed = missingQualifications.length === 0;
-    qualificationsScore = completed ? QUALIFICATIONS_BUCKET_MAX : null;
-    const completionPercent = completed ? 100 : 0;
+    const completionPercent = qualificationsScore === null
+      ? 0
+      : clampRange((qualificationsScore / QUALIFICATIONS_BUCKET_MAX) * 100, 0, 100);
     const missingList = missingQualifications.join(", ");
 
     if (completed) {
@@ -651,7 +726,7 @@ export function buildMemberReadinessScore(input: {
       standardReference: null,
       requiredValue: `${QUALIFICATIONS_BUCKET_MAX.toFixed(1)} / ${QUALIFICATIONS_BUCKET_MAX}`,
       currentValue: qualificationsScore === null
-        ? "Pending Redline deduction formula"
+        ? "Not scored"
         : `${qualificationsScore.toFixed(1)} / ${QUALIFICATIONS_BUCKET_MAX}`,
       completionPercent,
       completed,
@@ -747,12 +822,35 @@ export function buildMemberReadinessScore(input: {
     })
     .sort((a, b) => a.title.localeCompare(b.title));
 
+  const certificationsCategoryPercent = getAverageCategoryCompletionPercent(factors, "certification");
+  const trainingCategoryPercent = getAverageCategoryCompletionPercent(factors, "training");
+  const qualificationsCategoryPercent = qualificationsScore === null
+    ? null
+    : clampRange((qualificationsScore / QUALIFICATIONS_BUCKET_MAX) * 100, 0, 100);
+
+  const scorePercent = qualificationsCategoryPercent === null
+    ? null
+    : roundToTenths(calculateOverallReadinessScorePercent({
+      certificationsCategoryPercent,
+      trainingCategoryPercent,
+      qualificationsCategoryPercent,
+      deficienciesCategoryPercent: deficiencyCompletionPercent,
+    }));
+
+  const remainingPercent = scorePercent === null
+    ? null
+    : roundToTenths(clampRange(100 - scorePercent, 0, 100));
+
+  const configurationMessage = qualificationsCategoryPercent === null
+    ? qualificationsConfigurationMessage
+    : "Department-defined readiness requirements are configured.";
+
   return {
     configured: true,
     configurationState: "configured",
-    configurationMessage: "Department-defined readiness requirements are configured.",
-    scorePercent: null,
-    remainingPercent: null,
+    configurationMessage,
+    scorePercent,
+    remainingPercent,
     qualificationsScore,
     qualificationsMaxScore: QUALIFICATIONS_BUCKET_MAX,
     qualificationsStatus,
