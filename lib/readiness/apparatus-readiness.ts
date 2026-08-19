@@ -26,6 +26,8 @@ export type ApparatusCheckInput = {
   scoreProfile: ApparatusCheckScoreProfile | null;
 };
 
+type ApparatusCheckCadenceMode = "daily" | "scaled_custom" | "extended";
+
 export type ApparatusMaintenanceMethodEvaluation = {
   methodType: MaintenanceMethodType;
   intervalValue: number;
@@ -102,11 +104,44 @@ function getDaysOverdue(now: Date, dueAt: Date): number {
   return Math.floor((nowStart.getTime() - dueStart.getTime()) / millisPerDay);
 }
 
+function resolveCadenceMode(intervalDays: number): ApparatusCheckCadenceMode {
+  if (intervalDays === 1) {
+    return "daily";
+  }
+
+  if (intervalDays >= 30) {
+    return "extended";
+  }
+
+  return "scaled_custom";
+}
+
+export function calculateScaledCustomCheckBoundaries(intervalDays: number) {
+  const quarterOverdueBoundary = Math.max(1, Math.round(intervalDays * 0.25));
+  const halfOverdueBoundary = Math.max(
+    quarterOverdueBoundary + 1,
+    Math.round(intervalDays * 0.5)
+  );
+
+  return {
+    quarterOverdueBoundary,
+    halfOverdueBoundary,
+    fullyOverdueBoundary: intervalDays,
+  };
+}
+
 export function calculateApparatusChecksBucketScore(input: ApparatusCheckInput, now: Date) {
-  if (!input.intervalDays || !input.scoreProfile) {
+  if (!input.intervalDays) {
     return {
       score: null as number | null,
       blockingGap: "Missing apparatus check requirement configuration.",
+    };
+  }
+
+  if (input.intervalDays <= 0) {
+    return {
+      score: null as number | null,
+      blockingGap: "Invalid apparatus check interval configuration.",
     };
   }
 
@@ -129,28 +164,87 @@ export function calculateApparatusChecksBucketScore(input: ApparatusCheckInput, 
   dueAt.setDate(dueAt.getDate() + input.intervalDays);
 
   const daysOverdue = getDaysOverdue(now, dueAt);
+  const cadenceMode = resolveCadenceMode(input.intervalDays);
 
   if (daysOverdue < 0) {
     return { score: 20, blockingGap: null as string | null };
   }
 
+  if (cadenceMode === "daily") {
+    if (daysOverdue === 0) {
+      return {
+        score: 15,
+        blockingGap: null as string | null,
+      };
+    }
+
+    if (daysOverdue === 1) {
+      return {
+        score: 10,
+        blockingGap: null as string | null,
+      };
+    }
+
+    if (daysOverdue === 2) {
+      return {
+        score: 5,
+        blockingGap: null as string | null,
+      };
+    }
+
+    return {
+      score: 0,
+      blockingGap: null as string | null,
+    };
+  }
+
+  if (cadenceMode === "extended") {
+    if (daysOverdue === 0) {
+      return {
+        score: 10,
+        blockingGap: null as string | null,
+      };
+    }
+
+    if (daysOverdue === 1) {
+      return {
+        score: 5,
+        blockingGap: null as string | null,
+      };
+    }
+
+    return {
+      score: 0,
+      blockingGap: null as string | null,
+    };
+  }
+
   if (daysOverdue === 0) {
     return {
-      score: input.scoreProfile === "daily" ? 15 : 10,
+      score: 15,
       blockingGap: null as string | null,
     };
   }
 
-  if (daysOverdue === 1) {
+  const boundaries = calculateScaledCustomCheckBoundaries(input.intervalDays);
+
+  if (daysOverdue >= boundaries.fullyOverdueBoundary) {
     return {
-      score: input.scoreProfile === "daily" ? 10 : 5,
+      score: 0,
       blockingGap: null as string | null,
     };
   }
 
-  if (daysOverdue === 2) {
+  if (daysOverdue <= boundaries.quarterOverdueBoundary) {
     return {
-      score: input.scoreProfile === "daily" ? 5 : 0,
+      score: 10,
+      blockingGap: null as string | null,
+    };
+  }
+
+  if (daysOverdue <= boundaries.halfOverdueBoundary) {
+    return {
+      score: 5,
       blockingGap: null as string | null,
     };
   }

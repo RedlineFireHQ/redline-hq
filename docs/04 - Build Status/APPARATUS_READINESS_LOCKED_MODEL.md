@@ -65,9 +65,10 @@ Configuration is department/apparatus specific and must not assume daily checks.
 Cadence semantics are locked as:
 
 - interval_days defines department-specific cadence (daily, weekly, monthly, or other positive interval).
-- score_profile defines which locked overdue curve is applied (`daily` or `monthly`).
-- No additional scoring curves are implied.
-- Weekly/other cadences are supported by interval_days with an explicitly selected locked profile.
+- interval_days = 1 uses the Daily profile.
+- interval_days >= 30 uses the Extended/Monthly profile.
+- interval_days 2..29 uses a deterministic scaled custom profile.
+- No department can configure the penalty curve itself.
 
 Scoring profile behavior:
 
@@ -85,6 +86,41 @@ Monthly profile:
 - Due today and not completed: 10
 - 1 day overdue: 5
 - 2+ days overdue: 0
+
+Scaled custom profile (interval_days 2..29):
+
+- Current: 20
+- Due today and not completed: 15
+- Overdue at ~25% of one full interval: 10
+- Overdue at ~50% of one full interval: 5
+- Overdue at 100% of one full interval: 0
+
+Deterministic boundaries (approved clarification of locked model implementation):
+
+- proportional boundaries use nearest-integer rounding.
+- quarter boundary = round(interval_days * 0.25)
+- half boundary = round(interval_days * 0.50)
+- quarter boundary is clamped to at least 1 day.
+- half boundary is clamped to at least quarter + 1 day.
+- full boundary = interval_days
+
+Examples produced by this deterministic model:
+
+- 7-day: due=15, +2=10, +4=5, +7=0
+- 14-day: due=15, +4=10, +7=5, +14=0
+- 21-day: due=15, +5=10, +11=5, +21=0
+
+Configuration hierarchy for Apparatus Check cadence:
+
+- apparatus-specific active override in apparatus_check_requirements
+- otherwise active department default in apparatus_check_department_defaults
+- otherwise configuration required (not scored)
+
+Configuration governance:
+
+- readiness configuration is effective-dated (effective_start_at / effective_end_at)
+- readiness configuration keeps audit metadata (created_by/updated_by, created_at/updated_at)
+- historical records are preserved by ending prior effective windows rather than deleting history
 
 ## Condition / Safety Bucket (40)
 
@@ -200,6 +236,7 @@ apparatus_equipment_requirements uses polymorphic equipment_source + equipment_i
 Migration adds/extends:
 
 - apparatus_check_requirements
+- apparatus_check_department_defaults
 - apparatus_maintenance_requirements
 - apparatus_maintenance_requirement_methods
 - apparatus_equipment_requirements

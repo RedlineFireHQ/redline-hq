@@ -39,6 +39,19 @@ type RequirementRow = {
   maintenance_type: string | null;
 };
 
+type ApparatusCheckRequirementRow = {
+  score_profile: "daily" | "monthly";
+  interval_days: number;
+  effective_start_at: string | null;
+  effective_end_at: string | null;
+};
+
+type DepartmentCheckDefaultRow = {
+  interval_days: number;
+  effective_start_at: string | null;
+  effective_end_at: string | null;
+};
+
 type RequirementMethodRow = {
   apparatus_maintenance_requirement_id: string;
   method_type: "time_days" | "mileage" | "engine_hours";
@@ -267,11 +280,34 @@ function statusFromResult(result: ApparatusReadinessResult) {
     return "Out of Service" as const;
   }
 
+  if (result.status === "not_scored") {
+    return "Configuration Required" as const;
+  }
+
   if (result.status === "ready") {
     return "Ready" as const;
   }
 
   return "Checks Due" as const;
+}
+
+function isEffectiveNow(
+  now: Date,
+  effectiveStartAt: string | null,
+  effectiveEndAt: string | null
+) {
+  const start = effectiveStartAt ? new Date(effectiveStartAt) : null;
+  const end = effectiveEndAt ? new Date(effectiveEndAt) : null;
+
+  if (start && !Number.isNaN(start.getTime()) && start.getTime() > now.getTime()) {
+    return false;
+  }
+
+  if (end && !Number.isNaN(end.getTime()) && end.getTime() <= now.getTime()) {
+    return false;
+  }
+
+  return true;
 }
 
 export async function calculateApparatusReadinessForApparatusId(apparatusId: string) {
@@ -288,13 +324,33 @@ export async function calculateApparatusReadinessForApparatusId(apparatusId: str
   }
 
   const apparatus = apparatusRowData as ApparatusRow;
+  const evaluationNow = new Date();
 
-  const { data: checkRequirementData } = await supabase
+  const { data: apparatusCheckRequirementRowsData } = await supabase
     .from("apparatus_check_requirements")
-    .select("score_profile, interval_days")
+    .select("score_profile, interval_days, effective_start_at, effective_end_at")
     .eq("apparatus_id", apparatus.id)
     .eq("is_active", true)
-    .maybeSingle();
+    .order("effective_start_at", { ascending: false });
+
+  const apparatusCheckRequirementRows =
+    (apparatusCheckRequirementRowsData ?? []) as ApparatusCheckRequirementRow[];
+  const activeApparatusCheckRequirement = apparatusCheckRequirementRows.find((row) =>
+    isEffectiveNow(evaluationNow, row.effective_start_at, row.effective_end_at)
+  );
+
+  const { data: departmentCheckDefaultRowsData } = await supabase
+    .from("apparatus_check_department_defaults")
+    .select("interval_days, effective_start_at, effective_end_at")
+    .eq("department_id", apparatus.department_id)
+    .eq("is_active", true)
+    .order("effective_start_at", { ascending: false });
+
+  const departmentCheckDefaultRows =
+    (departmentCheckDefaultRowsData ?? []) as DepartmentCheckDefaultRow[];
+  const activeDepartmentCheckDefault = departmentCheckDefaultRows.find((row) =>
+    isEffectiveNow(evaluationNow, row.effective_start_at, row.effective_end_at)
+  );
 
   const { data: inspectionData } = await supabase
     .from("apparatus_inspections")
@@ -466,17 +522,24 @@ export async function calculateApparatusReadinessForApparatusId(apparatusId: str
   );
 
   const readinessResult = calculateOverallApparatusReadiness({
-    now: new Date(),
+    now: evaluationNow,
     explicitOutOfService: (apparatus.status ?? "").trim().toLowerCase() === "out_of_service",
     apparatusCheck: {
       lastCompletedAt: inspectionData?.created_at ?? apparatus.last_inspection_at,
       intervalDays:
-        typeof checkRequirementData?.interval_days === "number"
-          ? checkRequirementData.interval_days
+        typeof activeApparatusCheckRequirement?.interval_days === "number"
+          ? activeApparatusCheckRequirement.interval_days
+          : typeof activeDepartmentCheckDefault?.interval_days === "number"
+            ? activeDepartmentCheckDefault.interval_days
           : null,
       scoreProfile:
-        checkRequirementData?.score_profile === "daily" || checkRequirementData?.score_profile === "monthly"
-          ? checkRequirementData.score_profile
+        activeApparatusCheckRequirement?.score_profile === "daily" ||
+        activeApparatusCheckRequirement?.score_profile === "monthly"
+          ? activeApparatusCheckRequirement.score_profile
+          : activeDepartmentCheckDefault
+            ? activeDepartmentCheckDefault.interval_days >= 30
+              ? "monthly"
+              : "daily"
           : null,
     },
     conditionDeficiencies: unresolvedDeficiencies.map((row) => {
