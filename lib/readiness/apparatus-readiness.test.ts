@@ -6,6 +6,7 @@ import {
   calculateOverallApparatusReadiness,
   type ApparatusReadinessInput,
 } from "./apparatus-readiness";
+import { ensureApparatusReadinessRowContract, getStatusLabelForReadinessRow } from "./apparatus-readiness-data";
 
 function buildBaseInput(): ApparatusReadinessInput {
   return {
@@ -214,6 +215,168 @@ test("C8. Scaled boundary safeguards enforce minimum day and separation", () => 
     assert.ok(boundaries.halfOverdueBoundary >= boundaries.quarterOverdueBoundary + 1);
     assert.equal(boundaries.fullyOverdueBoundary, intervalDays);
   }
+});
+
+test("C9. Data contract returns explicit readiness for configuration-required apparatus", () => {
+  const apparatus = {
+    id: "a-1",
+    department_id: "d-1",
+    name: "Engine 1",
+    type: "Engine",
+    status: "in_service",
+    last_inspection_at: null,
+    mileage: null,
+    engine_hours: null,
+  };
+
+  const configurationRequiredReadiness = calculateOverallApparatusReadiness({
+    now: new Date("2026-08-18T12:00:00.000Z"),
+    explicitOutOfService: false,
+    apparatusCheck: {
+      lastCompletedAt: null,
+      intervalDays: null,
+      scoreProfile: null,
+    },
+    conditionDeficiencies: [],
+    maintenanceRequirements: [],
+    equipmentRequirements: [],
+  });
+  const row = ensureApparatusReadinessRowContract(
+    apparatus,
+    {
+      apparatus,
+      readiness: configurationRequiredReadiness,
+    },
+    new Date("2026-08-18T12:00:00.000Z")
+  );
+
+  assert.equal(row.readinessState, "evaluated");
+  assert.equal(row.evaluationErrorReason, "none");
+  assert.equal(row.readiness.status, "not_scored");
+  assert.equal(row.readiness.scorePercent, null);
+  assert.equal(getStatusLabelForReadinessRow(row), "Configuration Required");
+});
+
+test("C10. Unexpected missing evaluation is marked Readiness Unavailable", () => {
+  const apparatus = {
+    id: "a-2",
+    department_id: "d-1",
+    name: "Rescue 2",
+    type: "Rescue",
+    status: "in_service",
+    last_inspection_at: null,
+    mileage: null,
+    engine_hours: null,
+  };
+
+  const row = ensureApparatusReadinessRowContract(apparatus, undefined, new Date("2026-08-18T12:00:00.000Z"));
+  assert.equal(row.readinessState, "evaluation_error");
+  assert.equal(row.evaluationErrorReason, "missing_evaluation_result");
+  assert.equal(row.readiness.status, "not_scored");
+  assert.equal(row.readiness.scorePercent, null);
+  assert.equal(getStatusLabelForReadinessRow(row), "Readiness Unavailable");
+});
+
+test("C11. OOS remains OOS even when evaluation is unavailable", () => {
+  const apparatus = {
+    id: "a-3",
+    department_id: "d-1",
+    name: "Rescue 3",
+    type: "Rescue",
+    status: "out_of_service",
+    last_inspection_at: null,
+    mileage: null,
+    engine_hours: null,
+  };
+
+  const row = ensureApparatusReadinessRowContract(apparatus, undefined, new Date("2026-08-18T12:00:00.000Z"));
+  assert.equal(row.readinessState, "evaluation_error");
+  assert.equal(row.readiness.status, "out_of_service");
+  assert.equal(row.readiness.isOutOfService, true);
+  assert.equal(getStatusLabelForReadinessRow(row), "Out of Service");
+});
+
+test("C12. Mixed apparatus rows keep explicit non-conflated states", () => {
+  const now = new Date("2026-08-18T12:00:00.000Z");
+  const apparatusRows = [
+    {
+      id: "a-1",
+      department_id: "d-1",
+      name: "Engine 1",
+      type: "Engine",
+      status: "in_service",
+      last_inspection_at: null,
+      mileage: null,
+      engine_hours: null,
+    },
+    {
+      id: "a-2",
+      department_id: "d-1",
+      name: "Truck 2",
+      type: "Truck",
+      status: "in_service",
+      last_inspection_at: null,
+      mileage: null,
+      engine_hours: null,
+    },
+    {
+      id: "a-3",
+      department_id: "d-1",
+      name: "Rescue 3",
+      type: "Rescue",
+      status: "out_of_service",
+      last_inspection_at: null,
+      mileage: null,
+      engine_hours: null,
+    },
+  ];
+
+  const configurationRequiredReadiness = calculateOverallApparatusReadiness({
+    now,
+    explicitOutOfService: false,
+    apparatusCheck: {
+      lastCompletedAt: null,
+      intervalDays: null,
+      scoreProfile: null,
+    },
+    conditionDeficiencies: [],
+    maintenanceRequirements: [],
+    equipmentRequirements: [],
+  });
+
+  const evaluatedRows = [
+    {
+      apparatus: apparatusRows[0],
+      readiness: calculateOverallApparatusReadiness(buildBaseInput()),
+    },
+    {
+      apparatus: apparatusRows[1],
+      readiness: configurationRequiredReadiness,
+    },
+    undefined,
+  ];
+
+  const rows = apparatusRows.map((apparatus, index) =>
+    ensureApparatusReadinessRowContract(apparatus, evaluatedRows[index], now)
+  );
+
+  assert.equal(rows.length, 3);
+  for (const row of rows) {
+    assert.ok(row.readiness);
+    assert.equal(typeof row.readiness.isOutOfService, "boolean");
+  }
+
+  assert.equal(rows[0].readinessState, "evaluated");
+  assert.equal(rows[0].readiness.scorePercent !== null, true);
+  assert.equal(getStatusLabelForReadinessRow(rows[0]), "Ready");
+
+  assert.equal(rows[1].readinessState, "evaluated");
+  assert.equal(rows[1].readiness.status, "not_scored");
+  assert.equal(getStatusLabelForReadinessRow(rows[1]), "Configuration Required");
+
+  assert.equal(rows[2].readinessState, "evaluation_error");
+  assert.equal(rows[2].readiness.scorePercent, null);
+  assert.equal(getStatusLabelForReadinessRow(rows[2]), "Out of Service");
 });
 
 test("D. One Minor deficiency", () => {

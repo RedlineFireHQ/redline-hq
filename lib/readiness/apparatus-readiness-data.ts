@@ -89,6 +89,20 @@ type EquipmentRequirementRow = {
 
 type EquipmentOperationalMap = Record<string, boolean>;
 
+export type ApparatusReadinessListRow = {
+  apparatus: ApparatusRow;
+  readiness: ApparatusReadinessResult;
+  readinessState: "evaluated" | "evaluation_error";
+  evaluationErrorReason: "none" | "missing_evaluation_result" | "invalid_evaluation_shape" | "evaluation_exception";
+};
+
+export type ApparatusReadinessDisplayStatus =
+  | "Ready"
+  | "Checks Due"
+  | "Out of Service"
+  | "Configuration Required"
+  | "Readiness Unavailable";
+
 const DEFICIENCY_FIELD_BY_SOURCE: Record<EquipmentRequirementRow["equipment_source"], keyof DeficiencyRow> = {
   asset: "asset_id",
   fire_hose: "fire_hose_id",
@@ -289,6 +303,19 @@ function statusFromResult(result: ApparatusReadinessResult) {
   }
 
   return "Checks Due" as const;
+}
+
+export function getStatusLabelForReadinessRow(row: ApparatusReadinessListRow): ApparatusReadinessDisplayStatus {
+  // OOS gate remains authoritative even when evaluation had a data-access issue.
+  if (row.readiness.isOutOfService) {
+    return "Out of Service";
+  }
+
+  if (row.readinessState === "evaluation_error") {
+    return "Readiness Unavailable";
+  }
+
+  return statusFromResult(row.readiness);
 }
 
 function isEffectiveNow(
@@ -589,6 +616,50 @@ export async function calculateApparatusReadinessForApparatusId(apparatusId: str
   };
 }
 
+export function ensureApparatusReadinessRowContract(
+  apparatus: ApparatusRow,
+  evaluated:
+    | {
+        apparatus: ApparatusRow;
+        readiness: ApparatusReadinessResult;
+      }
+    | null
+    | undefined,
+  now: Date,
+  failureReason: "missing_evaluation_result" | "evaluation_exception" = "missing_evaluation_result"
+): ApparatusReadinessListRow {
+  if (evaluated && "readiness" in evaluated && evaluated.readiness) {
+    return {
+      apparatus: evaluated.apparatus,
+      readiness: evaluated.readiness,
+      readinessState: "evaluated",
+      evaluationErrorReason: "none",
+    };
+  }
+
+  // Preserve locked readiness scoring behavior while marking this as an
+  // evaluation failure state instead of configuration-required.
+  const fallbackReadiness = calculateOverallApparatusReadiness({
+    now,
+    explicitOutOfService: (apparatus.status ?? "").trim().toLowerCase() === "out_of_service",
+    apparatusCheck: {
+      lastCompletedAt: apparatus.last_inspection_at,
+      intervalDays: null,
+      scoreProfile: null,
+    },
+    conditionDeficiencies: [],
+    maintenanceRequirements: [],
+    equipmentRequirements: [],
+  });
+
+  return {
+    apparatus,
+    readiness: fallbackReadiness,
+    readinessState: "evaluation_error",
+    evaluationErrorReason: evaluated ? "invalid_evaluation_shape" : failureReason,
+  };
+}
+
 export async function getApparatusReadinessList() {
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase
@@ -598,14 +669,20 @@ export async function getApparatusReadinessList() {
 
   const apparatusRows = (data ?? []) as ApparatusRow[];
 
+  const evaluationNow = new Date();
+
   const readinessRows = await Promise.all(
     apparatusRows.map(async (row) => {
-      const evaluated = await calculateApparatusReadinessForApparatusId(row.id);
-      return evaluated;
+      try {
+        const evaluated = await calculateApparatusReadinessForApparatusId(row.id);
+        return ensureApparatusReadinessRowContract(row, evaluated, evaluationNow);
+      } catch {
+        return ensureApparatusReadinessRowContract(row, undefined, evaluationNow, "evaluation_exception");
+      }
     })
   );
 
-  return readinessRows.filter((row): row is NonNullable<typeof row> => row !== null);
+  return readinessRows;
 }
 
 export function getStatusLabelForReadiness(result: ApparatusReadinessResult) {

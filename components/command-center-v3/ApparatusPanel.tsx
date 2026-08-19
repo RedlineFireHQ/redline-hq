@@ -1,74 +1,34 @@
-"use client";
-
 import Image from "next/image";
 import { ChevronRight, CheckCircle2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import PrimaryActionButton from "./PrimaryActionButton";
+import { getApparatusReadinessList, getStatusLabelForReadinessRow } from "@/lib/readiness/apparatus-readiness-data";
+import { getApparatusImagePath } from "@/lib/apparatus-images";
 
-const apparatus = [
-  {
-    id: 1,
-    routeId: "pumper-430",
-    name: "Pumper 430",
-    type: "Pumper",
-    image: "/apparatus/elliott/pumper-430.jpg",
-    status: "Available",
-    lastCheck: "Today • 6:42 AM",
-    nextCheck: "August 1",
-    checkedBy: "A. Smith",
-  },
-  {
-    id: 2,
-    routeId: "pumper-432",
-    name: "Pumper 432",
-    type: "Pumper",
-    image: "/apparatus/elliott/pumper-432.jpg",
-    status: "Available",
-    lastCheck: "Today • 6:38 AM",
-    nextCheck: "August 1",
-    checkedBy: "J. Williams",
-  },
-  {
-    id: 3,
-    routeId: "tanker-445",
-    name: "Tanker 445",
-    type: "Tanker",
-    image: "/apparatus/elliott/tanker-445.jpg",
-    status: "Available",
-    lastCheck: "Today • 6:31 AM",
-    nextCheck: "August 1",
-    checkedBy: "T. Johnson",
-  },
-  {
-    id: 4,
-    routeId: "brush-420",
-    name: "Brush 420",
-    type: "Brush",
-    image: "/apparatus/elliott/brush-420.jpg",
-    status: "Available",
-    lastCheck: "Today • 6:26 AM",
-    nextCheck: "August 1",
-    checkedBy: "B. Miller",
-  },
-  {
-    id: 5,
-    routeId: "brush-421",
-    name: "Brush 421",
-    type: "Brush",
-    image: "/apparatus/elliott/brush-421.jpg",
-    status: "Available",
-    lastCheck: "Today • 6:21 AM",
-    nextCheck: "August 1",
-    checkedBy: "A. Smith",
-  },
-];
-
-export default function ApparatusPanel() {
-  const router = useRouter();
-
-  function handleCardNavigation(routeId: string) {
-    router.push(`/apparatus/${routeId}/daily-check`);
+function statusChipClasses(
+  statusLabel: "Ready" | "Checks Due" | "Out of Service" | "Configuration Required" | "Readiness Unavailable"
+) {
+  if (statusLabel === "Out of Service") {
+    return "border-red-500/35 bg-red-500/20";
   }
+
+  if (statusLabel === "Readiness Unavailable") {
+    return "border-zinc-400/35 bg-zinc-500/15";
+  }
+
+  if (statusLabel === "Configuration Required") {
+    return "border-sky-500/35 bg-sky-500/15";
+  }
+
+  if (statusLabel === "Checks Due") {
+    return "border-amber-500/30 bg-amber-500/15";
+  }
+
+  return "border-green-500/30 bg-black/45";
+}
+
+export default async function ApparatusPanel() {
+  const readinessRows = await getApparatusReadinessList();
 
   return (
     <section className="relative overflow-hidden rounded-[22px] border border-white/10 bg-[#101010] shadow-[0_20px_60px_rgba(0,0,0,.45)]">
@@ -99,7 +59,10 @@ export default function ApparatusPanel() {
 
           </div>
 
-          <button className="group inline-flex h-10 items-center gap-2 rounded-xl border border-red-500/40 bg-gradient-to-b from-[#ff3b3b] to-[#b90d0d] px-5 text-[13px] font-semibold text-white shadow-[0_0_18px_rgba(239,43,45,.30)] transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_26px_rgba(239,43,45,.45)]">
+          <Link
+            href="/apparatus"
+            className="group inline-flex h-10 items-center gap-2 rounded-xl border border-red-500/40 bg-gradient-to-b from-[#ff3b3b] to-[#b90d0d] px-5 text-[13px] font-semibold text-white shadow-[0_0_18px_rgba(239,43,45,.30)] transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_26px_rgba(239,43,45,.45)]"
+          >
 
             View All Apparatus
 
@@ -108,7 +71,7 @@ export default function ApparatusPanel() {
               className="transition-transform duration-300 group-hover:translate-x-1"
             />
 
-          </button>
+          </Link>
 
         </div>
 
@@ -118,29 +81,46 @@ export default function ApparatusPanel() {
 
           <div className="flex gap-5 px-6 py-5 min-w-max">
 
-            {apparatus.map((truck) => (
+              {readinessRows.map((row) => {
+                const { apparatus, readiness } = row;
+                const statusLabel = getStatusLabelForReadinessRow(row);
+              const lastCheck = apparatus.last_inspection_at
+                ? new Date(apparatus.last_inspection_at).toLocaleString("en-US", {
+                    month: "short",
+                    day: "2-digit",
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })
+                : "Not completed";
+                const checksScore = readiness.bucketScores.apparatusChecks;
+                const nextCheck =
+                  statusLabel === "Readiness Unavailable"
+                    ? "Unavailable"
+                    : checksScore === null
+                      ? "Config Required"
+                      : checksScore === 20
+                        ? "Current"
+                        : "Due / Overdue";
+                const scoreLabel =
+                  statusLabel === "Readiness Unavailable"
+                    ? "UNAVAILABLE"
+                    : readiness.scorePercent === null
+                      ? "NOT SCORED"
+                      : `${Math.round(readiness.scorePercent)}%`;
 
-              <div
-                key={truck.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => handleCardNavigation(truck.routeId)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    handleCardNavigation(truck.routeId);
-                  }
-                }}
-                className="group w-[260px] flex-shrink-0 cursor-pointer overflow-hidden rounded-2xl border border-white/10 bg-[#111111] text-left transition-all duration-300 hover:-translate-y-1 hover:border-red-500/40 hover:shadow-[0_18px_45px_rgba(239,43,45,.18)]"
-              >
+              return (
+                <div
+                  key={apparatus.id}
+                  className="group w-[260px] flex-shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-[#111111] text-left transition-all duration-300 hover:-translate-y-1 hover:border-red-500/40 hover:shadow-[0_18px_45px_rgba(239,43,45,.18)]"
+                >
 
                 {/* Photo */}
 
                 <div className="relative h-[150px] w-full overflow-hidden">
 
                   <Image
-                    src={truck.image}
-                    alt={truck.name}
+                    src={getApparatusImagePath(apparatus.name) ?? "/branding/images/redline-shield.png"}
+                    alt={apparatus.name}
                     fill
                     className="object-cover transition-transform duration-500 group-hover:scale-105"
                   />
@@ -150,20 +130,20 @@ export default function ApparatusPanel() {
                   <div className="absolute left-4 top-4 rounded-full border border-red-500/30 bg-black/45 px-3 py-1 backdrop-blur-sm">
 
                     <span className="text-[11px] font-semibold uppercase tracking-[.12em] text-white">
-                      {truck.type}
+                      {apparatus.type ?? "Apparatus"}
                     </span>
 
                   </div>
 
-                  <div className="absolute bottom-4 left-4 flex items-center gap-2 rounded-full border border-green-500/30 bg-black/45 px-3 py-1 backdrop-blur-sm">
+                  <div className={`absolute bottom-4 left-4 flex items-center gap-2 rounded-full border px-3 py-1 backdrop-blur-sm ${statusChipClasses(statusLabel)}`}>
 
                     <CheckCircle2
                       size={14}
-                      className="text-green-400"
+                        className={statusLabel === "Out of Service" ? "text-red-300" : statusLabel === "Readiness Unavailable" ? "text-zinc-300" : statusLabel === "Configuration Required" ? "text-sky-300" : statusLabel === "Checks Due" ? "text-amber-300" : "text-green-400"}
                     />
 
-                    <span className="text-[12px] font-semibold text-green-300">
-                      {truck.status}
+                      <span className={`text-[12px] font-semibold ${statusLabel === "Out of Service" ? "text-red-200" : statusLabel === "Readiness Unavailable" ? "text-zinc-200" : statusLabel === "Configuration Required" ? "text-sky-200" : statusLabel === "Checks Due" ? "text-amber-200" : "text-green-300"}`}>
+                      {statusLabel}
                     </span>
 
                   </div>
@@ -173,7 +153,7 @@ export default function ApparatusPanel() {
                 <div className="px-4 pb-2.5 pt-2">
 
                   <h3 className="text-[22px] font-black tracking-[-0.04em] text-white">
-                    {truck.name}
+                    {apparatus.name}
                   </h3>
 
                   <div className="mt-2 border-t border-white/10 pt-2">
@@ -183,7 +163,7 @@ export default function ApparatusPanel() {
                     </div>
 
                     <div className="mt-1 text-[14px] font-medium text-white">
-                      {truck.lastCheck}
+                      {lastCheck}
                     </div>
 
                   </div>
@@ -195,7 +175,7 @@ export default function ApparatusPanel() {
                     </div>
 
                     <div className="mt-1 text-[14px] font-medium text-white">
-                      {truck.nextCheck}
+                      {nextCheck}
                     </div>
 
                   </div>
@@ -203,24 +183,25 @@ export default function ApparatusPanel() {
                   <div className="mt-2 border-t border-white/10 pt-2">
 
                     <div className="text-[11px] font-semibold uppercase tracking-[.12em] text-neutral-500">
-                      Checked By
+                      Readiness
                     </div>
 
                     <div className="mt-1 text-[14px] font-medium text-white">
-                      {truck.checkedBy}
+                      {scoreLabel}
                     </div>
 
                   </div>
 
                   <div className="mt-2 border-t border-white/10 pt-2">
-                    <PrimaryActionButton label="Apparatus Check" />
+                    <PrimaryActionButton label="Apparatus Check" href={`/apparatus/${apparatus.id}/daily-check`} />
 
                   </div>
 
                 </div>
 
               </div>
-             ))}
+              );
+            })}
 
           </div>
 
@@ -243,32 +224,6 @@ export default function ApparatusPanel() {
       {/* Bottom Divider */}
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-
-      <style jsx global>{`
-        .apparatus-scroll {
-          scrollbar-width: auto;
-          scrollbar-color: #8f8f8f #111111;
-        }
-
-        .apparatus-scroll::-webkit-scrollbar {
-          height: 12px;
-        }
-
-        .apparatus-scroll::-webkit-scrollbar-track {
-          background: #111111;
-          border-radius: 9999px;
-        }
-
-        .apparatus-scroll::-webkit-scrollbar-thumb {
-          background: linear-gradient(to bottom, #a3a3a3, #7d7d7d);
-          border-radius: 9999px;
-          border: 2px solid #111111;
-        }
-
-        .apparatus-scroll::-webkit-scrollbar-thumb:hover {
-          background: linear-gradient(to bottom, #c2c2c2, #949494);
-        }
-      `}</style>
 
     </section>
   );
