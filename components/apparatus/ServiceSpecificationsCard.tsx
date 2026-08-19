@@ -24,6 +24,7 @@ type ServiceSpecifications = {
 type ServiceSpecificationsCardProps = {
   apparatusId: string;
   initialSpecifications: ServiceSpecifications;
+  initialIncludeInDepartmentReadiness: boolean;
   canEdit: boolean;
 };
 
@@ -57,6 +58,7 @@ function normalizeInputValue(value: string) {
 export default function ServiceSpecificationsCard({
   apparatusId,
   initialSpecifications,
+  initialIncludeInDepartmentReadiness,
   canEdit,
 }: ServiceSpecificationsCardProps) {
   const router = useRouter();
@@ -66,6 +68,8 @@ export default function ServiceSpecificationsCard({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [specifications, setSpecifications] = useState<ServiceSpecifications>(initialSpecifications);
   const [draftSpecifications, setDraftSpecifications] = useState<ServiceSpecifications>(initialSpecifications);
+  const [includeInDepartmentReadiness, setIncludeInDepartmentReadiness] = useState(initialIncludeInDepartmentReadiness);
+  const [draftIncludeInDepartmentReadiness, setDraftIncludeInDepartmentReadiness] = useState(initialIncludeInDepartmentReadiness);
 
   const hasAnySpecification = useMemo(() => {
     return Object.values(specifications).some((value) => Boolean(value && value.trim()));
@@ -75,12 +79,14 @@ export default function ServiceSpecificationsCard({
     setErrorMessage(null);
     setSuccessMessage(null);
     setDraftSpecifications(specifications);
+    setDraftIncludeInDepartmentReadiness(includeInDepartmentReadiness);
     setIsEditing(true);
   }
 
   function handleCancelEdit() {
     setErrorMessage(null);
     setDraftSpecifications(specifications);
+    setDraftIncludeInDepartmentReadiness(includeInDepartmentReadiness);
     setIsEditing(false);
   }
 
@@ -89,10 +95,11 @@ export default function ServiceSpecificationsCard({
     setErrorMessage(null);
     setSuccessMessage(null);
 
-    const payload = specFields.reduce<Record<string, string | null>>((accumulator, field) => {
+    const payload = specFields.reduce<Record<string, string | null | boolean>>((accumulator, field) => {
       accumulator[field.key] = normalizeInputValue(draftSpecifications[field.key] ?? "");
       return accumulator;
     }, {});
+    payload.include_in_department_readiness = draftIncludeInDepartmentReadiness;
 
     const { error } = await supabase
       .from("apparatus")
@@ -127,6 +134,7 @@ export default function ServiceSpecificationsCard({
 
     setSpecifications(normalizedSavedSpecifications);
     setDraftSpecifications(normalizedSavedSpecifications);
+    setIncludeInDepartmentReadiness(draftIncludeInDepartmentReadiness);
     setSuccessMessage("Service specifications saved.");
     setIsSaving(false);
     setIsEditing(false);
@@ -191,6 +199,13 @@ export default function ServiceSpecificationsCard({
         })}
       </div>
 
+      <div className="mt-4 rounded-xl border border-white/10 bg-[#1b1b1b] p-4">
+        <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Department Readiness Participation</p>
+        <p className="mt-2 text-sm font-semibold text-white">
+          {includeInDepartmentReadiness ? "Included" : "Excluded"}
+        </p>
+      </div>
+
       {isEditing ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 py-8">
           <div
@@ -233,6 +248,19 @@ export default function ServiceSpecificationsCard({
                     </div>
                   );
                 })}
+              </div>
+
+              <div className="mt-4 rounded-xl border border-white/10 bg-[#1b1b1b] p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Department Readiness Participation</p>
+                <label className="mt-3 flex items-center gap-3 text-sm text-neutral-200">
+                  <input
+                    type="checkbox"
+                    checked={draftIncludeInDepartmentReadiness}
+                    onChange={(event) => setDraftIncludeInDepartmentReadiness(event.target.checked)}
+                    className="h-4 w-4 rounded border border-white/20 bg-[#111111] accent-red-600"
+                  />
+                  Include this apparatus in Department Readiness calculations
+                </label>
               </div>
             </div>
 

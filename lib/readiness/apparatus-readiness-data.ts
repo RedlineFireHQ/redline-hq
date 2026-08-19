@@ -10,6 +10,7 @@ type ApparatusRow = {
   department_id: string;
   name: string;
   type: string | null;
+  include_in_department_readiness: boolean | null;
   status: string | null;
   last_inspection_at: string | null;
   mileage: number | null;
@@ -92,6 +93,9 @@ type EquipmentOperationalMap = Record<string, boolean>;
 export type ApparatusReadinessListRow = {
   apparatus: ApparatusRow;
   readiness: ApparatusReadinessResult;
+  simulationData: {
+    maintenanceRequirements: ApparatusMaintenanceRequirementEvaluation[];
+  };
   readinessState: "evaluated" | "evaluation_error";
   evaluationErrorReason: "none" | "missing_evaluation_result" | "invalid_evaluation_shape" | "evaluation_exception";
 };
@@ -342,7 +346,7 @@ export async function calculateApparatusReadinessForApparatusId(apparatusId: str
 
   const { data: apparatusRowData } = await supabase
     .from("apparatus")
-    .select("id, department_id, name, type, status, last_inspection_at, mileage, engine_hours")
+    .select("id, department_id, name, type, include_in_department_readiness, status, last_inspection_at, mileage, engine_hours")
     .eq("id", apparatusId)
     .maybeSingle();
 
@@ -613,6 +617,9 @@ export async function calculateApparatusReadinessForApparatusId(apparatusId: str
   return {
     apparatus,
     readiness: readinessResult,
+    simulationData: {
+      maintenanceRequirements: maintenanceRequirementEvaluations,
+    },
   };
 }
 
@@ -632,6 +639,7 @@ export function ensureApparatusReadinessRowContract(
     return {
       apparatus: evaluated.apparatus,
       readiness: evaluated.readiness,
+      simulationData: evaluated.simulationData,
       readinessState: "evaluated",
       evaluationErrorReason: "none",
     };
@@ -655,6 +663,9 @@ export function ensureApparatusReadinessRowContract(
   return {
     apparatus,
     readiness: fallbackReadiness,
+    simulationData: {
+      maintenanceRequirements: [],
+    },
     readinessState: "evaluation_error",
     evaluationErrorReason: evaluated ? "invalid_evaluation_shape" : failureReason,
   };
@@ -664,7 +675,7 @@ export async function getApparatusReadinessList() {
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase
     .from("apparatus")
-    .select("id, department_id, name, type, status, last_inspection_at, mileage, engine_hours")
+    .select("id, department_id, name, type, include_in_department_readiness, status, last_inspection_at, mileage, engine_hours")
     .order("name");
 
   const apparatusRows = (data ?? []) as ApparatusRow[];

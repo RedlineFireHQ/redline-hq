@@ -1,15 +1,28 @@
-"use client";
-
 import Image from "next/image";
+import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { getDepartmentReadinessDataForCurrentMember } from "@/lib/readiness/department-readiness";
 
-export default function ReadinessPanel() {
-  const readiness = 91;
+export default async function ReadinessPanel() {
+  const readinessData = await getDepartmentReadinessDataForCurrentMember();
+  const readiness = readinessData?.result.departmentScore;
+  const readinessDisplay = typeof readiness === "number" ? Math.round(readiness) : null;
+  const readinessLabel = readinessData?.result.notYetRated ? "NOT YET RATED" : "READY";
+  const headingLabel = readinessData?.result.notYetRated
+    ? "READINESS PENDING"
+    : readinessData?.result.status === "redline_ready"
+      ? "REDLINE READY"
+      : readinessData?.result.status === "not_redline_ready"
+        ? "NOT REDLINE READY"
+        : "NEEDS ATTENTION";
   const size = 176;
   const stroke = 16;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (readiness / 100) * circumference;
+  const offset =
+    readinessDisplay === null
+      ? circumference
+      : circumference - (readinessDisplay / 100) * circumference;
 
   return (
     <section className="relative h-full overflow-hidden rounded-[20px] border border-white/10 bg-[#090909] shadow-lg">
@@ -76,11 +89,11 @@ export default function ReadinessPanel() {
 
             <div className="text-center">
               <div className="text-5xl font-bold text-white">
-                {readiness}%
+                  {readinessDisplay === null ? "--" : `${readinessDisplay}%`}
               </div>
 
               <div className="mt-1 text-xs tracking-[0.35em] text-zinc-400">
-                READY
+                  {readinessLabel}
               </div>
             </div>
           </div>
@@ -92,13 +105,16 @@ export default function ReadinessPanel() {
             </p>
 
             <h2 className="mt-2 text-[52px] font-extrabold leading-none text-[#EF2B2D]">
-              REDLINE READY
+              {headingLabel}
             </h2>
 
-            <button className="mt-10 inline-flex h-[54px] w-fit items-center gap-3 rounded-2xl border border-[#EF2B2D] px-8 font-semibold text-white transition hover:bg-[#EF2B2D]/10">
-              View Readiness Details
+            <Link
+              href="/department-readiness"
+              className="mt-10 inline-flex h-[54px] w-fit items-center gap-3 rounded-2xl border border-[#EF2B2D] px-8 font-semibold text-white transition hover:bg-[#EF2B2D]/10"
+            >
+              REDLINE READINESS COACH™
               <ArrowRight className="h-5 w-5" />
-            </button>
+            </Link>
           </div>
         </div>
       </div>

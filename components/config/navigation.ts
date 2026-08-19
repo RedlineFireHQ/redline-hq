@@ -11,6 +11,16 @@ export const navigation: NavigationItem[] = [
     href: "/",
   },
   {
+    id: "my-readiness",
+    label: "My Readiness",
+    href: "/my-readiness",
+  },
+  {
+    id: "department-readiness",
+    label: "Department Readiness",
+    href: "/department-readiness",
+  },
+  {
     id: "apparatus",
     label: "Apparatus",
     href: "/apparatus",

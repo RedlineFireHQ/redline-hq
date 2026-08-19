@@ -185,6 +185,11 @@ export default async function ApparatusInformationPage({
         <ServiceSpecificationsCard
           apparatusId={truck.id}
           initialSpecifications={serviceSpecifications}
+          initialIncludeInDepartmentReadiness={
+            typeof truck.include_in_department_readiness === "boolean"
+              ? truck.include_in_department_readiness
+              : true
+          }
           canEdit={canEditServiceSpecifications}
         />
       </div>
