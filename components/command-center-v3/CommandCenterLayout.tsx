@@ -5,7 +5,6 @@ import TrainingPanel from "./TrainingPanel";
 import AlertsPanel from "./AlertsPanel";
 import ApparatusPanel from "./ApparatusPanel";
 import WeatherPanel from "./WeatherPanel";
-import ActivityPanel from "./ActivityPanel";
 
 export default function CommandCenterLayout() {
   return (
@@ -19,11 +18,11 @@ export default function CommandCenterLayout() {
           <MissionPanel />
         </div>
 
-        <div className="col-span-4">
+        <div className="col-span-4 -translate-y-[93px]">
           <MyReadinessPanel />
         </div>
 
-        <div className="col-span-3">
+        <div className="col-span-3 -translate-y-[93px]">
           <TrainingPanel />
         </div>
 
@@ -31,16 +30,12 @@ export default function CommandCenterLayout() {
           <AlertsPanel />
         </div>
 
-        <div className="col-span-12">
-          <ApparatusPanel />
-        </div>
-
-        <div className="col-span-8">
-          <ActivityPanel />
-        </div>
-
-        <div className="col-span-4">
+        <div className="col-start-5 col-span-3 -translate-y-[258px]">
           <WeatherPanel />
+        </div>
+
+        <div className="col-span-12 -translate-y-[253px]">
+          <ApparatusPanel />
         </div>
       </div>
     </div>
