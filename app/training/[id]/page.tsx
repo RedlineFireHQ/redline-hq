@@ -1,5 +1,4 @@
 import { notFound, redirect } from "next/navigation";
-import PageLayout from "@/components/layout/PageLayout";
 import TrainingEventDetailWorkspace from "@/components/training/TrainingEventDetailWorkspace";
 import { getCurrentMember } from "@/lib/current-member";
 import { hasDepartmentPermission } from "@/lib/member-permissions";
@@ -237,19 +236,17 @@ export default async function TrainingEventDetailPage({
   }));
 
   return (
-    <PageLayout>
-      <TrainingEventDetailWorkspace
-        departmentId={currentMember.departmentId}
-        currentMemberId={currentMember.id}
-        currentMemberRole={currentMember.role}
-        canManageTraining={canManageTraining}
-        trainingEvent={trainingEvent}
-        categories={categories}
-        documents={documents}
-        emsCourseDefinitions={emsCourseDefinitions}
-        members={members}
-        attendanceRows={attendanceRows}
-      />
-    </PageLayout>
+    <TrainingEventDetailWorkspace
+      departmentId={currentMember.departmentId}
+      currentMemberId={currentMember.id}
+      currentMemberRole={currentMember.role}
+      canManageTraining={canManageTraining}
+      trainingEvent={trainingEvent}
+      categories={categories}
+      documents={documents}
+      emsCourseDefinitions={emsCourseDefinitions}
+      members={members}
+      attendanceRows={attendanceRows}
+    />
   );
 }

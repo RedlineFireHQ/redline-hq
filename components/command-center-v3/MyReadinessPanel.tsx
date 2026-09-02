@@ -26,7 +26,12 @@ import {
   type ReadinessScoreState,
   type RequirementInput,
 } from "@/lib/readiness/member-readiness";
-import { getRoleRequirementComparison, type CatalogRow, type RoleRequiredQualificationRow } from "@/lib/role-requirements";
+import {
+  buildCanonicalMemberCertificationRows,
+  buildQualificationReadinessAdapter,
+  type CatalogRow,
+  type RoleRequiredQualificationRow,
+} from "@/lib/role-requirements";
 import { buildScoredCertificationStatuses } from "@/lib/readiness/scored-certifications";
 import { supabase } from "@/lib/supabase";
 import { calculateComplianceBucketHours } from "@/lib/training/compliance-buckets";
@@ -682,18 +687,6 @@ export default function MyReadinessPanel() {
       const selectedDepartmentRole = memberDepartmentRoleId
         ? departmentRoles.find((row) => row.id === memberDepartmentRoleId) ?? null
         : null;
-      const roleRequirementComparison = getRoleRequirementComparison({
-        memberDepartmentRoleId,
-        certificationTypes: certificationCatalogRows.map((row) => ({ id: row.id, name: row.name, active: true } satisfies CatalogRow)),
-        qualificationTypes,
-        roleRequiredCertifications: ((roleRequiredCertificationsData ?? []) as Array<{ department_role_id: string; certification_id: string }>).map((row) => ({
-          department_role_id: row.department_role_id,
-          certification_id: row.certification_id,
-        })),
-        roleRequiredQualifications,
-        memberCertifications: [],
-        memberQualifications,
-      });
       const certificationNameById = new Map(certificationCatalogRows.map((row) => [row.id, row.name]));
       const certificationTypeById = buildCertificationTypeMetaById(
         certificationCatalogRows.map((row) => ({
@@ -704,12 +697,24 @@ export default function MyReadinessPanel() {
       );
       const emsProfiles = (emsTrackProfileData ?? []) as EmsTrackProfileAuthorityRow[];
 
-      const certificationRows = (certificationsData ?? []).map((row) => ({
+      const rawCertificationRows = (certificationsData ?? []).map((row) => ({
         id: String(row.id),
         certification_id: typeof row.certification_id === "string" ? row.certification_id : "",
         certificate_number: typeof row.certificate_number === "string" ? row.certificate_number : null,
         issued_at: typeof row.issued_at === "string" ? row.issued_at : "",
         expires_at: typeof row.expires_at === "string" ? row.expires_at : null,
+      }));
+      const certificationRows = buildCanonicalMemberCertificationRows({
+        certificationTypes: certificationCatalogRows.map((row) => ({ id: row.id, name: row.name, active: true } satisfies CatalogRow)),
+        qualificationTypes,
+        memberCertifications: rawCertificationRows,
+        memberQualifications,
+      }).map((row) => ({
+        id: row.id ?? row.certification_id,
+        certification_id: row.certification_id,
+        certificate_number: row.certificate_number ?? null,
+        issued_at: row.issued_at ?? "",
+        expires_at: row.expires_at,
       }));
 
       const authoritativeEmsCertifications = resolveAuthoritativeEmsCertificationsForMember({
@@ -763,6 +768,18 @@ export default function MyReadinessPanel() {
           status,
           is_ems_certification: certificationMeta?.authority === "iowa" || certificationMeta?.authority === "nremt",
         };
+      });
+      const qualificationReadinessAdapter = buildQualificationReadinessAdapter({
+        memberDepartmentRoleId,
+        certificationTypes: certificationCatalogRows.map((row) => ({ id: row.id, name: row.name, active: true } satisfies CatalogRow)),
+        qualificationTypes,
+        roleRequiredCertifications: ((roleRequiredCertificationsData ?? []) as Array<{ department_role_id: string; certification_id: string }>).map((row) => ({
+          department_role_id: row.department_role_id,
+          certification_id: row.certification_id,
+        })),
+        roleRequiredQualifications,
+        memberCertifications: nextRows.map((row) => ({ certification_id: row.certification_id, expires_at: row.expires_at })),
+        memberQualifications,
       });
       const scoredCertificationStatuses = buildScoredCertificationStatuses({
         memberDepartmentRoleId,
@@ -1004,9 +1021,9 @@ export default function MyReadinessPanel() {
       setQualificationReadiness({
         hasAssignedRole: memberDepartmentRoleId !== null,
         roleName: selectedDepartmentRole?.name ?? null,
-        requiredQualifications: roleRequirementComparison.requiredQualifications.map((item) => item.name),
-        completedQualifications: roleRequirementComparison.requiredQualifications.filter((item) => item.isCurrent).map((item) => item.name),
-        missingQualifications: roleRequirementComparison.requiredQualifications.filter((item) => !item.isCurrent).map((item) => item.name),
+        requiredQualifications: qualificationReadinessAdapter.requiredQualifications,
+        completedQualifications: qualificationReadinessAdapter.completedQualifications,
+        missingQualifications: qualificationReadinessAdapter.missingQualifications,
       });
       setAssignedDeficiencies(assignedDeficiencyRows);
       setPersonalAssignmentStartedAtByDeficiencyId(personalAssignedAtByDeficiencyId);

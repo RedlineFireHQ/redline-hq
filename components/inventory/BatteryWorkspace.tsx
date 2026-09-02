@@ -840,7 +840,7 @@ export default function BatteryWorkspace({
 				<div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
 					<div>
 						<p className="text-xs font-semibold uppercase tracking-[0.18em] text-red-400">Inventory Accountability</p>
-						<h1 className="mt-2 text-3xl font-black tracking-tight text-white">Batteries</h1>
+						<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">Batteries</h1>
 						<p className="mt-2 max-w-2xl text-sm text-neutral-400">Manage battery assets, assignment accountability, and readiness status without introducing test/calibration workflows.</p>
 					</div>
 					<button

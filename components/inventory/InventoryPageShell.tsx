@@ -25,8 +25,8 @@ export default function InventoryPageShell({
 		<div className="space-y-8">
 			{eyebrow || title || subtitle ? (
 				<div>
-					{eyebrow ? <p className="text-sm font-semibold uppercase tracking-[0.3em] text-red-500">{eyebrow}</p> : null}
-					{title ? <h1 className="mt-2 text-5xl font-black tracking-tight text-white">{title}</h1> : null}
+					{eyebrow ? <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">{eyebrow}</p> : null}
+					{title ? <h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">{title}</h1> : null}
 					{subtitle ? <p className="mt-3 max-w-2xl text-lg text-neutral-400">{subtitle}</p> : null}
 				</div>
 			) : null}

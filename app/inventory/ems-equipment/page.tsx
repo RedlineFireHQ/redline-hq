@@ -1,4 +1,3 @@
-import PageLayout from "@/components/layout/PageLayout";
 import EmsEquipmentWorkspace, {
   type EmsEquipmentRow,
 } from "@/components/inventory/EmsEquipmentWorkspace";
@@ -68,13 +67,13 @@ export default async function EmsEquipmentInventoryPage() {
   }
 
   return (
-    <PageLayout>
+    
       <EmsEquipmentWorkspace
         departmentName={departmentName}
         canManageEquipment={canManageEquipment}
         initialRows={initialRows}
         initialError={initialError}
       />
-    </PageLayout>
+    
   );
 }

@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import PageLayout from "@/components/layout/PageLayout";
 import TrainingWorkspace from "@/components/training/TrainingWorkspace";
 import { getCurrentMember } from "@/lib/current-member";
 import { hasDepartmentPermission } from "@/lib/member-permissions";
@@ -405,28 +404,26 @@ export default async function TrainingPage() {
     }));
 
     return (
-      <PageLayout>
-        <TrainingWorkspace
-          departmentId={currentMember.departmentId}
-          currentMemberId={currentMember.id}
-          currentMemberRole={currentMember.role}
-          canManageTraining={canManageTraining}
-          canAssignHomework={canAssignHomework}
-          canReviewTraining={canReviewTraining}
-          categories={categories}
-          events={[]}
-          attendanceRows={[]}
-          members={[]}
-          documents={documents}
-          pendingReviews={0}
-          outsideSubmissions={outsideSubmissions}
-          outsideEvidenceRows={outsideEvidenceRows}
-          assignments={assignments}
-          assignmentMembers={assignmentMembers}
-          assignmentEvidenceRows={assignmentEvidenceRows}
-          emsCourseDefinitions={emsCourseDefinitions}
-        />
-      </PageLayout>
+      <TrainingWorkspace
+        departmentId={currentMember.departmentId}
+        currentMemberId={currentMember.id}
+        currentMemberRole={currentMember.role}
+        canManageTraining={canManageTraining}
+        canAssignHomework={canAssignHomework}
+        canReviewTraining={canReviewTraining}
+        categories={categories}
+        events={[]}
+        attendanceRows={[]}
+        members={[]}
+        documents={documents}
+        pendingReviews={0}
+        outsideSubmissions={outsideSubmissions}
+        outsideEvidenceRows={outsideEvidenceRows}
+        assignments={assignments}
+        assignmentMembers={assignmentMembers}
+        assignmentEvidenceRows={assignmentEvidenceRows}
+        emsCourseDefinitions={emsCourseDefinitions}
+      />
     );
   }
 
@@ -730,27 +727,25 @@ export default async function TrainingPage() {
     (pendingAttendanceCount ?? 0);
 
   return (
-    <PageLayout>
-      <TrainingWorkspace
-        departmentId={currentMember.departmentId}
-        currentMemberId={currentMember.id}
-        currentMemberRole={currentMember.role}
-        canManageTraining={canManageTraining}
-        canAssignHomework={canAssignHomework}
-        canReviewTraining={canReviewTraining}
-        categories={categories}
-        events={events}
-        attendanceRows={attendanceRows}
-        members={members}
-        documents={documents}
-        pendingReviews={pendingReviews}
-        outsideSubmissions={outsideSubmissions}
-        outsideEvidenceRows={outsideEvidenceRows}
-        assignments={assignments}
-        assignmentMembers={assignmentMembers}
-        assignmentEvidenceRows={assignmentEvidenceRows}
-        emsCourseDefinitions={emsCourseDefinitions}
-      />
-    </PageLayout>
+    <TrainingWorkspace
+      departmentId={currentMember.departmentId}
+      currentMemberId={currentMember.id}
+      currentMemberRole={currentMember.role}
+      canManageTraining={canManageTraining}
+      canAssignHomework={canAssignHomework}
+      canReviewTraining={canReviewTraining}
+      categories={categories}
+      events={events}
+      attendanceRows={attendanceRows}
+      members={members}
+      documents={documents}
+      pendingReviews={pendingReviews}
+      outsideSubmissions={outsideSubmissions}
+      outsideEvidenceRows={outsideEvidenceRows}
+      assignments={assignments}
+      assignmentMembers={assignmentMembers}
+      assignmentEvidenceRows={assignmentEvidenceRows}
+      emsCourseDefinitions={emsCourseDefinitions}
+    />
   );
 }

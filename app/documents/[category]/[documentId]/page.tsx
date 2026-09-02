@@ -1,7 +1,12 @@
 import Link from "next/link";
+import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
-import PageLayout from "@/components/layout/PageLayout";
 import { getCurrentMember } from "@/lib/current-member";
+import {
+  DEPARTMENT_DOCUMENTS_CATEGORY,
+  type DocumentReferenceCategoryRow,
+} from "@/lib/document-reference-categories";
+import { canManageDocuments as hasDocumentsManagementPermission } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 function formatDate(value: string | null | undefined) {
@@ -61,7 +66,7 @@ export default async function DocumentViewerPage({
   const { data: document, error: documentError } = await supabase
     .from("documents")
     .select(
-      "id, department_id, category, title, description, document_number, effective_date, status, uploaded_by, current_revision_id, updated_at",
+      "id, department_id, category, title, description, document_number, effective_date, status, uploaded_by, current_revision_id, updated_at, reference_category_id, source_kind",
     )
     .eq("id", documentId)
     .eq("department_id", currentMember.departmentId)
@@ -74,6 +79,12 @@ export default async function DocumentViewerPage({
   if (!document) {
     notFound();
   }
+
+  const canManageDocuments = await hasDocumentsManagementPermission(
+    supabase,
+    currentMember.departmentId,
+    currentMember.role,
+  );
 
   const { data: currentRevision, error: revisionError } = await supabase
     .from("document_revisions")
@@ -131,6 +142,84 @@ export default async function DocumentViewerPage({
       ? currentRevision.content_text
       : "Searchable document content is not yet available for this file.";
 
+  const isLibraryOwnedDepartmentDocument =
+    document.category === DEPARTMENT_DOCUMENTS_CATEGORY && document.source_kind === "library";
+
+  const { data: departmentReferenceCategoryRows } = isLibraryOwnedDepartmentDocument
+    ? await supabase
+        .from("document_reference_categories")
+        .select("id, name, slug, description, status, is_default, department_id, created_by, updated_by, created_at, updated_at")
+        .eq("department_id", currentMember.departmentId)
+        .order("is_default", { ascending: false })
+        .order("name", { ascending: true })
+    : { data: [] as DocumentReferenceCategoryRow[] };
+
+  const referenceCategoryOptions = ((departmentReferenceCategoryRows ?? []) as DocumentReferenceCategoryRow[])
+    .filter((row) => row.status === "active" || row.id === document.reference_category_id);
+  const currentReferenceCategory = referenceCategoryOptions.find((row) => row.id === document.reference_category_id) ?? null;
+  const documentBackHref = currentReferenceCategory
+    ? `/documents/${currentReferenceCategory.slug}`
+    : `/documents/${category}`;
+
+  async function moveDepartmentDocumentCategory(formData: FormData) {
+    "use server";
+
+    const supabase = await createSupabaseServerClient();
+    const currentMember = await getCurrentMember(supabase);
+
+    if (!currentMember?.departmentId) {
+      redirect("/login");
+    }
+
+    const canManageDocuments = await hasDocumentsManagementPermission(
+      supabase,
+      currentMember.departmentId,
+      currentMember.role,
+    );
+
+    if (!canManageDocuments) {
+      redirect(`/documents/${category}/${documentId}`);
+    }
+
+    const requestedReferenceCategoryId = String(formData.get("reference_category_id") ?? "").trim();
+    const { data: currentDocument } = await supabase
+      .from("documents")
+      .select("id, category, source_kind")
+      .eq("id", documentId)
+      .eq("department_id", currentMember.departmentId)
+      .maybeSingle();
+
+    if (!currentDocument || currentDocument.category !== DEPARTMENT_DOCUMENTS_CATEGORY || currentDocument.source_kind !== "library") {
+      redirect(`/documents/${category}/${documentId}`);
+    }
+
+    const { data: nextReferenceCategories } = await supabase
+      .from("document_reference_categories")
+      .select("id, slug, is_default")
+      .eq("department_id", currentMember.departmentId)
+      .eq("status", "active");
+
+    const fallbackReferenceCategory = (nextReferenceCategories ?? []).find((row) => row.is_default === true) ?? null;
+    const nextReferenceCategory =
+      (nextReferenceCategories ?? []).find((row) => String(row.id) === requestedReferenceCategoryId) ?? fallbackReferenceCategory;
+
+    if (!nextReferenceCategory) {
+      redirect(`/documents/${category}/${documentId}`);
+    }
+
+    await supabase
+      .from("documents")
+      .update({ reference_category_id: nextReferenceCategory.id })
+      .eq("id", documentId)
+      .eq("department_id", currentMember.departmentId);
+
+    revalidatePath("/documents");
+    revalidatePath(`/documents/${category}`);
+    revalidatePath(`/documents/${nextReferenceCategory.slug}`);
+    revalidatePath(`/documents/${category}/${documentId}`);
+    redirect(`/documents/${nextReferenceCategory.slug}/${documentId}`);
+  }
+
   const matchSnippets = (() => {
     if (!insideDocumentQuery || !hasSearchableContent || !currentRevision?.content_text) {
       return [] as string[];
@@ -153,20 +242,22 @@ export default async function DocumentViewerPage({
   })();
 
   return (
-    <PageLayout>
-      <div className="space-y-6">
-        <div className="flex flex-col gap-4 border-b border-white/10 pb-5 md:flex-row md:items-end md:justify-between">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-red-500">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">
               Documents
             </p>
-            <h1 className="mt-3 text-3xl font-black tracking-tight text-white md:text-4xl">
+            <h1
+              className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white"
+              style={{ fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif' }}
+            >
               {document.title}
             </h1>
           </div>
 
           <Link
-            href={`/documents/${category}`}
+            href={documentBackHref}
             className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-[#111111] px-4 py-2.5 text-sm font-semibold text-white transition hover:border-red-500/40 hover:bg-[#171717]"
           >
             Back to category
@@ -218,6 +309,13 @@ export default async function DocumentViewerPage({
               <p className="mt-2 text-base font-semibold text-white">{document.category}</p>
             </div>
 
+            {isLibraryOwnedDepartmentDocument ? (
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.18em] text-neutral-500">Reference Folder</p>
+                <p className="mt-2 text-base font-semibold text-white">{currentReferenceCategory?.name ?? "Unassigned"}</p>
+              </div>
+            ) : null}
+
             <div>
               <p className="text-[10px] uppercase tracking-[0.18em] text-neutral-500">Version</p>
               <p className="mt-2 text-base font-semibold text-white">
@@ -254,6 +352,32 @@ export default async function DocumentViewerPage({
                 <p className="text-[10px] uppercase tracking-[0.18em] text-neutral-500">Description</p>
                 <p className="mt-2 text-sm leading-6 text-neutral-300">{document.description}</p>
               </div>
+            ) : null}
+
+            {isLibraryOwnedDepartmentDocument && canManageDocuments && referenceCategoryOptions.length > 0 ? (
+              <form action={moveDepartmentDocumentCategory} className="space-y-3 border-t border-white/10 pt-4">
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.18em] text-neutral-500">Move Document</p>
+                  <select
+                    name="reference_category_id"
+                    defaultValue={currentReferenceCategory?.id ?? referenceCategoryOptions[0]?.id ?? ""}
+                    className="mt-2 w-full rounded-xl border border-white/10 bg-[#0c0c0c] px-3 py-2.5 text-sm text-white focus:border-red-500/60 focus:outline-none"
+                  >
+                    {referenceCategoryOptions.map((categoryOption) => (
+                      <option key={categoryOption.id} value={categoryOption.id}>
+                        {categoryOption.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <button
+                  type="submit"
+                  className="inline-flex w-full items-center justify-center rounded-xl border border-red-500/50 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-100 transition hover:border-red-400 hover:bg-red-500/20"
+                >
+                  Save Folder
+                </button>
+              </form>
             ) : null}
           </aside>
         </div>
@@ -321,6 +445,5 @@ export default async function DocumentViewerPage({
           )}
         </section>
       </div>
-    </PageLayout>
   );
 }

@@ -570,8 +570,8 @@ export default function ScbaCylinderWorkspace({
 
 			<div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
 				<div>
-					<p className="text-sm font-semibold uppercase tracking-[0.3em] text-red-500">Inventory</p>
-					<h1 className="mt-2 text-5xl font-black tracking-tight text-white">SCBA Cylinders</h1>
+					<p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">Inventory</p>
+					<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">SCBA Cylinders</h1>
 					<p className="mt-3 max-w-2xl text-lg text-neutral-400">Manage department SCBA cylinder inventory.</p>
 					{departmentName ? <p className="mt-2 text-sm text-neutral-500">Department: {departmentName}</p> : null}
 				</div>
@@ -604,7 +604,7 @@ export default function ScbaCylinderWorkspace({
 										className={summaryCardClasses(active, card.tone)}
 									>
 										<p className="text-xs uppercase tracking-[0.22em] text-neutral-500">{card.label}</p>
-										<p className="mt-2 text-4xl font-black text-white">{card.value}</p>
+										<p className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">{card.value}</p>
 									</button>
 								);
 							})}
@@ -613,7 +613,7 @@ export default function ScbaCylinderWorkspace({
 
 					<div className="w-full max-w-[220px] rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3">
 						<p className="text-xs uppercase tracking-[0.24em] text-neutral-500">SCBA Cylinder Readiness</p>
-						<p className="mt-1 text-4xl font-black text-white">{readinessPercentage}%</p>
+						<p className="mt-1 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">{readinessPercentage}%</p>
 						<p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-red-400">
 							{readyCount} Ready / {activeCylinderCount} Active
 						</p>

@@ -1,4 +1,3 @@
-import PageLayout from "@/components/layout/PageLayout";
 import InventoryCategoryWorkspace from "@/components/inventory/InventoryCategoryWorkspace";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentMember } from "@/lib/current-member";
@@ -277,7 +276,7 @@ export default async function FireHoseInventoryPage() {
 	];
 
 	return (
-		<PageLayout>
+		
 			<InventoryCategoryWorkspace
 				title="Fire Hose"
 				subtitle="Manage department fire hose inventory."
@@ -296,6 +295,6 @@ export default async function FireHoseInventoryPage() {
 				searchKeys={["inventoryNumber", "hoseSize", "length"]}
 				initialError={initialError}
 			/>
-		</PageLayout>
+		
 	);
 }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import PageLayout from "@/components/layout/PageLayout";
+import { getActiveApparatusOptions } from "@/lib/database";
 import { supabase } from "@/lib/supabase";
 
 type SelectOption = {
@@ -656,10 +657,10 @@ export default function ReportDeficiencyPage() {
       setIsLoadingOptions(true);
       setErrorMessage(null);
 
-      const [categoriesResult, prioritiesResult, apparatusResult, statusesResult] = await Promise.all([
+      const [categoriesResult, prioritiesResult, activeApparatusOptions, statusesResult] = await Promise.all([
         supabase.from("deficiency_categories").select("*").order("display_order"),
         supabase.from("deficiency_priorities").select("*").order("display_order"),
-        supabase.from("apparatus").select("*").order("name"),
+        getActiveApparatusOptions(),
         supabase.from("deficiency_statuses").select("id, name").order("display_order"),
       ]);
 
@@ -670,13 +671,11 @@ export default function ReportDeficiencyPage() {
       if (
         categoriesResult.error ||
         prioritiesResult.error ||
-        apparatusResult.error ||
         statusesResult.error
       ) {
         setErrorMessage(
           categoriesResult.error?.message ||
             prioritiesResult.error?.message ||
-            apparatusResult.error?.message ||
             statusesResult.error?.message ||
             "Unable to load deficiency form options."
         );
@@ -684,9 +683,47 @@ export default function ReportDeficiencyPage() {
         return;
       }
 
+      const normalizedApparatusOptions = activeApparatusOptions.map((record) =>
+        normalizeOption(record as unknown as Record<string, unknown>)
+      );
+
+      const ensureBoundApparatusOption = async (boundApparatusId: string | null) => {
+        if (!boundApparatusId) {
+          return;
+        }
+
+        const normalizedId = boundApparatusId.trim();
+        if (!normalizedId) {
+          return;
+        }
+
+        const alreadyIncluded = normalizedApparatusOptions.some((option) => option.id === normalizedId);
+        if (alreadyIncluded) {
+          return;
+        }
+
+        const { data } = await supabase
+          .from("apparatus")
+          .select("id, name")
+          .eq("id", normalizedId)
+          .maybeSingle();
+
+        if (!data) {
+          return;
+        }
+
+        normalizedApparatusOptions.unshift(
+          normalizeOption(data as Record<string, unknown>)
+        );
+      };
+
+      const initialBoundApparatusId =
+        typeof apparatusIdParam === "string" && apparatusIdParam.trim() ? apparatusIdParam.trim() : null;
+      await ensureBoundApparatusOption(initialBoundApparatusId);
+
       setCategories((categoriesResult.data ?? []).map((record) => normalizeOption(record as Record<string, unknown>)));
       setPriorities((prioritiesResult.data ?? []).map((record) => normalizeOption(record as Record<string, unknown>)));
-      setApparatusOptions((apparatusResult.data ?? []).map((record) => normalizeOption(record as Record<string, unknown>)));
+      setApparatusOptions(normalizedApparatusOptions);
 
       if (isInventoryDeficiencyLaunch) {
         const categoryOptions = (categoriesResult.data ?? []).map((record) =>
@@ -707,6 +744,9 @@ export default function ReportDeficiencyPage() {
           normalizedInventoryCategory === "misc-fire-equipment"
             ? ((await resolveCurrentInventoryApparatusDefault(normalizedInventoryCategory, inventoryItemId)) ?? "")
             : STATION_SUPPLY_OPTION.id;
+
+        await ensureBoundApparatusOption(defaultApparatusId || null);
+        setApparatusOptions([...normalizedApparatusOptions]);
 
         setFormState((current) => ({
           ...current,

@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import PageLayout from "@/components/layout/PageLayout";
 import CertificationTypesSection from "@/components/settings/CertificationTypesSection";
 import DepartmentRolesSection from "@/components/settings/DepartmentRolesSection";
 import RoleRequirementsSection from "@/components/settings/RoleRequirementsSection";
@@ -20,15 +19,6 @@ type CertificationTypeRow = {
   updated_at: string;
 };
 
-type QualificationRow = {
-  id: string;
-  name: string;
-  description: string | null;
-  active: boolean;
-  created_at: string;
-  updated_at: string;
-};
-
 type TrainingCategoryRow = {
   id: string;
   name: string;
@@ -43,15 +33,6 @@ type RoleRequiredCertificationRow = {
   department_id: string;
   department_role_id: string;
   certification_id: string;
-  created_at: string;
-  updated_at: string;
-};
-
-type RoleRequiredQualificationRow = {
-  id: string;
-  department_id: string;
-  department_role_id: string;
-  qualification_id: string;
   created_at: string;
   updated_at: string;
 };
@@ -97,22 +78,15 @@ export default async function SettingsPage() {
 
   const [
     { data: certificationData, error: certificationError },
-    { data: qualificationData, error: qualificationError },
     { data: trainingCategoryData, error: trainingCategoryError },
     { data: departmentRoleData, error: departmentRoleError },
     { data: roleRequiredCertificationData, error: roleRequiredCertificationError },
-    { data: roleRequiredQualificationData, error: roleRequiredQualificationError },
     { data: requirementsData, error: requirementsError },
     { data: apparatusInspectionSettingsData, error: apparatusInspectionSettingsError },
   ] = await Promise.all([
     supabase
       .from("certifications")
       .select("id, name, description, active, ems_authority, ems_certification_level, created_at, updated_at")
-      .eq("department_id", currentMember.departmentId)
-      .order("name", { ascending: true }),
-    supabase
-      .from("qualifications")
-      .select("id, name, description, active, created_at, updated_at")
       .eq("department_id", currentMember.departmentId)
       .order("name", { ascending: true }),
     supabase
@@ -135,12 +109,6 @@ export default async function SettingsPage() {
       .order("department_role_id", { ascending: true })
       .order("certification_id", { ascending: true }),
     supabase
-      .from("role_required_qualifications")
-      .select("id, department_id, department_role_id, qualification_id, created_at, updated_at")
-      .eq("department_id", currentMember.departmentId)
-      .order("department_role_id", { ascending: true })
-      .order("qualification_id", { ascending: true }),
-    supabase
       .from("training_requirements")
       .select("id, name, requirement_kind, period_type, minimum_hours, category_id, due_frequency_rule, required_topic, active, sort_order, config_json, created_at, updated_at")
       .eq("department_id", currentMember.departmentId)
@@ -157,10 +125,6 @@ export default async function SettingsPage() {
     throw new Error(certificationError.message || "Unable to load certification types.");
   }
 
-  if (qualificationError) {
-    throw new Error(qualificationError.message || "Unable to load qualifications.");
-  }
-
   if (trainingCategoryError) {
     throw new Error(trainingCategoryError.message || "Unable to load training categories.");
   }
@@ -171,10 +135,6 @@ export default async function SettingsPage() {
 
   if (roleRequiredCertificationError) {
     throw new Error(roleRequiredCertificationError.message || "Unable to load required certifications.");
-  }
-
-  if (roleRequiredQualificationError) {
-    throw new Error(roleRequiredQualificationError.message || "Unable to load required qualifications.");
   }
 
   if (requirementsError) {
@@ -211,29 +171,11 @@ export default async function SettingsPage() {
     updated_at: typeof row.updated_at === "string" ? row.updated_at : new Date().toISOString(),
   }));
 
-  const qualifications: QualificationRow[] = (qualificationData ?? []).map((row) => ({
-    id: String(row.id),
-    name: typeof row.name === "string" ? row.name : "",
-    description: typeof row.description === "string" ? row.description : null,
-    active: typeof row.active === "boolean" ? row.active : true,
-    created_at: typeof row.created_at === "string" ? row.created_at : new Date().toISOString(),
-    updated_at: typeof row.updated_at === "string" ? row.updated_at : new Date().toISOString(),
-  }));
-
   const roleRequiredCertifications: RoleRequiredCertificationRow[] = (roleRequiredCertificationData ?? []).map((row) => ({
     id: String(row.id),
     department_id: typeof row.department_id === "string" ? row.department_id : "",
     department_role_id: typeof row.department_role_id === "string" ? row.department_role_id : "",
     certification_id: typeof row.certification_id === "string" ? row.certification_id : "",
-    created_at: typeof row.created_at === "string" ? row.created_at : new Date().toISOString(),
-    updated_at: typeof row.updated_at === "string" ? row.updated_at : new Date().toISOString(),
-  }));
-
-  const roleRequiredQualifications: RoleRequiredQualificationRow[] = (roleRequiredQualificationData ?? []).map((row) => ({
-    id: String(row.id),
-    department_id: typeof row.department_id === "string" ? row.department_id : "",
-    department_role_id: typeof row.department_role_id === "string" ? row.department_role_id : "",
-    qualification_id: typeof row.qualification_id === "string" ? row.qualification_id : "",
     created_at: typeof row.created_at === "string" ? row.created_at : new Date().toISOString(),
     updated_at: typeof row.updated_at === "string" ? row.updated_at : new Date().toISOString(),
   }));
@@ -268,26 +210,29 @@ export default async function SettingsPage() {
   const requireApparatusChecklist = apparatusInspectionSettingsData?.require_checklist === true;
 
   return (
-    <PageLayout>
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
       <div className="mb-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-red-500">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">
           Settings
         </p>
-        <h1 className="mt-3 text-4xl font-black tracking-tight text-white">
+        <h1
+          className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white"
+          style={{ fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif' }}
+        >
           Department Settings
         </h1>
-        <p className="mt-2 max-w-3xl text-neutral-400">
+        <p className="mt-3 max-w-3xl text-lg text-neutral-400">
           Configure department-level options used across the app.
         </p>
       </div>
 
-      <CertificationTypesSection
-        departmentId={currentMember.departmentId}
-        currentMemberId={currentMember.id}
-        certificationTypes={certificationTypes}
-      />
+      <div className="grid gap-6 lg:grid-cols-2">
+        <CertificationTypesSection
+          departmentId={currentMember.departmentId}
+          currentMemberId={currentMember.id}
+          certificationTypes={certificationTypes}
+        />
 
-      <div className="mt-6">
         <DepartmentRolesSection
           departmentId={currentMember.departmentId}
           currentMemberId={currentMember.id}
@@ -301,9 +246,7 @@ export default async function SettingsPage() {
           currentMemberId={currentMember.id}
           departmentRoles={departmentRoles}
           certifications={certificationTypes}
-          qualifications={qualifications}
           roleRequiredCertifications={roleRequiredCertifications}
-          roleRequiredQualifications={roleRequiredQualifications}
         />
       </div>
 
@@ -332,6 +275,6 @@ export default async function SettingsPage() {
           initialRequireChecklist={requireApparatusChecklist}
         />
       </div>
-    </PageLayout>
+    </div>
   );
 }

@@ -1,7 +1,7 @@
-import PageLayout from "@/components/layout/PageLayout";
 import EmsSupplyWorkspace, {
   type EmsSupplyItemRow,
 } from "@/components/inventory/EmsSupplyWorkspace";
+import { getActiveApparatusOptions } from "@/lib/database";
 import { getCurrentMember } from "@/lib/current-member";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -41,7 +41,7 @@ export default async function EmsSuppliesInventoryPage() {
   let initialError: string | null = null;
 
   if (departmentId) {
-    const [{ data: departmentData }, { data, error }, { data: apparatusData, error: apparatusError }] = await Promise.all([
+    const [{ data: departmentData }, { data, error }, apparatusData] = await Promise.all([
       supabase
         .from("departments")
         .select("name")
@@ -55,11 +55,7 @@ export default async function EmsSuppliesInventoryPage() {
         .eq("department_id", departmentId)
         .order("status", { ascending: true })
         .order("item_name", { ascending: true }),
-      supabase
-        .from("apparatus")
-        .select("id, name")
-        .eq("department_id", departmentId)
-        .order("name", { ascending: true }),
+      getActiveApparatusOptions({ client: supabase, departmentId }),
     ]);
 
     departmentName = typeof departmentData?.name === "string" ? departmentData.name : null;
@@ -69,13 +65,9 @@ export default async function EmsSuppliesInventoryPage() {
       initialError = error.message || "Unable to load EMS supplies.";
     }
 
-    if (apparatusError) {
-      console.error("[ems-supplies] apparatus load failed", apparatusError);
-    }
-
-    apparatusOptions = (apparatusData ?? [])
+    apparatusOptions = apparatusData
       .map((row) => ({
-        id: typeof row.id === "string" ? row.id : "",
+        id: row.id,
         name: typeof row.name === "string" && row.name.trim() ? row.name.trim() : "Unnamed Apparatus",
       }))
       .filter((row) => row.id.length > 0);
@@ -86,7 +78,7 @@ export default async function EmsSuppliesInventoryPage() {
   }
 
   return (
-    <PageLayout>
+    
       <EmsSupplyWorkspace
         departmentName={departmentName}
         checkedOutByName={checkedOutByName}
@@ -95,6 +87,6 @@ export default async function EmsSuppliesInventoryPage() {
         initialRows={initialRows}
         initialError={initialError}
       />
-    </PageLayout>
+    
   );
 }

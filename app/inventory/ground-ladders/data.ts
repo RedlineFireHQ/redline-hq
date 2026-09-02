@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { getActiveApparatusOptions } from "@/lib/database";
 
 export type ApparatusOption = {
 	id: string;
@@ -230,7 +231,7 @@ export async function loadGroundLadderInventoryData(
 		maintenanceSettingsResult,
 		maintenanceResult,
 		maintenanceItemsResult,
-		apparatusResult,
+		apparatusData,
 	] = await Promise.all([
 		supabase
 			.from("ground_ladders")
@@ -269,11 +270,7 @@ export async function loadGroundLadderInventoryData(
 			.eq("department_id", departmentId)
 			.order("check_order", { ascending: true })
 			.order("created_at", { ascending: false }),
-		supabase
-			.from("apparatus")
-			.select("id, name")
-			.eq("department_id", departmentId)
-			.order("name", { ascending: true }),
+		getActiveApparatusOptions({ client: supabase, departmentId }),
 	]);
 
 	return {
@@ -295,8 +292,8 @@ export async function loadGroundLadderInventoryData(
 		maintenanceItems: (maintenanceItemsResult.data ?? []).map((row) =>
 			normalizeGroundLadderMaintenanceItemRecord(row as Record<string, unknown>),
 		),
-		apparatusOptions: ((apparatusResult.data ?? []) as Record<string, unknown>[]).map((row) => ({
-			id: typeof row.id === "string" ? row.id : String(row.id ?? ""),
+		apparatusOptions: apparatusData.map((row) => ({
+			id: row.id,
 			name: typeof row.name === "string" ? row.name : null,
 		})),
 	};

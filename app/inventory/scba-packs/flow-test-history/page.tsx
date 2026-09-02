@@ -1,5 +1,4 @@
 import Link from "next/link";
-import PageLayout from "@/components/layout/PageLayout";
 import PrintScbaPackFlowTestRecordButton from "@/components/inventory/PrintScbaPackFlowTestRecordButton";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentMember } from "@/lib/current-member";
@@ -77,22 +76,22 @@ export default async function ScbaPackFlowTestHistoryPage({
 
 	if (!departmentId) {
 		return (
-			<PageLayout>
+			
 				<div className="mx-auto max-w-5xl space-y-6">
-					<p className="text-sm font-semibold uppercase tracking-[0.3em] text-red-500">SCBA Packs</p>
-					<h1 className="text-4xl font-black tracking-tight text-white">Flow Test History</h1>
+					<p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">SCBA Packs</p>
+					<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">Flow Test History</h1>
 					<p className="text-neutral-400">Unable to determine your department.</p>
 				</div>
-			</PageLayout>
+			
 		);
 	}
 
 	if (!packId) {
 		return (
-			<PageLayout>
+			
 				<div className="mx-auto max-w-5xl space-y-6">
-					<p className="text-sm font-semibold uppercase tracking-[0.3em] text-red-500">SCBA Packs</p>
-					<h1 className="text-4xl font-black tracking-tight text-white">Flow Test History</h1>
+					<p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">SCBA Packs</p>
+					<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">Flow Test History</h1>
 					<p className="text-neutral-400">No SCBA pack was selected.</p>
 					<Link
 						href="/inventory/scba-packs"
@@ -101,7 +100,7 @@ export default async function ScbaPackFlowTestHistoryPage({
 						Back to SCBA Packs
 					</Link>
 				</div>
-			</PageLayout>
+			
 		);
 	}
 
@@ -114,10 +113,10 @@ export default async function ScbaPackFlowTestHistoryPage({
 
 	if (packError || !packData) {
 		return (
-			<PageLayout>
+			
 				<div className="mx-auto max-w-5xl space-y-6">
-					<p className="text-sm font-semibold uppercase tracking-[0.3em] text-red-500">SCBA Packs</p>
-					<h1 className="text-4xl font-black tracking-tight text-white">Flow Test History</h1>
+					<p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">SCBA Packs</p>
+					<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">Flow Test History</h1>
 					<p className="text-neutral-400">SCBA pack not found.</p>
 					<Link
 						href="/inventory/scba-packs"
@@ -126,7 +125,7 @@ export default async function ScbaPackFlowTestHistoryPage({
 						Back to SCBA Packs
 					</Link>
 				</div>
-			</PageLayout>
+			
 		);
 	}
 
@@ -146,12 +145,12 @@ export default async function ScbaPackFlowTestHistoryPage({
 	const departmentName = currentMember?.name ?? "Department";
 
 	return (
-		<PageLayout>
+		
 			<div className="mx-auto max-w-6xl space-y-8">
 				<div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
 					<div>
-						<p className="text-sm font-semibold uppercase tracking-[0.3em] text-red-500">SCBA Packs</p>
-						<h1 className="mt-2 text-5xl font-black tracking-tight text-white">FLOW TEST HISTORY</h1>
+						<p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">SCBA Packs</p>
+						<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">FLOW TEST HISTORY</h1>
 						<p className="mt-3 max-w-2xl text-lg text-neutral-400">
 							Pack {pack.pack_number ?? pack.id}
 							{[pack.manufacturer, pack.model, pack.serial_number].filter(Boolean).length > 0
@@ -226,6 +225,6 @@ export default async function ScbaPackFlowTestHistoryPage({
 					</div>
 				</section>
 			</div>
-		</PageLayout>
+		
 	);
 }

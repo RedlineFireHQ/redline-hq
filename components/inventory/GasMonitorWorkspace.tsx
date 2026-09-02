@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { getActiveApparatusOptions } from "@/lib/database";
 import { supabase } from "@/lib/supabase";
 import GasMonitorFormModal, {
 	GasMonitorInitialAssignmentValues,
@@ -413,18 +414,14 @@ export default function GasMonitorWorkspace({
 			return;
 		}
 
-		const [membersResult, apparatusResult] = await Promise.all([
+		const [membersResult, apparatusOptionsResult] = await Promise.all([
 			supabase
 				.from("members")
 				.select("id, first_name, last_name")
 				.eq("department_id", departmentId)
 				.order("last_name", { ascending: true })
 				.order("first_name", { ascending: true }),
-			supabase
-				.from("apparatus")
-				.select("id, name")
-				.eq("department_id", departmentId)
-				.order("name", { ascending: true }),
+			getActiveApparatusOptions({ departmentId }),
 		]);
 
 		if (membersResult.error) {
@@ -433,11 +430,7 @@ export default function GasMonitorWorkspace({
 			setMemberOptions((membersResult.data ?? []) as MemberRecord[]);
 		}
 
-		if (apparatusResult.error) {
-			setToastMessage(apparatusResult.error.message || "Unable to load apparatus options.");
-		} else {
-			setApparatusOptions((apparatusResult.data ?? []) as ApparatusRecord[]);
-		}
+		setApparatusOptions(apparatusOptionsResult as ApparatusRecord[]);
 	};
 
 	const refreshCalibrationSettings = async () => {
@@ -1403,7 +1396,7 @@ export default function GasMonitorWorkspace({
 				<div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
 					<div className="min-w-0 flex-1">
 						<p className="text-xs font-semibold uppercase tracking-[0.28em] text-red-500">Inventory Module</p>
-						<h1 className="mt-2 text-4xl font-black tracking-tight text-white">Gas Monitors</h1>
+						<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">Gas Monitors</h1>
 						<p className="mt-2 max-w-3xl text-sm text-neutral-400">Manage gas monitor accountability, assignment, calibration intervals, and shared deficiency linkage.</p>
 
 						<div className="mt-4 flex flex-wrap items-center gap-2">
@@ -1433,7 +1426,7 @@ export default function GasMonitorWorkspace({
 
 					<div className="w-full max-w-[240px] rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3">
 						<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Readiness</p>
-						<p className="mt-1 text-4xl font-black text-white">{readinessPercentage}%</p>
+						<p className="mt-1 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">{readinessPercentage}%</p>
 						<p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-red-400">In Service Ready</p>
 						<div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-neutral-800">
 							<div className="h-full rounded-full bg-red-500 transition-all" style={{ width: scoreWidth }} />

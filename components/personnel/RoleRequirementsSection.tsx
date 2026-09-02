@@ -3,9 +3,9 @@ import {
   type DepartmentRoleRow,
   type MemberCertificationRow,
   type MemberQualificationRow,
-  type RoleRequiredCertificationRow,
   type RoleRequiredQualificationRow,
-  isCertificationCurrent,
+  type RoleRequiredCertificationRow,
+  getRoleRequirementComparison,
 } from "@/lib/role-requirements";
 
 interface RoleRequirementsSectionProps {
@@ -62,25 +62,17 @@ export default function RoleRequirementsSection({
     ? departmentRoles.find((role) => role.id === memberDepartmentRoleId) ?? null
     : null;
 
-  const certificationLookup = new Map(certificationTypes.map((row) => [row.id, row]));
-  const qualificationLookup = new Map(qualificationTypes.map((row) => [row.id, row]));
-
-  const currentCertificationIds = new Set(
-    memberCertifications
-      .filter((record) => isCertificationCurrent(record.expires_at))
-      .map((record) => record.certification_id),
-  );
-
-  const currentQualificationIds = new Set(memberQualifications.map((record) => record.qualification_id));
-
-  const selectedRoleCertRequirements = selectedRole
-    ? roleRequiredCertifications.filter((row) => row.department_role_id === selectedRole.id)
-    : [];
-  const selectedRoleQualRequirements = selectedRole
-    ? roleRequiredQualifications.filter((row) => row.department_role_id === selectedRole.id)
-    : [];
-
-  const hasAnyRequirements = selectedRoleCertRequirements.length > 0 || selectedRoleQualRequirements.length > 0;
+  const roleRequirementComparison = getRoleRequirementComparison({
+    memberDepartmentRoleId,
+    certificationTypes,
+    qualificationTypes,
+    roleRequiredCertifications,
+    roleRequiredQualifications,
+    memberCertifications,
+    memberQualifications,
+  });
+  const selectedRoleCertRequirements = roleRequirementComparison.requiredCertifications;
+  const hasAnyRequirements = selectedRoleCertRequirements.length > 0;
 
   return (
     <section className="rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
@@ -88,7 +80,7 @@ export default function RoleRequirementsSection({
         <div>
           <h2 className="text-2xl font-semibold text-white">ROLE REQUIREMENTS</h2>
           <p className="mt-2 max-w-3xl text-sm text-neutral-400">
-            Compare the member&apos;s assigned department role against the certifications and qualifications that role requires.
+            Compare the member&apos;s assigned department role against the certifications that role requires.
           </p>
         </div>
       </div>
@@ -117,7 +109,7 @@ export default function RoleRequirementsSection({
             )}
           </div>
 
-          <div className="mt-6 grid gap-6 lg:grid-cols-2">
+          <div className="mt-6">
             <div className="rounded-xl border border-neutral-800 bg-[#111111] p-5">
               <div className="flex flex-col gap-2 border-b border-neutral-800 pb-4">
                 <h3 className="text-xl font-semibold text-white">Required Certifications</h3>
@@ -131,44 +123,11 @@ export default function RoleRequirementsSection({
               ) : (
                 <div className="mt-4 space-y-3">
                   {selectedRoleCertRequirements.map((requirement) => {
-                    const certification = certificationLookup.get(requirement.certification_id);
-                    const isCurrent = currentCertificationIds.has(requirement.certification_id);
-                    const displayName = certification?.name ?? "Unknown Certification";
-
                     return (
                       <RequirementRow
-                        key={`${requirement.department_role_id}-${requirement.certification_id}`}
-                        name={displayName}
-                        isCurrent={isCurrent}
-                      />
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div className="rounded-xl border border-neutral-800 bg-[#111111] p-5">
-              <div className="flex flex-col gap-2 border-b border-neutral-800 pb-4">
-                <h3 className="text-xl font-semibold text-white">Required Qualifications</h3>
-                <p className="text-sm text-neutral-400">Required items are compared against the member&apos;s earned qualification records.</p>
-              </div>
-
-              {selectedRoleQualRequirements.length === 0 ? (
-                <div className="mt-4 rounded-xl border border-dashed border-neutral-700 bg-neutral-950 p-6 text-center text-sm text-neutral-400">
-                  No required qualifications for this role.
-                </div>
-              ) : (
-                <div className="mt-4 space-y-3">
-                  {selectedRoleQualRequirements.map((requirement) => {
-                    const qualification = qualificationLookup.get(requirement.qualification_id);
-                    const isCurrent = currentQualificationIds.has(requirement.qualification_id);
-                    const displayName = qualification?.name ?? "Unknown Qualification";
-
-                    return (
-                      <RequirementRow
-                        key={`${requirement.department_role_id}-${requirement.qualification_id}`}
-                        name={displayName}
-                        isCurrent={isCurrent}
+                        key={requirement.id}
+                        name={requirement.name}
+                        isCurrent={requirement.isCurrent}
                       />
                     );
                   })}

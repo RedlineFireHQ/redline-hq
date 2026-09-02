@@ -26,6 +26,8 @@ import {
 import { buildScoredCertificationStatuses } from "@/lib/readiness/scored-certifications";
 import { calculateComplianceBucketHours, getTrainingComplianceBucketByCategoryId } from "@/lib/training/compliance-buckets";
 import {
+  buildCanonicalMemberCertificationRows,
+  buildQualificationReadinessAdapter,
   getRoleRequirementComparison,
   type CatalogRow,
   type RoleRequiredCertificationRow,
@@ -645,7 +647,7 @@ export default async function MyReadinessPage() {
   const attendance = (attendanceRows ?? []) as TrainingAttendanceRow[];
   const approvedOutside = (approvedOutsideRows ?? []) as OutsideSubmissionRow[];
   const allOutside = (allOutsideRows ?? []) as OutsideSubmissionRow[];
-  const memberCertifications = (certificationsRows ?? []) as MemberCertificationRow[];
+  const rawMemberCertifications = (certificationsRows ?? []) as MemberCertificationRow[];
   const certificationTypes = (certificationTypesRows ?? []) as CertificationTypeRow[];
   const requirements = (requirementsRows ?? []) as RequirementInput[];
   const roleAssignment = (memberRoleRow ?? null) as MemberRoleAssignmentRow | null;
@@ -662,6 +664,21 @@ export default async function MyReadinessPage() {
   }));
   const memberQualifications = ((memberQualificationsRows ?? []) as Array<{ qualification_id: string }>).map((row) => ({
     qualification_id: row.qualification_id,
+  }));
+  const memberCertifications = buildCanonicalMemberCertificationRows({
+    certificationTypes: certificationTypes.map((row) => ({ id: row.id, name: row.name, active: true } satisfies CatalogRow)),
+    qualificationTypes,
+    memberCertifications: rawMemberCertifications,
+    memberQualifications,
+  }).map((row) => ({
+    id: row.id ?? row.certification_id,
+    certification_id: row.certification_id,
+    certificate_number: row.certificate_number ?? null,
+    issued_at: row.issued_at ?? "",
+    expires_at: row.expires_at,
+    supporting_document_id: row.supporting_document_id ?? null,
+    created_at: row.created_at ?? row.issued_at ?? "",
+    updated_at: row.updated_at ?? row.created_at ?? row.issued_at ?? "",
   }));
   const roleRequiredCertifications = ((roleRequiredCertificationRows ?? []) as RoleRequiredCertificationRow[]).map((row) => ({
     department_role_id: row.department_role_id,
@@ -848,16 +865,21 @@ export default async function MyReadinessPage() {
     memberCertifications,
     memberQualifications,
   });
+  const qualificationReadinessAdapter = buildQualificationReadinessAdapter({
+    memberDepartmentRoleId,
+    certificationTypes: certificationCatalog,
+    qualificationTypes,
+    roleRequiredCertifications,
+    roleRequiredQualifications,
+    memberCertifications,
+    memberQualifications,
+  });
   const qualificationReadiness: QualificationReadinessInput = {
     hasAssignedRole: memberDepartmentRoleId !== null,
     roleName: selectedDepartmentRole?.name ?? null,
-    requiredQualifications: roleRequirementComparison.requiredQualifications.map((item) => item.name),
-    completedQualifications: roleRequirementComparison.requiredQualifications
-      .filter((item) => item.isCurrent)
-      .map((item) => item.name),
-    missingQualifications: roleRequirementComparison.requiredQualifications
-      .filter((item) => !item.isCurrent)
-      .map((item) => item.name),
+    requiredQualifications: qualificationReadinessAdapter.requiredQualifications,
+    completedQualifications: qualificationReadinessAdapter.completedQualifications,
+    missingQualifications: qualificationReadinessAdapter.missingQualifications,
   };
   const assignmentById = new Map(assignments.map((row) => [row.id, row]));
   const approvedHomeworkMembers = assignmentMembers.filter((row) => row.completion_status === "approved");

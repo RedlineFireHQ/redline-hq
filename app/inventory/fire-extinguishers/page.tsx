@@ -1,6 +1,6 @@
-import PageLayout from "@/components/layout/PageLayout";
 import FireExtinguisherWorkspace, { type FireExtinguisherRow } from "@/components/inventory/FireExtinguisherWorkspace";
 import type { FireExtinguisherApparatusOption } from "@/components/inventory/FireExtinguisherFormModal";
+import { getActiveApparatusOptions } from "@/lib/database";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentMember } from "@/lib/current-member";
 
@@ -45,7 +45,7 @@ export default async function FireExtinguishersInventoryPage() {
 		const [
 			{ data: departmentData },
 			{ data: extinguisherData, error },
-			{ data: apparatusData },
+			apparatusData,
 		] = await Promise.all([
 			supabase.from("departments").select("name").eq("id", departmentId).maybeSingle(),
 			supabase
@@ -54,7 +54,7 @@ export default async function FireExtinguishersInventoryPage() {
 				.eq("department_id", departmentId)
 				.order("status", { ascending: true })
 				.order("extinguisher_number", { ascending: true }),
-			supabase.from("apparatus").select("id, name").eq("department_id", departmentId).order("name", { ascending: true }),
+			getActiveApparatusOptions({ client: supabase, departmentId }),
 		]);
 
 		departmentName = typeof departmentData?.name === "string" ? departmentData.name : null;
@@ -64,10 +64,10 @@ export default async function FireExtinguishersInventoryPage() {
 			initialError = error.message || "Unable to load fire extinguisher inventory.";
 		}
 
-		apparatusOptions = ((apparatusData ?? []) as Array<Record<string, unknown>>)
+		apparatusOptions = apparatusData
 			.map((row) => ({
-				id: typeof row.id === "string" ? row.id : String(row.id ?? ""),
-				name: normalizeDisplayName(row.name, typeof row.id === "string" ? row.id : String(row.id ?? "")),
+				id: row.id,
+				name: normalizeDisplayName(row.name, row.id),
 			}))
 			.filter((row) => Boolean(row.id));
 
@@ -134,7 +134,7 @@ export default async function FireExtinguishersInventoryPage() {
 	}
 
 	return (
-		<PageLayout>
+		
 			<FireExtinguisherWorkspace
 				departmentName={departmentName}
 				canManageFireExtinguishers={canManageFireExtinguishers}
@@ -142,6 +142,6 @@ export default async function FireExtinguishersInventoryPage() {
 				initialRows={initialRows}
 				initialError={initialError}
 			/>
-		</PageLayout>
+		
 	);
 }

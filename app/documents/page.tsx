@@ -1,60 +1,86 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import PageLayout from "@/components/layout/PageLayout";
 import { getCurrentMember } from "@/lib/current-member";
+import {
+  DEPARTMENT_DOCUMENTS_CATEGORY,
+  MISCELLANEOUS_DOCUMENTS_CATEGORY_NAME,
+  MISCELLANEOUS_DOCUMENTS_CATEGORY_SLUG,
+  type DocumentReferenceCategoryRow,
+} from "@/lib/document-reference-categories";
+import { canManageDocuments as hasDocumentsManagementPermission } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 const primaryCategories = [
   {
     slug: "sops",
     title: "SOPs",
+    dbCategory: "SOPs",
     href: "/documents/sops",
     description: "Standard operating procedures and field reference material.",
   },
   {
     slug: "ems-protocols",
     title: "EMS Protocols",
+    dbCategory: "EMS Protocols",
     href: "/documents/ems-protocols",
     description: "Clinical guidance and operational treatment reference documents.",
   },
   {
     slug: "city-department-policies",
-    title: "City / Department Policies",
+    title: "City Department Policies",
+    dbCategory: "City / Department Policies",
     href: "/documents/city-department-policies",
     description: "City policy, department policy, and administrative direction.",
   },
   {
     slug: "mutual-aid-agreements",
     title: "Mutual Aid Agreements",
+    dbCategory: "Mutual Aid Agreements",
     href: "/documents/mutual-aid-agreements",
     description: "Regional coordination, assisting agency, and mutual aid references.",
   },
 ];
 
-const departmentLibraryLink = {
-  slug: "department-documents",
-  title: "Department Documents",
-  href: "/documents/department-documents",
-  description:
-    "Department-created reference material such as grant information, hose evolutions, engineering procedures, and station procedures.",
-};
-
-function resolveCategorySlug(category: string | null | undefined) {
+function resolveCategorySlug(
+  category: string | null | undefined,
+  referenceCategoryId: string | null | undefined,
+  referenceCategoryById: Map<string, DocumentReferenceCategoryRow>,
+  defaultReferenceCategorySlug: string,
+) {
   if (!category) {
     return null;
   }
 
   const normalizedCategory = category.trim();
 
+  if (normalizedCategory === DEPARTMENT_DOCUMENTS_CATEGORY) {
+    if (typeof referenceCategoryId === "string" && referenceCategoryId) {
+      const mappedReferenceCategory = referenceCategoryById.get(referenceCategoryId);
+      if (mappedReferenceCategory?.slug) {
+        return mappedReferenceCategory.slug;
+      }
+    }
+
+    return defaultReferenceCategorySlug;
+  }
+
   const match = Object.entries({
     SOPs: "sops",
     "EMS Protocols": "ems-protocols",
     "City / Department Policies": "city-department-policies",
     "Mutual Aid Agreements": "mutual-aid-agreements",
-    "Department Documents": "department-documents",
   }).find(([label]) => label === normalizedCategory);
 
   return match ? match[1] : null;
+}
+
+function getReferenceCategoryTitle(row: DocumentReferenceCategoryRow) {
+  const trimmed = row.name.trim().toLowerCase();
+  if (row.is_default && trimmed === MISCELLANEOUS_DOCUMENTS_CATEGORY_NAME.toLowerCase()) {
+    return "Miscellaneous";
+  }
+
+  return row.name;
 }
 
 function getSnippet(text: string | null | undefined, term: string) {
@@ -105,9 +131,36 @@ export default async function DocumentsPage({
     redirect("/login");
   }
 
+  const canManageDocuments = await hasDocumentsManagementPermission(
+    supabase,
+    currentMember.departmentId,
+    currentMember.role,
+  );
+
+  const { data: referenceCategoryRows, error: referenceCategoriesError } = await supabase
+    .from("document_reference_categories")
+    .select("id, department_id, name, slug, description, status, is_default, created_by, updated_by, created_at, updated_at")
+    .eq("department_id", currentMember.departmentId)
+    .eq("status", "active")
+    .order("is_default", { ascending: false })
+    .order("name", { ascending: true });
+
+  if (referenceCategoriesError) {
+    throw new Error(referenceCategoriesError.message || "Unable to load Department Reference Categories.");
+  }
+
+  const referenceCategories = (referenceCategoryRows ?? []) as DocumentReferenceCategoryRow[];
+  const referenceCategoryById = new Map(referenceCategories.map((row) => [row.id, row]));
+  const defaultReferenceCategory =
+    referenceCategories.find((row) => row.is_default) ?? referenceCategories[0] ?? null;
+  const fallbackReferenceCategorySlug =
+    defaultReferenceCategory?.slug || MISCELLANEOUS_DOCUMENTS_CATEGORY_SLUG;
+
   let searchResults: Array<{
     id: string;
     category: string;
+    categoryLabel: string;
+    categorySlug: string;
     title: string;
     description: string | null;
     document_number: string | null;
@@ -116,21 +169,38 @@ export default async function DocumentsPage({
     revision_number: number | null;
     updated_by: string | null;
     matchText: string | null;
+    reference_category_id: string | null;
   }> = [];
 
   const { data: allDocuments } = await supabase
     .from("documents")
     .select(
-      "id, category, title, description, document_number, updated_at, current_revision_id, uploaded_by",
+      "id, category, title, description, document_number, updated_at, current_revision_id, uploaded_by, reference_category_id",
     )
     .eq("department_id", currentMember.departmentId)
+    .eq("source_kind", "library")
     .order("title");
 
   const countsByCategory: Record<string, number> = {};
+  const countsByReferenceCategoryId: Record<string, number> = {};
 
   for (const document of allDocuments ?? []) {
-    const key = document.category ?? "";
-    countsByCategory[key] = (countsByCategory[key] ?? 0) + 1;
+    const category = document.category ?? "";
+
+    if (category === DEPARTMENT_DOCUMENTS_CATEGORY) {
+      const categoryId =
+        (typeof document.reference_category_id === "string" && document.reference_category_id) ||
+        defaultReferenceCategory?.id ||
+        "";
+
+      if (categoryId) {
+        countsByReferenceCategoryId[categoryId] = (countsByReferenceCategoryId[categoryId] ?? 0) + 1;
+      }
+
+      continue;
+    }
+
+    countsByCategory[category] = (countsByCategory[category] ?? 0) + 1;
   }
 
   if (query) {
@@ -249,6 +319,34 @@ export default async function DocumentsPage({
         return {
           id: document.id,
           category: document.category ?? "",
+          categoryLabel:
+            document.category === DEPARTMENT_DOCUMENTS_CATEGORY
+              ? getReferenceCategoryTitle(
+                  (typeof document.reference_category_id === "string"
+                    ? referenceCategoryById.get(document.reference_category_id)
+                    : undefined) ||
+                    defaultReferenceCategory || {
+                      id: "",
+                      department_id: "",
+                      name: MISCELLANEOUS_DOCUMENTS_CATEGORY_NAME,
+                      slug: fallbackReferenceCategorySlug,
+                      description: null,
+                      status: "active",
+                      is_default: true,
+                      created_by: null,
+                      updated_by: null,
+                      created_at: "",
+                      updated_at: "",
+                    },
+                )
+              : document.category ?? "",
+          categorySlug:
+            resolveCategorySlug(
+              document.category,
+              document.reference_category_id,
+              referenceCategoryById,
+              fallbackReferenceCategorySlug,
+            ) ?? fallbackReferenceCategorySlug,
           title: document.title ?? "Untitled document",
           description: document.description ?? null,
           document_number: document.document_number ?? null,
@@ -257,6 +355,7 @@ export default async function DocumentsPage({
           revision_number: revisionNumber,
           updated_by: updatedBy,
           matchText,
+          reference_category_id: document.reference_category_id ?? null,
         };
       })
       .sort((left, right) => {
@@ -267,16 +366,18 @@ export default async function DocumentsPage({
   }
 
   return (
-    <PageLayout>
-      <div className="space-y-8">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-8">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-red-500">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">
             Reference Library
           </p>
-          <h1 className="mt-3 text-4xl font-black tracking-tight text-white lg:text-5xl">
+          <h1
+            className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white"
+            style={{ fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif' }}
+          >
             Documents
           </h1>
-          <p className="mt-3 max-w-3xl text-base text-neutral-400 lg:text-lg">
+          <p className="mt-3 max-w-3xl text-lg text-neutral-400">
             This is the department&apos;s digital reference library for the policies,
             procedures, and operational guidance firefighters and command staff need
             to access quickly.
@@ -323,7 +424,6 @@ export default async function DocumentsPage({
             ) : (
               <div className="mt-6 space-y-3">
                 {searchResults.map((document) => {
-                  const categorySlug = resolveCategorySlug(document.category) ?? "department-documents";
                   const revisionLabel = document.revision_number ? `Version ${document.revision_number}` : "Version 1";
                   const updatedDate = document.updated_at
                     ? new Date(document.updated_at).toLocaleDateString("en-US", {
@@ -343,7 +443,7 @@ export default async function DocumentsPage({
                         <div>
                           <p className="text-lg font-bold text-white">{document.title}</p>
                           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs uppercase tracking-[0.12em] text-neutral-500">
-                            <span>{document.category}</span>
+                            <span>{document.categoryLabel}</span>
                             <span className="text-neutral-600">•</span>
                             <span>{revisionLabel}</span>
                             <span className="text-neutral-600">•</span>
@@ -357,7 +457,7 @@ export default async function DocumentsPage({
                         </div>
 
                         <Link
-                          href={`/documents/${categorySlug}/${document.id}`}
+                          href={`/documents/${document.categorySlug}/${document.id}`}
                           className="inline-flex items-center justify-center rounded-xl border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-100 transition hover:border-red-400 hover:bg-red-500/20"
                         >
                           Open Document
@@ -385,11 +485,20 @@ export default async function DocumentsPage({
                 Department Reference Categories
               </h2>
             </div>
+
+            {canManageDocuments ? (
+              <Link
+                href="/documents/department-documents/categories/new"
+                className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/[0.08]"
+              >
+                Create a New Category
+              </Link>
+            ) : null}
           </div>
 
           <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {primaryCategories.map((category) => {
-              const count = countsByCategory[category.title] ?? 0;
+              const count = countsByCategory[category.dbCategory] ?? 0;
 
               return (
                 <Link
@@ -419,53 +528,41 @@ export default async function DocumentsPage({
                 </Link>
               );
             })}
-          </div>
-        </section>
 
-        <section className="rounded-2xl border border-neutral-800 bg-[#1b1b1b] p-6">
-          <div className="flex items-end justify-between gap-3">
-            <div>
-              <p className="text-xs uppercase tracking-[0.22em] text-neutral-500">
-                Department Library
-              </p>
-              <h2 className="mt-2 text-2xl font-black text-white">
-                Department Documents
-              </h2>
-            </div>
-          </div>
+            {referenceCategories.map((categoryRow) => {
+              const count = countsByReferenceCategoryId[categoryRow.id] ?? 0;
+              const title = getReferenceCategoryTitle(categoryRow);
 
-          <div className="mt-6">
-            <Link
-              href={departmentLibraryLink.href}
-              className="block rounded-2xl border border-white/10 bg-[#111111] p-5 transition hover:border-red-500/40 hover:bg-[#171717]"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.22em] text-neutral-500">
-                    Department Created
+              return (
+                <Link
+                  key={categoryRow.id}
+                  href={`/documents/${categoryRow.slug}`}
+                  className="group block rounded-2xl border border-white/10 bg-[#111111] p-5 transition hover:border-red-500/40 hover:bg-[#171717]"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.22em] text-neutral-500">
+                        Category
+                      </p>
+                      <h3 className="mt-3 text-xl font-bold text-white">{title}</h3>
+                    </div>
+                    <span className="rounded-full border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-red-200">
+                      {count}
+                    </span>
+                  </div>
+
+                  <p className="mt-4 text-sm leading-6 text-neutral-400">
+                    {categoryRow.description?.trim() || "Department reference material stored in this category."}
                   </p>
-                  <h3 className="mt-3 text-xl font-bold text-white">
-                    {departmentLibraryLink.title}
-                  </h3>
-                </div>
-                <span className="rounded-full border border-red-500/30 bg-red-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-red-200">
-                  {countsByCategory[departmentLibraryLink.title] ?? 0}
-                </span>
-              </div>
 
-              <p className="mt-4 max-w-3xl text-sm leading-6 text-neutral-400">
-                {departmentLibraryLink.description}
-              </p>
-
-              <div className="mt-5 text-sm font-semibold text-red-300">
-                {countsByCategory[departmentLibraryLink.title]
-                  ? "Open department documents"
-                  : "No department documents have been added yet."}
-              </div>
-            </Link>
+                  <div className="mt-5 text-sm font-semibold text-red-300 transition group-hover:text-red-200">
+                    {count === 0 ? "No documents yet" : `Open ${title}`}
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         </section>
       </div>
-    </PageLayout>
   );
 }

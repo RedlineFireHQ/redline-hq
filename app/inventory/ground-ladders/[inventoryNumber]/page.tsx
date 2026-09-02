@@ -1,5 +1,4 @@
 import GroundLadderWorkspace from "@/components/inventory/GroundLadderWorkspace";
-import PageLayout from "@/components/layout/PageLayout";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentMember } from "@/lib/current-member";
 import { loadGroundLadderInventoryData } from "../data";
@@ -24,20 +23,20 @@ export default async function GroundLadderDetailPage({ params }: GroundLadderDet
 
 	if (!member?.departmentId) {
 		return (
-			<PageLayout>
+			
 				<div className="mx-auto max-w-3xl rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-8">
 					<p className="text-sm font-semibold uppercase tracking-[0.24em] text-red-500">Inventory</p>
-					<h1 className="mt-2 text-4xl font-black">Ground Ladders</h1>
+					<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">Ground Ladders</h1>
 					<p className="mt-4 text-neutral-400">You need an active department membership before you can open this inventory workspace.</p>
 				</div>
-			</PageLayout>
+			
 		);
 	}
 
 	const data = await loadGroundLadderInventoryData(supabase, member.departmentId);
 
 	return (
-		<PageLayout>
+		
 			<GroundLadderWorkspace
 				departmentId={member.departmentId}
 				departmentName={member.name ?? null}
@@ -51,6 +50,6 @@ export default async function GroundLadderDetailPage({ params }: GroundLadderDet
 				selectedLadderNumber={selectedLadderNumber}
 				canDeleteLadder={member.role === "administrator" || member.role === "officer"}
 			/>
-		</PageLayout>
+		
 	);
 }

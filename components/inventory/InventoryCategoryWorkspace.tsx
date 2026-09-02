@@ -1375,9 +1375,9 @@ export default function InventoryCategoryWorkspace({
 			)}
 
 			<div>
-				<p className="text-sm font-semibold uppercase tracking-[0.3em] text-red-500">Inventory</p>
+				<p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">Inventory</p>
 
-				<h1 className="mt-2 text-5xl font-black tracking-tight text-white">{title}</h1>
+				<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">{title}</h1>
 
 				<p className="mt-3 max-w-2xl text-lg text-neutral-400">{subtitle}</p>
 			</div>
@@ -1441,7 +1441,7 @@ export default function InventoryCategoryWorkspace({
 
 					<div className="w-full max-w-[220px] rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3">
 						<p className="text-xs uppercase tracking-[0.24em] text-neutral-500">Fire Hose Readiness</p>
-						<p className="mt-1 text-4xl font-black text-white">{readinessScore}%</p>
+						<p className="mt-1 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">{readinessScore}%</p>
 						<p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-red-400">
 							{readinessLabel}
 						</p>

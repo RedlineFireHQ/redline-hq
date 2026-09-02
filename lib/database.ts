@@ -1,6 +1,19 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 
+export type ActiveApparatusOption = {
+  id: string;
+  name: string | null;
+};
+
+export type ArchivedApparatusRow = {
+  id: string;
+  name: string | null;
+  type: string | null;
+  department_id: string | null;
+  lifecycle_status: "active" | "archived" | null;
+};
+
 async function getOpenDeficiencyStatusId() {
   const { data, error } = await supabase
     .from("deficiency_statuses")
@@ -42,12 +55,55 @@ export async function getApparatus(client?: SupabaseClient) {
   return data ?? [];
 }
 
-export async function getArchivedApparatus(departmentId: string | null) {
+export async function getActiveApparatusOptions({
+  client,
+  departmentId,
+}: {
+  client?: SupabaseClient;
+  departmentId?: string | null;
+} = {}): Promise<ActiveApparatusOption[]> {
+  const targetClient = client ?? supabase;
+  let query = targetClient
+    .from("apparatus")
+    .select("id, name")
+    .eq("lifecycle_status", "active")
+    .order("name", { ascending: true });
+
+  if (typeof departmentId === "string" && departmentId.trim().length > 0) {
+    query = query.eq("department_id", departmentId.trim());
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error("[getActiveApparatusOptions] apparatus options query failed", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      usingServerClient: Boolean(client),
+      hasDepartmentFilter: Boolean(departmentId),
+    });
+    return [];
+  }
+
+  return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+    id: typeof row.id === "string" ? row.id : String(row.id ?? ""),
+    name: typeof row.name === "string" ? row.name : null,
+  }));
+}
+
+export async function getArchivedApparatus(
+  departmentId: string | null,
+  client?: SupabaseClient,
+): Promise<ArchivedApparatusRow[]> {
   if (!departmentId) {
     return [];
   }
 
-  const { data, error } = await supabase
+  const targetClient = client ?? supabase;
+
+  const { data, error } = await targetClient
     .from("apparatus")
     .select("id, name, type, department_id, lifecycle_status")
     .eq("department_id", departmentId)
@@ -59,7 +115,16 @@ export async function getArchivedApparatus(departmentId: string | null) {
     return [];
   }
 
-  return data ?? [];
+  return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+    id: typeof row.id === "string" ? row.id : String(row.id ?? ""),
+    name: typeof row.name === "string" ? row.name : null,
+    type: typeof row.type === "string" ? row.type : null,
+    department_id: typeof row.department_id === "string" ? row.department_id : null,
+    lifecycle_status:
+      row.lifecycle_status === "active" || row.lifecycle_status === "archived"
+        ? row.lifecycle_status
+        : null,
+  }));
 }
 
 export async function getOpenDeficiencyCountsByApparatusIds(apparatusIds: string[]) {

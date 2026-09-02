@@ -772,7 +772,7 @@ export default function PieEquipmentWorkspace({
 				<div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
 					<div>
 						<p className="text-xs font-semibold uppercase tracking-[0.18em] text-red-400">PIE Asset Tracking</p>
-						<h1 className="mt-2 text-3xl font-black tracking-tight text-white">Power & Industrial Equipment</h1>
+						<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">Power & Industrial Equipment</h1>
 						<p className="mt-2 max-w-2xl text-sm text-neutral-400">Track assignments, accountability, and readiness for portable power and industrial tools.</p>
 					</div>
 					<button

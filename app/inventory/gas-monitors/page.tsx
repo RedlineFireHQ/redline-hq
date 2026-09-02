@@ -1,4 +1,3 @@
-import PageLayout from "@/components/layout/PageLayout";
 import GasMonitorWorkspace from "@/components/inventory/GasMonitorWorkspace";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentMember } from "@/lib/current-member";
@@ -74,7 +73,7 @@ export default async function GasMonitorsInventoryPage() {
 	}
 
 	return (
-		<PageLayout>
+		
 			<GasMonitorWorkspace
 				departmentId={departmentId}
 				departmentName={departmentName}
@@ -82,6 +81,6 @@ export default async function GasMonitorsInventoryPage() {
 				initialError={initialError}
 				canDeleteMonitor={canDeleteMonitor}
 			/>
-		</PageLayout>
+		
 	);
 }

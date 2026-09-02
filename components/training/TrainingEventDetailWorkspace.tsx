@@ -791,7 +791,12 @@ export default function TrainingEventDetailWorkspace({
             <ArrowLeft className="h-4 w-4" />
             Back to Training
           </Link>
-          <h1 className="mt-3 text-4xl font-black tracking-tight text-white">{eventState.title}</h1>
+          <h1
+            className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white"
+            style={{ fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif' }}
+          >
+            {eventState.title}
+          </h1>
           <p className="mt-2 text-sm text-neutral-400">
             {categoryLookup.get(eventState.category_id ?? "")?.name || "Uncategorized"} • {formatDateTime(eventState.starts_at)}
           </p>

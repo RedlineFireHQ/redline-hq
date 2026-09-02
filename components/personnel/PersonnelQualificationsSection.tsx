@@ -309,6 +309,7 @@ export default function PersonnelQualificationsSection({
           .insert({
             department_id: departmentId,
             category: "Department Documents",
+            source_kind: "personnel_qualification",
             title: documentTitle,
             description: null,
             document_number: null,

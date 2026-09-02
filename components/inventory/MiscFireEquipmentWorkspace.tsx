@@ -584,7 +584,7 @@ export default function MiscFireEquipmentWorkspace({
 
 				<div className="rounded-2xl border border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(225,24,27,0.14),_transparent_36%),linear-gradient(180deg,_rgba(255,255,255,0.02),_rgba(255,255,255,0.01))] p-5 shadow-[0_22px_60px_rgba(0,0,0,0.32)]">
 					<p className="text-xs font-semibold uppercase tracking-[0.24em] text-red-500">Inventory</p>
-					<h1 className="mt-2 text-3xl font-black tracking-tight text-white">Miscellaneous Fire Equipment</h1>
+					<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">Miscellaneous Fire Equipment</h1>
 					<p className="mt-2 text-sm text-zinc-400">General fire equipment and tools.</p>
 					{departmentName ? (
 						<p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">{departmentName}</p>

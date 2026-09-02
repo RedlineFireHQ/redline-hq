@@ -70,7 +70,10 @@ export default async function CalendarPage() {
   }));
 
   return (
-    <PageLayout>
+    <PageLayout
+      environmentBackgroundUrl="/branding/images/calendarpage.png"
+      environmentBackgroundPosition="left center"
+    >
       <CalendarWorkspace
         currentMember={{
           id: currentMember.id,

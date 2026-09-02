@@ -1,5 +1,5 @@
-import PageLayout from "@/components/layout/PageLayout";
 import ReportsWorkspace from "@/components/reports/ReportsWorkspace";
+import { getActiveApparatusOptions } from "@/lib/database";
 import { getCurrentMember } from "@/lib/current-member";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -80,11 +80,7 @@ export default async function ReportsPage() {
         .select("id, name")
         .eq("department_id", currentMember.departmentId)
         .order("name", { ascending: true }),
-      supabase
-        .from("apparatus")
-        .select("id, name")
-        .eq("department_id", currentMember.departmentId)
-        .order("name", { ascending: true }),
+      getActiveApparatusOptions({ client: supabase, departmentId: currentMember.departmentId }),
       supabase
         .from("apparatus_inspections")
         .select("member_id")
@@ -172,9 +168,9 @@ export default async function ReportsPage() {
       }))
       .filter((row) => row.id.length > 0 && row.name.length > 0);
 
-    apparatuses = (apparatusResult.data ?? [])
+    apparatuses = apparatusResult
       .map((row) => ({
-        id: String(row.id),
+        id: row.id,
         name: typeof row.name === "string" ? row.name : "",
       }))
       .filter((row) => row.id.length > 0 && row.name.length > 0);
@@ -277,25 +273,23 @@ export default async function ReportsPage() {
   }
 
   return (
-    <PageLayout>
-      <ReportsWorkspace
-        isAuthenticated={Boolean(currentMember?.departmentId)}
-        departmentName={departmentName}
-        members={members}
-        trainingCategories={trainingCategories}
-        certifications={certifications}
-        apparatuses={apparatuses}
-        apparatusCheckMembers={apparatusCheckMembers}
-        departmentRoles={departmentRoles}
-        inspectionFireHose={inspectionFireHose}
-        inspectionScbaCylinders={inspectionScbaCylinders}
-        inspectionScbaPacks={inspectionScbaPacks}
-        inspectionGasMonitors={inspectionGasMonitors}
-        inspectionRopeItems={inspectionRopeItems}
-        inspectionGroundLadders={inspectionGroundLadders}
-        emsEquipment={emsEquipment}
-        emsSupplies={emsSupplies}
-      />
-    </PageLayout>
+    <ReportsWorkspace
+      isAuthenticated={Boolean(currentMember?.departmentId)}
+      departmentName={departmentName}
+      members={members}
+      trainingCategories={trainingCategories}
+      certifications={certifications}
+      apparatuses={apparatuses}
+      apparatusCheckMembers={apparatusCheckMembers}
+      departmentRoles={departmentRoles}
+      inspectionFireHose={inspectionFireHose}
+      inspectionScbaCylinders={inspectionScbaCylinders}
+      inspectionScbaPacks={inspectionScbaPacks}
+      inspectionGasMonitors={inspectionGasMonitors}
+      inspectionRopeItems={inspectionRopeItems}
+      inspectionGroundLadders={inspectionGroundLadders}
+      emsEquipment={emsEquipment}
+      emsSupplies={emsSupplies}
+    />
   );
 }

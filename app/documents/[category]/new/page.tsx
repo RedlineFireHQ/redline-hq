@@ -2,16 +2,19 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import PageLayout from "@/components/layout/PageLayout";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import {
+  DEPARTMENT_DOCUMENTS_CATEGORY,
+  MISCELLANEOUS_DOCUMENTS_CATEGORY_NAME,
+  type DocumentReferenceCategoryRow,
+} from "@/lib/document-reference-categories";
 
 const categoryMap: Record<string, string> = {
   sops: "SOPs",
   "ems-protocols": "EMS Protocols",
   "city-department-policies": "City / Department Policies",
   "mutual-aid-agreements": "Mutual Aid Agreements",
-  "department-documents": "Department Documents",
 };
 
 type ExtractedPdfMetadata = {
@@ -35,6 +38,11 @@ type CurrentMember = {
   departmentId: string | null;
   role: "firefighter" | "officer" | "administrator";
 };
+
+type DocumentReferenceCategoryOption = Pick<
+  DocumentReferenceCategoryRow,
+  "id" | "name" | "slug" | "description" | "is_default"
+>;
 
 const initialFormState: FormState = {
   title: "",
@@ -66,17 +74,26 @@ async function extractPdfText(file: File): Promise<ExtractedPdfMetadata> {
 export default function AddDocumentPage() {
   const params = useParams<{ category?: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const categorySlug = typeof params?.category === "string" ? params.category.trim().toLowerCase() : "";
-  const categoryName = categoryMap[categorySlug] ?? "Document";
+  const mappedCategoryName = categoryMap[categorySlug] ?? null;
+  const requestedFolderSlug = searchParams.get("folder")?.trim().toLowerCase() ?? "";
+  const isDepartmentDocumentsCategory = categorySlug === "department-documents" || !mappedCategoryName;
 
   const [currentMember, setCurrentMember] = useState<CurrentMember | null>(null);
   const [isLoadingMember, setIsLoadingMember] = useState(true);
+  const [isCategoryNotFound, setIsCategoryNotFound] = useState(false);
+  const [canManageDocuments, setCanManageDocuments] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isExtractingText, setIsExtractingText] = useState(false);
   const [detectedMetadata, setDetectedMetadata] = useState<ExtractedPdfMetadata | null>(null);
   const [formState, setFormState] = useState<FormState>(initialFormState);
+  const [categoryName, setCategoryName] = useState(mappedCategoryName ?? "Department Documents");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [warningMessage, setWarningMessage] = useState<string | null>(null);
+  const [referenceCategoryOptions, setReferenceCategoryOptions] = useState<DocumentReferenceCategoryOption[]>([]);
+  const [selectedReferenceCategoryId, setSelectedReferenceCategoryId] = useState("");
+  const [referenceCategoriesError, setReferenceCategoriesError] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -107,14 +124,14 @@ export default function AddDocumentPage() {
 
       if (error || !data) {
         setCurrentMember(null);
+        setIsCategoryNotFound(false);
         setIsLoadingMember(false);
         return;
       }
 
       const row = data as Record<string, unknown>;
       const roleValue = typeof row.role === "string" ? row.role.trim().toLowerCase() : "firefighter";
-
-      setCurrentMember({
+      const nextMember = {
         id: typeof row.id === "string" ? row.id : String(row.id ?? ""),
         departmentId:
           typeof row.department_id === "string" ? row.department_id : null,
@@ -124,7 +141,75 @@ export default function AddDocumentPage() {
             : roleValue === "officer"
               ? "officer"
               : "firefighter",
-      });
+      } satisfies CurrentMember;
+
+      const { data: permissionRows } = await supabase
+        .from("member_app_permissions")
+        .select("permission_key")
+        .eq("department_id", nextMember.departmentId)
+        .eq("member_id", nextMember.id)
+        .eq("permission_key", "documents_management");
+
+      const nextCanManageDocuments =
+        nextMember.role === "administrator" || (permissionRows?.length ?? 0) > 0;
+
+      let nextReferenceCategories: DocumentReferenceCategoryOption[] = [];
+      let nextSelectedReferenceCategoryId = "";
+      let nextCategoryName = mappedCategoryName ?? "Department Documents";
+      let nextCategoryNotFound = false;
+
+      if (isDepartmentDocumentsCategory && nextMember.departmentId) {
+        const { data: referenceCategories, error: referenceCategoriesLoadError } = await supabase
+          .from("document_reference_categories")
+          .select("id, name, slug, description, is_default")
+          .eq("department_id", nextMember.departmentId)
+          .eq("status", "active")
+          .order("is_default", { ascending: false })
+          .order("name", { ascending: true });
+
+        if (referenceCategoriesLoadError) {
+          if (isMounted) {
+            setReferenceCategoriesError(referenceCategoriesLoadError.message || "Unable to load Department Documents reference categories.");
+          }
+        } else {
+          nextReferenceCategories = (referenceCategories ?? []).map((categoryRow) => ({
+            id: String(categoryRow.id),
+            name: typeof categoryRow.name === "string" ? categoryRow.name : "Reference Category",
+            slug: typeof categoryRow.slug === "string" ? categoryRow.slug : "",
+            description: typeof categoryRow.description === "string" ? categoryRow.description : null,
+            is_default: categoryRow.is_default === true,
+          }));
+
+          if (!mappedCategoryName && categorySlug !== "department-documents") {
+            const directCategory = nextReferenceCategories.find((categoryOption) => categoryOption.slug === categorySlug);
+            if (!directCategory) {
+              nextCategoryNotFound = true;
+            } else {
+              nextCategoryName = directCategory.name;
+              nextSelectedReferenceCategoryId = directCategory.id;
+            }
+          } else {
+            const requestedCategory = nextReferenceCategories.find((categoryOption) => categoryOption.slug === requestedFolderSlug);
+            const fallbackCategory =
+              requestedCategory ||
+              nextReferenceCategories.find((categoryOption) => categoryOption.is_default) ||
+              nextReferenceCategories[0] ||
+              null;
+
+            nextSelectedReferenceCategoryId = fallbackCategory?.id || "";
+            if (fallbackCategory) {
+              nextCategoryName = fallbackCategory.name;
+            }
+          }
+        }
+      }
+
+      setCurrentMember(nextMember);
+      setCanManageDocuments(nextCanManageDocuments);
+      setReferenceCategoryOptions(nextReferenceCategories);
+      setSelectedReferenceCategoryId(nextSelectedReferenceCategoryId);
+      setCategoryName(nextCategoryName);
+      setIsCategoryNotFound(nextCategoryNotFound);
       setIsLoadingMember(false);
     }
 
@@ -133,14 +218,11 @@ export default function AddDocumentPage() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [categorySlug, isDepartmentDocumentsCategory, mappedCategoryName, requestedFolderSlug]);
 
-  const canManageDocuments =
-    currentMember?.role === "administrator" || currentMember?.role === "officer";
-
-  if (!categoryMap[categorySlug]) {
+  if (!isLoadingMember && isCategoryNotFound) {
     return (
-      <PageLayout>
+      <div className="mx-auto max-w-3xl">
         <div className="rounded-2xl border border-red-900 bg-[#1a1a1a] p-8">
           <h1 className="text-2xl font-black text-white">Category not found</h1>
           <p className="mt-3 text-neutral-400">
@@ -150,13 +232,13 @@ export default function AddDocumentPage() {
             Back to documents
           </Link>
         </div>
-      </PageLayout>
+      </div>
     );
   }
 
   if (!isLoadingMember && !canManageDocuments) {
     return (
-      <PageLayout>
+      <div className="mx-auto max-w-3xl">
         <div className="rounded-2xl border border-red-900 bg-[#1a1a1a] p-8">
           <h1 className="text-2xl font-black text-white">Access restricted</h1>
           <p className="mt-3 text-neutral-400">
@@ -169,7 +251,7 @@ export default function AddDocumentPage() {
             Back to category
           </Link>
         </div>
-      </PageLayout>
+      </div>
     );
   }
 
@@ -243,6 +325,11 @@ export default function AddDocumentPage() {
       return;
     }
 
+    if (isDepartmentDocumentsCategory && referenceCategoryOptions.length === 0) {
+      setErrorMessage("Department reference categories are not available right now.");
+      return;
+    }
+
     setIsSubmitting(true);
     setErrorMessage(null);
     setWarningMessage(null);
@@ -286,7 +373,14 @@ export default function AddDocumentPage() {
         .from("documents")
         .insert({
           department_id: currentMember.departmentId,
-          category: categoryName,
+          category: isDepartmentDocumentsCategory ? DEPARTMENT_DOCUMENTS_CATEGORY : categoryName,
+          reference_category_id: isDepartmentDocumentsCategory
+            ? selectedReferenceCategoryId ||
+              referenceCategoryOptions.find((categoryOption) => categoryOption.is_default)?.id ||
+              referenceCategoryOptions[0]?.id ||
+              null
+            : null,
+          source_kind: "library",
           title,
           description: null,
           document_number: extractedMetadata.documentNumber || null,
@@ -341,7 +435,19 @@ export default function AddDocumentPage() {
         );
       }
 
-      router.push(`/documents/${categorySlug}`);
+      if (isDepartmentDocumentsCategory) {
+        const targetCategory = referenceCategoryOptions.find((categoryOption) => categoryOption.id === selectedReferenceCategoryId)
+          || referenceCategoryOptions.find((categoryOption) => categoryOption.is_default)
+          || null;
+
+        router.push(
+          targetCategory
+            ? `/documents/${targetCategory.slug}`
+            : "/documents",
+        );
+      } else {
+        router.push(`/documents/${categorySlug}`);
+      }
       router.refresh();
     } catch (error) {
       setErrorMessage(
@@ -353,14 +459,16 @@ export default function AddDocumentPage() {
   };
 
   return (
-    <PageLayout>
       <div className="mx-auto max-w-3xl space-y-6">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-red-500">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">
               Documents
             </p>
-            <h1 className="mt-3 text-3xl font-black tracking-tight text-white">
+            <h1
+              className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white"
+              style={{ fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif' }}
+            >
               Add Document
             </h1>
           </div>
@@ -443,6 +551,32 @@ export default function AddDocumentPage() {
                 </select>
               </div>
 
+              {isDepartmentDocumentsCategory ? (
+                <div className="md:col-span-2">
+                  <label htmlFor="reference-category" className="mb-2 block text-sm font-medium text-neutral-200">
+                    Department Reference Category
+                  </label>
+                  <select
+                    id="reference-category"
+                    value={selectedReferenceCategoryId}
+                    onChange={(event) => setSelectedReferenceCategoryId(event.target.value)}
+                    className="w-full rounded-xl border border-white/10 bg-[#0c0c0c] px-3 py-2.5 text-white focus:border-red-500/60 focus:outline-none"
+                  >
+                    {referenceCategoryOptions.map((categoryOption) => (
+                      <option key={categoryOption.id} value={categoryOption.id}>
+                        {categoryOption.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-2 text-xs text-neutral-400">
+                    Documents added without a specific folder default to {MISCELLANEOUS_DOCUMENTS_CATEGORY_NAME}.
+                  </p>
+                  {referenceCategoriesError ? (
+                    <p className="mt-2 text-xs text-red-300">{referenceCategoriesError}</p>
+                  ) : null}
+                </div>
+              ) : null}
+
               {detectedMetadata ? (
                 <div className="md:col-span-2 rounded-xl border border-white/10 bg-[#0d0d0d] p-4">
                   <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">Detected from PDF</p>
@@ -492,6 +626,5 @@ export default function AddDocumentPage() {
           </form>
         </div>
       </div>
-    </PageLayout>
   );
 }

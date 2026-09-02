@@ -572,7 +572,7 @@ export default function FireExtinguisherWorkspace({
 				<div className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(225,24,27,0.16),_transparent_34%),linear-gradient(180deg,_rgba(255,255,255,0.02),_rgba(255,255,255,0.01))] p-6 shadow-[0_30px_90px_rgba(0,0,0,0.35)] lg:flex-row lg:items-start lg:justify-between">
 					<div className="space-y-3">
 						<p className="text-xs font-semibold uppercase tracking-[0.28em] text-red-500">Inventory</p>
-						<h1 className="text-4xl font-black tracking-tight text-white">Fire Extinguishers</h1>
+						<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">Fire Extinguishers</h1>
 						<p className="max-w-2xl text-sm text-zinc-400">
 							Track extinguisher readiness, locations, photos, and shared deficiencies in one place.
 						</p>

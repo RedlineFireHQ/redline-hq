@@ -6,6 +6,7 @@ import {
   MAINTENANCE_PHOTOS_BUCKET,
   MAINTENANCE_TYPE_OPTIONS,
 } from "@/lib/maintenance";
+import { getActiveApparatusOptions } from "@/lib/database";
 import { supabase } from "@/lib/supabase";
 
 type SelectOption = {
@@ -224,8 +225,8 @@ export default function MaintenanceFormModal({
       setIsLoadingOptions(true);
       setErrorMessage(null);
 
-      const [apparatusResult, membersResult] = await Promise.all([
-        supabase.from("apparatus").select("id, name").order("name"),
+      const [activeApparatusOptions, membersResult] = await Promise.all([
+        getActiveApparatusOptions(),
         supabase.from("members").select("id, first_name, last_name"),
       ]);
 
@@ -233,20 +234,18 @@ export default function MaintenanceFormModal({
         return;
       }
 
-      if (apparatusResult.error || membersResult.error) {
+      if (membersResult.error) {
         setErrorMessage(
-          apparatusResult.error?.message ||
-            membersResult.error?.message ||
-            "Unable to load maintenance form options."
+          membersResult.error?.message ||
+          "Unable to load maintenance form options."
         );
         setIsLoadingOptions(false);
         return;
       }
 
-      const normalizedApparatus = (apparatusResult.data ?? []).map((row) => {
-        const record = row as Record<string, unknown>;
-        const id = typeof record.id === "string" ? record.id : String(record.id ?? "");
-        const name = typeof record.name === "string" && record.name.trim() ? record.name : id;
+      const normalizedApparatus = activeApparatusOptions.map((row) => {
+        const id = row.id;
+        const name = typeof row.name === "string" && row.name.trim() ? row.name : id;
 
         return {
           id,
@@ -254,22 +253,32 @@ export default function MaintenanceFormModal({
         };
       });
 
-      if (lockApparatusSelection && defaultApparatusId) {
-        const hasDefaultApparatus = normalizedApparatus.some(
-          (apparatus) => apparatus.id === defaultApparatusId
+      const boundApparatusIds = new Set<string>();
+      const addBoundApparatusId = (value: string | null | undefined) => {
+        if (typeof value === "string" && value.trim()) {
+          boundApparatusIds.add(value.trim());
+        }
+      };
+
+      addBoundApparatusId(defaultApparatusId ?? null);
+      addBoundApparatusId(initialRecord?.apparatus_id ?? null);
+
+      for (const boundApparatusId of boundApparatusIds) {
+        const hasBoundApparatus = normalizedApparatus.some(
+          (apparatus) => apparatus.id === boundApparatusId
         );
 
-        if (!hasDefaultApparatus) {
+        if (!hasBoundApparatus) {
           const { data: defaultApparatusData } = await supabase
             .from("apparatus")
             .select("id, name")
-            .eq("id", defaultApparatusId)
+            .eq("id", boundApparatusId)
             .maybeSingle();
 
           if (defaultApparatusData) {
             const defaultRow = defaultApparatusData as Record<string, unknown>;
             const defaultId =
-              typeof defaultRow.id === "string" ? defaultRow.id : defaultApparatusId;
+              typeof defaultRow.id === "string" ? defaultRow.id : boundApparatusId;
             const defaultName =
               typeof defaultRow.name === "string" && defaultRow.name.trim()
                 ? defaultRow.name

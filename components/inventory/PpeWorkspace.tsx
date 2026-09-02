@@ -517,8 +517,8 @@ export default function PpeWorkspace({
         ) : null}
 
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.3em] text-red-500">Inventory</p>
-          <h1 className="mt-2 text-5xl font-black tracking-tight text-white">PPE Inventory</h1>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">Inventory</p>
+          <h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">PPE Inventory</h1>
           <p className="mt-3 max-w-2xl text-lg text-neutral-400">
             Department-scoped personal protective equipment records assigned to firefighters.
           </p>

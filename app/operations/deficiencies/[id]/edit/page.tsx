@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import PageLayout from "@/components/layout/PageLayout";
+import { getActiveApparatusOptions } from "@/lib/database";
 import { supabase } from "@/lib/supabase";
 
 type SelectOption = {
@@ -93,7 +94,7 @@ export default function EditDeficiencyPage() {
 
       const [apparatusResult, categoriesResult, prioritiesResult, statusesResult, deficiencyResult] =
         await Promise.all([
-          supabase.from("apparatus").select("*").order("name"),
+          getActiveApparatusOptions(),
           supabase.from("deficiency_categories").select("*").order("display_order"),
           supabase.from("deficiency_priorities").select("*").order("display_order"),
           supabase.from("deficiency_statuses").select("*").order("display_order"),
@@ -109,7 +110,6 @@ export default function EditDeficiencyPage() {
       }
 
       if (
-        apparatusResult.error ||
         categoriesResult.error ||
         prioritiesResult.error ||
         statusesResult.error ||
@@ -117,20 +117,37 @@ export default function EditDeficiencyPage() {
         !deficiencyResult.data
       ) {
         setOptionsError(
-          apparatusResult.error?.message ||
-            categoriesResult.error?.message ||
-            prioritiesResult.error?.message ||
-            statusesResult.error?.message ||
-            deficiencyResult.error?.message ||
-            "Unable to load edit options."
+          categoriesResult.error?.message ||
+          prioritiesResult.error?.message ||
+          statusesResult.error?.message ||
+          deficiencyResult.error?.message ||
+          "Unable to load edit options."
         );
         setIsLoading(false);
         return;
       }
 
-      const normalizedApparatusOptions = (apparatusResult.data ?? []).map((record) =>
-        normalizeSelectOption(record as Record<string, unknown>)
+      const deficiency = deficiencyResult.data as Record<string, unknown>;
+      const apparatusId = typeof deficiency.apparatus_id === "string" ? deficiency.apparatus_id : "";
+
+      const normalizedApparatusOptions = apparatusResult.map((record) =>
+        normalizeSelectOption(record as unknown as Record<string, unknown>)
       );
+
+      if (apparatusId && !normalizedApparatusOptions.some((option) => option.id === apparatusId)) {
+        const { data: selectedApparatusData } = await supabase
+          .from("apparatus")
+          .select("id, name")
+          .eq("id", apparatusId)
+          .maybeSingle();
+
+        if (selectedApparatusData) {
+          normalizedApparatusOptions.unshift(
+            normalizeSelectOption(selectedApparatusData as Record<string, unknown>)
+          );
+        }
+      }
+
       const normalizedCategoryOptions = (categoriesResult.data ?? []).map((record) =>
         normalizeSelectOption(record as Record<string, unknown>)
       );
@@ -146,8 +163,6 @@ export default function EditDeficiencyPage() {
       setPriorityOptions(normalizedPriorityOptions);
       setStatusOptions(normalizedStatusOptions);
 
-      const deficiency = deficiencyResult.data as Record<string, unknown>;
-      const apparatusId = typeof deficiency.apparatus_id === "string" ? deficiency.apparatus_id : "";
       const description = typeof deficiency.description === "string" ? deficiency.description : "";
       const location = typeof deficiency.location === "string" ? deficiency.location : "";
       const categoryId = typeof deficiency.category_id === "string" ? deficiency.category_id : "";

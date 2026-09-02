@@ -7,7 +7,9 @@ import { getCurrentMember } from "@/lib/current-member";
 import { canManagePersonnel } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import {
+  buildCanonicalMemberCertificationRows,
   getRoleRequirementStatus,
+  type CatalogRow,
   type DepartmentRoleRow,
   type MemberCertificationRow,
   type MemberQualificationRow,
@@ -62,9 +64,17 @@ export default async function PersonnelPage() {
     .eq("department_id", currentMember.departmentId)
     .order("last_name", { ascending: true })
     .order("first_name", { ascending: true });
-  const [{ data: departmentRolesData }, { data: memberCertificationsData }, { data: memberQualificationsData }, { data: roleRequiredCertificationsData }, { data: roleRequiredQualificationsData }, { data: appPermissionsData, error: appPermissionsError }] = await Promise.all([
+  const [{ data: departmentRolesData }, { data: certificationTypesData }, { data: qualificationTypesData }, { data: memberCertificationsData }, { data: memberQualificationsData }, { data: roleRequiredCertificationsData }, { data: roleRequiredQualificationsData }, { data: appPermissionsData, error: appPermissionsError }] = await Promise.all([
     supabase
       .from("department_roles")
+      .select("id, name, active")
+      .eq("department_id", currentMember.departmentId),
+    supabase
+      .from("certifications")
+      .select("id, name, active")
+      .eq("department_id", currentMember.departmentId),
+    supabase
+      .from("qualifications")
       .select("id, name, active")
       .eq("department_id", currentMember.departmentId),
     supabase
@@ -108,6 +118,16 @@ export default async function PersonnelPage() {
     name: typeof row.name === "string" ? row.name : "",
     active: typeof row.active === "boolean" ? row.active : true,
   }));
+  const certificationTypes: CatalogRow[] = (certificationTypesData ?? []).map((row) => ({
+    id: String(row.id),
+    name: typeof row.name === "string" ? row.name : "",
+    active: typeof row.active === "boolean" ? row.active : true,
+  }));
+  const qualificationTypes: CatalogRow[] = (qualificationTypesData ?? []).map((row) => ({
+    id: String(row.id),
+    name: typeof row.name === "string" ? row.name : "",
+    active: typeof row.active === "boolean" ? row.active : true,
+  }));
 
   const memberCertificationsByMemberId = new Map<string, MemberCertificationRow[]>();
   for (const row of (memberCertificationsData ?? []) as MemberCertificationQueryRow[]) {
@@ -146,6 +166,38 @@ export default async function PersonnelPage() {
     qualification_id: typeof row.qualification_id === "string" ? row.qualification_id : "",
   }));
 
+  const effectiveMemberCertifications = buildCanonicalMemberCertificationRows({
+    certificationTypes,
+    qualificationTypes,
+    memberCertifications: Array.from(memberCertificationsByMemberId.entries()).flatMap(([memberId, rows]) =>
+      rows.map((row) => ({
+        member_id: memberId,
+        certification_id: row.certification_id,
+        expires_at: row.expires_at,
+      })),
+    ),
+    memberQualifications: Array.from(memberQualificationsByMemberId.entries()).flatMap(([memberId, rows]) =>
+      rows.map((row) => ({
+        member_id: memberId,
+        qualification_id: row.qualification_id,
+      })),
+    ),
+  });
+
+  const effectiveMemberCertificationsByMemberId = new Map<string, MemberCertificationRow[]>();
+  for (const row of effectiveMemberCertifications) {
+    if (!row.member_id) {
+      continue;
+    }
+
+    const currentRows = effectiveMemberCertificationsByMemberId.get(row.member_id) ?? [];
+    currentRows.push({
+      certification_id: row.certification_id,
+      expires_at: row.expires_at,
+    });
+    effectiveMemberCertificationsByMemberId.set(row.member_id, currentRows);
+  }
+
   const departmentRoleLookup = new Map(departmentRoles.map((role) => [role.id, role.name]));
 
   if (error) {
@@ -166,9 +218,11 @@ export default async function PersonnelPage() {
         : null,
     role_requirement_label: getRoleRequirementStatus({
       memberDepartmentRoleId: typeof row.department_role_id === "string" ? row.department_role_id : null,
+      certificationTypes,
+      qualificationTypes,
       roleRequiredCertifications,
       roleRequiredQualifications,
-      memberCertifications: memberCertificationsByMemberId.get(String(row.id)) ?? [],
+      memberCertifications: effectiveMemberCertificationsByMemberId.get(String(row.id)) ?? [],
       memberQualifications: memberQualificationsByMemberId.get(String(row.id)) ?? [],
     }).label,
   }));
@@ -187,7 +241,11 @@ export default async function PersonnelPage() {
           </p>
         </div>
 
-        <AddMemberButton permissionOptions={permissionOptions} />
+        <AddMemberButton
+          permissionOptions={permissionOptions}
+          departmentId={currentMember.departmentId}
+          currentMemberId={currentMember.id}
+        />
       </div>
 
       <PersonnelMembersTable members={members} />

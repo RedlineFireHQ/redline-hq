@@ -23,7 +23,8 @@ import {
 } from "@/lib/readiness/member-readiness";
 import { buildScoredCertificationStatuses } from "@/lib/readiness/scored-certifications";
 import {
-  getRoleRequirementComparison,
+  buildCanonicalMemberCertificationRows,
+  buildQualificationReadinessAdapter,
   type CatalogRow,
   type RoleRequiredCertificationRow,
   type RoleRequiredQualificationRow,
@@ -1205,14 +1206,31 @@ export async function getDepartmentReadinessData(
   const categoryNameById = new Map(
     ((categoryRowsResult.data ?? []) as TrainingCategoryRow[]).map((row) => [row.id, row.name]),
   );
+  const qualificationCatalog: CatalogRow[] = qualificationTypes.map((row) => ({
+    id: row.id,
+    name: row.name,
+    active: row.active,
+  }));
 
   const memberResults: MemberReadinessResult[] = [];
 
   for (const member of members) {
     const memberId = member.id;
     const memberName = toMemberName(member);
-    const memberCertifications = certificationsByMember.get(memberId) ?? [];
+    const rawMemberCertifications = certificationsByMember.get(memberId) ?? [];
     const memberQualifications = qualificationsByMember.get(memberId) ?? [];
+    const memberCertifications = buildCanonicalMemberCertificationRows({
+      certificationTypes: certificationCatalog,
+      qualificationTypes: qualificationCatalog,
+      memberCertifications: rawMemberCertifications,
+      memberQualifications,
+    }).map((row) => ({
+      member_id: row.member_id ?? memberId,
+      certification_id: row.certification_id,
+      certificate_number: row.certificate_number ?? null,
+      issued_at: row.issued_at ?? "",
+      expires_at: row.expires_at,
+    }));
 
     const authoritativeEmsCertifications = resolveAuthoritativeEmsCertificationsForMember({
       memberCertifications,
@@ -1261,7 +1279,7 @@ export async function getDepartmentReadinessData(
       ? departmentRoleById.get(memberDepartmentRoleId) ?? null
       : null;
 
-    const roleRequirementComparison = getRoleRequirementComparison({
+    const qualificationReadinessAdapter = buildQualificationReadinessAdapter({
       memberDepartmentRoleId,
       certificationTypes: certificationCatalog,
       qualificationTypes,
@@ -1279,13 +1297,9 @@ export async function getDepartmentReadinessData(
     const qualificationReadiness: QualificationReadinessInput = {
       hasAssignedRole: memberDepartmentRoleId !== null,
       roleName: selectedDepartmentRole?.name ?? null,
-      requiredQualifications: roleRequirementComparison.requiredQualifications.map((item) => item.name),
-      completedQualifications: roleRequirementComparison.requiredQualifications
-        .filter((item) => item.isCurrent)
-        .map((item) => item.name),
-      missingQualifications: roleRequirementComparison.requiredQualifications
-        .filter((item) => !item.isCurrent)
-        .map((item) => item.name),
+      requiredQualifications: qualificationReadinessAdapter.requiredQualifications,
+      completedQualifications: qualificationReadinessAdapter.completedQualifications,
+      missingQualifications: qualificationReadinessAdapter.missingQualifications,
     };
     const scoredCertificationStatuses = buildScoredCertificationStatuses({
       memberDepartmentRoleId,
@@ -1448,9 +1462,6 @@ export async function getDepartmentReadinessData(
       readinessState: row.readinessState,
       scorePercent: row.readiness.scorePercent,
     })),
-  );
-  const participatingApparatus = includedApparatusRows.filter(
-    (row) => row.readinessState === "evaluated" && typeof row.readiness.scorePercent === "number",
   );
 
   const apparatusCount = participatingScores.length;

@@ -1,5 +1,4 @@
 import Link from "next/link";
-import PageLayout from "@/components/layout/PageLayout";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentMember } from "@/lib/current-member";
 
@@ -81,22 +80,22 @@ export default async function GasMonitorCalibrationHistoryPage({
 
 	if (!departmentId) {
 		return (
-			<PageLayout>
+			
 				<div className="mx-auto max-w-5xl space-y-6">
-					<p className="text-sm font-semibold uppercase tracking-[0.3em] text-red-500">Gas Monitors</p>
-					<h1 className="mt-2 text-4xl font-black tracking-tight text-white">Calibration History</h1>
+					<p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">Gas Monitors</p>
+					<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">Calibration History</h1>
 					<p className="mt-3 max-w-2xl text-lg text-neutral-400">Unable to determine your department.</p>
 				</div>
-			</PageLayout>
+			
 		);
 	}
 
 	if (!monitorId) {
 		return (
-			<PageLayout>
+			
 				<div className="mx-auto max-w-5xl space-y-6">
-					<p className="text-sm font-semibold uppercase tracking-[0.3em] text-red-500">Gas Monitors</p>
-					<h1 className="mt-2 text-4xl font-black tracking-tight text-white">Calibration History</h1>
+					<p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">Gas Monitors</p>
+					<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">Calibration History</h1>
 					<p className="mt-3 max-w-2xl text-lg text-neutral-400">No gas monitor was selected.</p>
 					<Link
 						href="/inventory/gas-monitors"
@@ -105,7 +104,7 @@ export default async function GasMonitorCalibrationHistoryPage({
 						Back to Gas Monitors
 					</Link>
 				</div>
-			</PageLayout>
+			
 		);
 	}
 
@@ -118,10 +117,10 @@ export default async function GasMonitorCalibrationHistoryPage({
 
 	if (monitorError || !monitorData) {
 		return (
-			<PageLayout>
+			
 				<div className="mx-auto max-w-5xl space-y-6">
-					<p className="text-sm font-semibold uppercase tracking-[0.3em] text-red-500">Gas Monitors</p>
-					<h1 className="mt-2 text-4xl font-black tracking-tight text-white">Calibration History</h1>
+					<p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">Gas Monitors</p>
+					<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">Calibration History</h1>
 					<p className="mt-3 max-w-2xl text-lg text-neutral-400">The selected gas monitor could not be found.</p>
 					<Link
 						href="/inventory/gas-monitors"
@@ -130,7 +129,7 @@ export default async function GasMonitorCalibrationHistoryPage({
 						Back to Gas Monitors
 					</Link>
 				</div>
-			</PageLayout>
+			
 		);
 	}
 
@@ -151,12 +150,12 @@ export default async function GasMonitorCalibrationHistoryPage({
 	});
 
 	return (
-		<PageLayout>
+		
 			<div className="mx-auto max-w-6xl space-y-8">
 				<div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
 					<div>
-						<p className="text-sm font-semibold uppercase tracking-[0.3em] text-red-500">Gas Monitors</p>
-						<h1 className="mt-2 text-5xl font-black tracking-tight text-white">CALIBRATION HISTORY</h1>
+						<p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">Gas Monitors</p>
+						<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">CALIBRATION HISTORY</h1>
 						<p className="mt-3 max-w-2xl text-lg text-neutral-400">
 							Monitor {monitor.monitor_number ?? monitor.id}
 							{monitor.serial_number ? ` • Serial ${monitor.serial_number}` : ""}
@@ -212,6 +211,6 @@ export default async function GasMonitorCalibrationHistoryPage({
 					</div>
 				</section>
 			</div>
-		</PageLayout>
+		
 	);
 }

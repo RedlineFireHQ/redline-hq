@@ -1,16 +1,34 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import PageLayout from "@/components/layout/PageLayout";
 import { getCurrentMember } from "@/lib/current-member";
+import {
+  DEPARTMENT_DOCUMENTS_CATEGORY,
+  MISCELLANEOUS_DOCUMENTS_CATEGORY_NAME,
+  type DocumentReferenceCategoryRow,
+} from "@/lib/document-reference-categories";
+import { canManageDocuments as hasDocumentsManagementPermission } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
-const categoryMap: Record<string, string> = {
-  sops: "SOPs",
-  "ems-protocols": "EMS Protocols",
-  "city-department-policies": "City / Department Policies",
-  "mutual-aid-agreements": "Mutual Aid Agreements",
-  "department-documents": "Department Documents",
+const categoryMap: Record<string, { dbCategory: string; title: string }> = {
+  sops: { dbCategory: "SOPs", title: "SOPs" },
+  "ems-protocols": { dbCategory: "EMS Protocols", title: "EMS Protocols" },
+  "city-department-policies": {
+    dbCategory: "City / Department Policies",
+    title: "City Department Policies",
+  },
+  "mutual-aid-agreements": {
+    dbCategory: "Mutual Aid Agreements",
+    title: "Mutual Aid Agreements",
+  },
 };
+
+function getReferenceCategoryTitle(referenceCategory: DocumentReferenceCategoryRow) {
+  if (referenceCategory.is_default && referenceCategory.name.trim().toLowerCase() === "miscellaneous documents") {
+    return "Miscellaneous";
+  }
+
+  return referenceCategory.name;
+}
 
 function formatDate(value: string | null | undefined) {
   if (!value) {
@@ -83,16 +101,12 @@ export default async function DocumentCategoryPage({
   const { category } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const normalizedCategory = category?.trim().toLowerCase();
-  const categoryName = categoryMap[normalizedCategory ?? ""];
+  const mappedCategory = categoryMap[normalizedCategory ?? ""];
   const categoryQuery = typeof resolvedSearchParams.q === "string"
     ? resolvedSearchParams.q.trim()
     : Array.isArray(resolvedSearchParams.q)
       ? resolvedSearchParams.q.find((value) => typeof value === "string" && value.trim().length > 0)?.trim() ?? ""
       : "";
-
-  if (!categoryName) {
-    notFound();
-  }
 
   const supabase = await createSupabaseServerClient();
   const currentMember = await getCurrentMember(supabase);
@@ -101,17 +115,50 @@ export default async function DocumentCategoryPage({
     redirect("/login");
   }
 
-  const canManageDocuments =
-    currentMember.role === "administrator" || currentMember.role === "officer";
+  const canManageDocuments = await hasDocumentsManagementPermission(
+    supabase,
+    currentMember.departmentId,
+    currentMember.role,
+  );
 
-  const { data: documents, error } = await supabase
+  let referenceCategory: DocumentReferenceCategoryRow | null = null;
+  if (!mappedCategory) {
+    const { data: referenceCategoryRow, error: referenceCategoryError } = await supabase
+      .from("document_reference_categories")
+      .select("id, department_id, name, slug, description, status, is_default, created_by, updated_by, created_at, updated_at")
+      .eq("department_id", currentMember.departmentId)
+      .eq("slug", normalizedCategory ?? "")
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (referenceCategoryError) {
+      throw new Error(referenceCategoryError.message || "Unable to load reference category.");
+    }
+
+    referenceCategory = (referenceCategoryRow as DocumentReferenceCategoryRow | null) ?? null;
+  }
+
+  if (!mappedCategory && !referenceCategory) {
+    notFound();
+  }
+
+  const categoryName = mappedCategory?.dbCategory ?? DEPARTMENT_DOCUMENTS_CATEGORY;
+  const categoryTitle = mappedCategory?.title ?? (referenceCategory ? getReferenceCategoryTitle(referenceCategory) : MISCELLANEOUS_DOCUMENTS_CATEGORY_NAME);
+
+  let documentsQuery = supabase
     .from("documents")
     .select(
       "id, category, title, description, document_number, effective_date, status, updated_at, uploaded_by, current_revision_id",
     )
     .eq("department_id", currentMember.departmentId)
-    .eq("category", categoryName)
-    .order("effective_date", { ascending: false });
+    .eq("source_kind", "library")
+    .eq("category", categoryName);
+
+  if (referenceCategory) {
+    documentsQuery = documentsQuery.eq("reference_category_id", referenceCategory.id);
+  }
+
+  const { data: documents, error } = await documentsQuery.order("effective_date", { ascending: false });
 
   if (error) {
     throw new Error(error.message || "Unable to load documents for this category.");
@@ -239,16 +286,23 @@ export default async function DocumentCategoryPage({
   }
 
   return (
-    <PageLayout>
-      <div className="space-y-6">
-        <div className="flex flex-col gap-4 border-b border-white/10 pb-6 md:flex-row md:items-end md:justify-between">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-red-500">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">
               Documents
             </p>
-            <h1 className="mt-3 text-3xl font-black tracking-tight text-white md:text-4xl">
-              {categoryName}
+            <h1
+              className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white"
+              style={{ fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif' }}
+            >
+              {categoryTitle}
             </h1>
+            <p className="mt-3 max-w-3xl text-lg text-neutral-400">
+              {referenceCategory
+                ? (referenceCategory.description?.trim() || "Department-created reference material for this category.")
+                : "Access department reference material, policy documents, and operational guidance for this category."}
+            </p>
           </div>
 
           {canManageDocuments ? (
@@ -350,7 +404,7 @@ export default async function DocumentCategoryPage({
                           <p className="text-[10px] uppercase tracking-[0.2em] text-neutral-500">
                             Category
                           </p>
-                          <p className="mt-1 text-white">{document.category}</p>
+                          <p className="mt-1 text-white">{categoryTitle}</p>
                         </div>
 
                         <div>
@@ -402,6 +456,5 @@ export default async function DocumentCategoryPage({
           </div>
         )}
       </div>
-    </PageLayout>
   );
 }

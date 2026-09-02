@@ -11,12 +11,32 @@ export type CatalogRow = {
 };
 
 export type MemberCertificationRow = {
+  id?: string;
+  member_id?: string;
   certification_id: string;
+  certificate_number?: string | null;
+  issued_at?: string;
   expires_at: string | null;
+  supporting_document_id?: string | null;
+  notes?: string | null;
+  created_by?: string | null;
+  updated_by?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
 };
 
 export type MemberQualificationRow = {
+  id?: string;
+  member_id?: string;
   qualification_id: string;
+  earned_at?: string;
+  certificate_number?: string | null;
+  notes?: string | null;
+  supporting_document_id?: string | null;
+  created_by?: string | null;
+  updated_by?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
 };
 
 export type RoleRequiredCertificationRow = {
@@ -63,6 +83,16 @@ export type RoleRequirementComparison = {
   requiredQualifications: RoleRequirementComparisonItem[];
 };
 
+export type QualificationReadinessAdapter = {
+  requiredQualifications: string[];
+  completedQualifications: string[];
+  missingQualifications: string[];
+};
+
+export type CanonicalMemberCertificationRow = MemberCertificationRow & {
+  sourceTable: "member_certifications" | "member_qualifications";
+};
+
 function parseLocalDate(value: string) {
   return new Date(`${value}T00:00:00`);
 }
@@ -70,6 +100,174 @@ function parseLocalDate(value: string) {
 function getTodayLocalDate() {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+}
+
+function normalizeRequirementName(value: string) {
+  return value.trim().toLowerCase();
+}
+
+export function buildCanonicalMemberCertificationRows(params: {
+  certificationTypes: CatalogRow[];
+  qualificationTypes: CatalogRow[];
+  memberCertifications: MemberCertificationRow[];
+  memberQualifications: MemberQualificationRow[];
+}): CanonicalMemberCertificationRow[] {
+  const certificationLookup = new Map(params.certificationTypes.map((row) => [row.id, row.name]));
+  const qualificationLookup = new Map(params.qualificationTypes.map((row) => [row.id, row.name]));
+  const certificationIdsByNormalizedName = new Map<string, string[]>();
+
+  for (const certification of params.certificationTypes) {
+    const normalizedName = normalizeRequirementName(certification.name);
+    if (!normalizedName) {
+      continue;
+    }
+
+    const current = certificationIdsByNormalizedName.get(normalizedName) ?? [];
+    current.push(certification.id);
+    certificationIdsByNormalizedName.set(normalizedName, current);
+  }
+
+  const canonicalRows: CanonicalMemberCertificationRow[] = params.memberCertifications.map((row) => ({
+    ...row,
+    sourceTable: "member_certifications",
+  }));
+
+  const seenCertificationIds = new Set(canonicalRows.map((row) => row.certification_id));
+  const seenNormalizedNames = new Set(
+    canonicalRows
+      .map((row) => certificationLookup.get(row.certification_id) ?? "")
+      .map(normalizeRequirementName)
+      .filter((value) => value.length > 0),
+  );
+
+  for (const qualification of params.memberQualifications) {
+    const qualificationName = qualificationLookup.get(qualification.qualification_id) ?? "";
+    const normalizedName = normalizeRequirementName(qualificationName);
+    if (!normalizedName) {
+      continue;
+    }
+
+    const matchingCertificationIds = certificationIdsByNormalizedName.get(normalizedName) ?? [];
+    if (matchingCertificationIds.length !== 1) {
+      continue;
+    }
+
+    const certificationId = matchingCertificationIds[0];
+    if (seenCertificationIds.has(certificationId) || seenNormalizedNames.has(normalizedName)) {
+      continue;
+    }
+
+    canonicalRows.push({
+      id: qualification.id ? `legacy:${qualification.id}` : `legacy:${qualification.qualification_id}`,
+      member_id: qualification.member_id,
+      certification_id: certificationId,
+      certificate_number: qualification.certificate_number ?? null,
+      issued_at: qualification.earned_at ?? qualification.created_at ?? "",
+      expires_at: null,
+      supporting_document_id: qualification.supporting_document_id ?? null,
+      notes: qualification.notes ?? null,
+      created_by: qualification.created_by ?? null,
+      updated_by: qualification.updated_by ?? null,
+      created_at: qualification.created_at ?? null,
+      updated_at: qualification.updated_at ?? null,
+      sourceTable: "member_qualifications",
+    });
+    seenCertificationIds.add(certificationId);
+    seenNormalizedNames.add(normalizedName);
+  }
+
+  return canonicalRows;
+}
+
+function buildRoleRequirementState(params: {
+  memberDepartmentRoleId: string | null;
+  certificationTypes: CatalogRow[];
+  qualificationTypes: CatalogRow[];
+  roleRequiredCertifications: RoleRequiredCertificationRow[];
+  roleRequiredQualifications: RoleRequiredQualificationRow[];
+  memberCertifications: MemberCertificationRow[];
+  memberQualifications: MemberQualificationRow[];
+}) {
+  const certificationLookup = new Map(params.certificationTypes.map((row) => [row.id, row.name]));
+  const qualificationLookup = new Map(params.qualificationTypes.map((row) => [row.id, row.name]));
+  const canonicalMemberCertifications = buildCanonicalMemberCertificationRows({
+    certificationTypes: params.certificationTypes,
+    qualificationTypes: params.qualificationTypes,
+    memberCertifications: params.memberCertifications,
+    memberQualifications: params.memberQualifications,
+  });
+
+  const currentCertificationIds = new Set(
+    canonicalMemberCertifications
+      .filter((record) => isCertificationCurrent(record.expires_at))
+      .map((record) => record.certification_id),
+  );
+  const currentCertificationNames = new Set(
+    canonicalMemberCertifications
+      .filter((record) => isCertificationCurrent(record.expires_at))
+      .map((record) => certificationLookup.get(record.certification_id) ?? "")
+      .map(normalizeRequirementName)
+      .filter((value) => value.length > 0),
+  );
+  const currentNonExpiringCertificationNames = new Set(
+    canonicalMemberCertifications
+      .filter((record) => record.expires_at === null)
+      .map((record) => certificationLookup.get(record.certification_id) ?? "")
+      .map(normalizeRequirementName)
+      .filter((value) => value.length > 0),
+  );
+
+  const currentQualificationIds = new Set(params.memberQualifications.map((record) => record.qualification_id));
+  const currentQualificationNames = new Set(
+    params.memberQualifications
+      .map((record) => qualificationLookup.get(record.qualification_id) ?? "")
+      .map(normalizeRequirementName)
+      .filter((value) => value.length > 0),
+  );
+
+  const selectedRoleCertRequirements = params.memberDepartmentRoleId
+    ? params.roleRequiredCertifications
+        .filter((row) => row.department_role_id === params.memberDepartmentRoleId)
+        .map((row) => {
+          const name = certificationLookup.get(row.certification_id) ?? "Unknown Certification";
+          const normalizedName = normalizeRequirementName(name);
+          return {
+            id: row.certification_id,
+            name,
+            normalizedName,
+            isCurrent: currentCertificationIds.has(row.certification_id),
+          };
+        })
+    : [];
+
+  const certificationRequirementNames = new Set(
+    selectedRoleCertRequirements.map((row) => row.normalizedName).filter((value) => value.length > 0),
+  );
+
+  const selectedRoleQualRequirements = params.memberDepartmentRoleId
+    ? params.roleRequiredQualifications
+        .filter((row) => row.department_role_id === params.memberDepartmentRoleId)
+        .map((row) => {
+          const name = qualificationLookup.get(row.qualification_id) ?? "Unknown Qualification";
+          const normalizedName = normalizeRequirementName(name);
+          return {
+            id: row.qualification_id,
+            name,
+            normalizedName,
+            isCurrent:
+              currentQualificationIds.has(row.qualification_id) ||
+              currentCertificationNames.has(normalizedName),
+          };
+        })
+        .filter((row) => !certificationRequirementNames.has(row.normalizedName))
+    : [];
+
+  return {
+    selectedRoleCertRequirements,
+    selectedRoleQualRequirements,
+    currentQualificationNames,
+    currentNonExpiringCertificationNames,
+  };
 }
 
 export function isCertificationCurrent(expiresAt: string | null) {
@@ -87,6 +285,8 @@ export function isCertificationCurrent(expiresAt: string | null) {
 
 export function getRoleRequirementStatus(params: {
   memberDepartmentRoleId: string | null;
+  certificationTypes?: CatalogRow[];
+  qualificationTypes?: CatalogRow[];
   roleRequiredCertifications: RoleRequiredCertificationRow[];
   roleRequiredQualifications: RoleRequiredQualificationRow[];
   memberCertifications: MemberCertificationRow[];
@@ -104,38 +304,26 @@ export function getRoleRequirementStatus(params: {
     return { kind: "no_role", label: "No role", missingCount: 0 };
   }
 
-  const currentCertificationIds = new Set(
-    memberCertifications
-      .filter((record) => isCertificationCurrent(record.expires_at))
-      .map((record) => record.certification_id),
-  );
+  const state = buildRoleRequirementState({
+    memberDepartmentRoleId,
+    certificationTypes: params.certificationTypes ?? [],
+    qualificationTypes: params.qualificationTypes ?? [],
+    roleRequiredCertifications,
+    roleRequiredQualifications,
+    memberCertifications,
+    memberQualifications,
+  });
 
-  const currentQualificationIds = new Set(memberQualifications.map((record) => record.qualification_id));
-
-  const selectedRoleCertRequirements = roleRequiredCertifications.filter(
-    (row) => row.department_role_id === memberDepartmentRoleId,
-  );
-  const selectedRoleQualRequirements = roleRequiredQualifications.filter(
-    (row) => row.department_role_id === memberDepartmentRoleId,
-  );
+  const selectedRoleCertRequirements = state.selectedRoleCertRequirements;
+  const selectedRoleQualRequirements = state.selectedRoleQualRequirements;
 
   const requiredCount = selectedRoleCertRequirements.length + selectedRoleQualRequirements.length;
   if (requiredCount === 0) {
     return { kind: "no_requirements", label: "No requirements", missingCount: 0 };
   }
 
-  let missingCount = 0;
-  for (const requirement of selectedRoleCertRequirements) {
-    if (!currentCertificationIds.has(requirement.certification_id)) {
-      missingCount += 1;
-    }
-  }
-
-  for (const requirement of selectedRoleQualRequirements) {
-    if (!currentQualificationIds.has(requirement.qualification_id)) {
-      missingCount += 1;
-    }
-  }
+  const missingCount = selectedRoleCertRequirements.filter((row) => !row.isCurrent).length +
+    selectedRoleQualRequirements.filter((row) => !row.isCurrent).length;
 
   if (missingCount === 0) {
     return { kind: "complete", label: "Complete", missingCount: 0 };
@@ -169,46 +357,83 @@ export function getRoleRequirementComparison(params: {
 
   const status = getRoleRequirementStatus({
     memberDepartmentRoleId,
+    certificationTypes,
+    qualificationTypes,
     roleRequiredCertifications,
     roleRequiredQualifications,
     memberCertifications,
     memberQualifications,
   });
 
-  const certificationLookup = new Map(certificationTypes.map((row) => [row.id, row.name]));
-  const qualificationLookup = new Map(qualificationTypes.map((row) => [row.id, row.name]));
+  const state = buildRoleRequirementState({
+    memberDepartmentRoleId,
+    certificationTypes,
+    qualificationTypes,
+    roleRequiredCertifications,
+    roleRequiredQualifications,
+    memberCertifications,
+    memberQualifications,
+  });
 
-  const currentCertificationIds = new Set(
-    memberCertifications
-      .filter((record) => isCertificationCurrent(record.expires_at))
-      .map((record) => record.certification_id),
-  );
-  const currentQualificationIds = new Set(memberQualifications.map((record) => record.qualification_id));
+  const requiredCertifications = state.selectedRoleCertRequirements.map((row) => ({
+    id: row.id,
+    name: row.name,
+    isCurrent: row.isCurrent,
+  }));
 
-  const requiredCertifications = memberDepartmentRoleId
-    ? roleRequiredCertifications
-        .filter((row) => row.department_role_id === memberDepartmentRoleId)
-        .map((row) => ({
-          id: row.certification_id,
-          name: certificationLookup.get(row.certification_id) ?? "Unknown Certification",
-          isCurrent: currentCertificationIds.has(row.certification_id),
-        }))
-    : [];
-
-  const requiredQualifications = memberDepartmentRoleId
-    ? roleRequiredQualifications
-        .filter((row) => row.department_role_id === memberDepartmentRoleId)
-        .map((row) => ({
-          id: row.qualification_id,
-          name: qualificationLookup.get(row.qualification_id) ?? "Unknown Qualification",
-          isCurrent: currentQualificationIds.has(row.qualification_id),
-        }))
-    : [];
+  const requiredQualifications = state.selectedRoleQualRequirements.map((row) => ({
+    id: row.id,
+    name: row.name,
+    isCurrent: row.isCurrent,
+  }));
 
   return {
     status,
     requiredCertifications,
     requiredQualifications,
+  };
+}
+
+export function buildQualificationReadinessAdapter(params: {
+  memberDepartmentRoleId: string | null;
+  certificationTypes: CatalogRow[];
+  qualificationTypes: CatalogRow[];
+  roleRequiredCertifications: RoleRequiredCertificationRow[];
+  roleRequiredQualifications: RoleRequiredQualificationRow[];
+  memberCertifications: MemberCertificationRow[];
+  memberQualifications: MemberQualificationRow[];
+}): QualificationReadinessAdapter {
+  const state = buildRoleRequirementState(params);
+
+  const requiredNames = new Map<string, string>();
+  for (const requirement of state.selectedRoleCertRequirements) {
+    if (requirement.normalizedName.length > 0) {
+      requiredNames.set(requirement.normalizedName, requirement.name);
+    }
+  }
+
+  for (const requirement of state.selectedRoleQualRequirements) {
+    if (requirement.normalizedName.length > 0 && !requiredNames.has(requirement.normalizedName)) {
+      requiredNames.set(requirement.normalizedName, requirement.name);
+    }
+  }
+
+  const completedNames = new Map<string, string>();
+  for (const [normalizedName, displayName] of requiredNames) {
+    if (
+      state.currentNonExpiringCertificationNames.has(normalizedName) ||
+      state.currentQualificationNames.has(normalizedName)
+    ) {
+      completedNames.set(normalizedName, displayName);
+    }
+  }
+
+  return {
+    requiredQualifications: Array.from(requiredNames.values()),
+    completedQualifications: Array.from(completedNames.values()),
+    missingQualifications: Array.from(requiredNames.entries())
+      .filter(([normalizedName]) => !completedNames.has(normalizedName))
+      .map(([, displayName]) => displayName),
   };
 }
 

@@ -1,4 +1,3 @@
-import PageLayout from "@/components/layout/PageLayout";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
@@ -76,12 +75,12 @@ export default async function FireHoseDetailPage({ params }: FireHoseDetailPageP
 	];
 
 	return (
-		<PageLayout>
+		
 			<div className="space-y-8">
 				<div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
 					<div>
-						<p className="text-sm font-semibold uppercase tracking-[0.3em] text-red-500">Inventory</p>
-						<h1 className="mt-2 text-5xl font-black tracking-tight text-white">{hose.inventoryNumber}</h1>
+						<p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">Inventory</p>
+						<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">{hose.inventoryNumber}</h1>
 						<p className="mt-3 max-w-2xl text-lg text-neutral-400">
 							{hose.hoseSize} • {hose.length}
 						</p>
@@ -194,7 +193,7 @@ export default async function FireHoseDetailPage({ params }: FireHoseDetailPageP
 					/>
 				</SectionShell>
 			</div>
-		</PageLayout>
+		
 	);
 }
 

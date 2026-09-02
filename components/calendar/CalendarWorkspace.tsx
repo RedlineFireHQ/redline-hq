@@ -11,7 +11,6 @@ import {
   Trash2,
   UserRound,
 } from "lucide-react";
-import InventoryPageShell from "@/components/inventory/InventoryPageShell";
 import { supabase } from "@/lib/supabase";
 
 type CurrentMemberRole = "firefighter" | "officer" | "administrator";
@@ -771,11 +770,22 @@ export default function CalendarWorkspace({
 
   return (
     <>
-      <InventoryPageShell
-        eyebrow="Calendar"
-        title="Calendar Quick Tab"
-        subtitle="Track department activities, answer what is happening today, and plan scheduled operations across the month."
-      >
+      <div className="space-y-8">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">
+            Calendar Quick Tab
+          </p>
+          <h1
+            className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white"
+            style={{ fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif' }}
+          >
+            Calendar
+          </h1>
+          <p className="mt-3 max-w-3xl text-lg text-neutral-400">
+            Track department activities, answer what is happening today, and plan scheduled operations across the month.
+          </p>
+        </div>
+
         {canManageActivities ? (
           <div className="mb-6">
             <button
@@ -1078,7 +1088,7 @@ export default function CalendarWorkspace({
             </div>
           </div>
         </section>
-      </InventoryPageShell>
+      </div>
 
       <ActivityModal
         isOpen={isModalOpen}

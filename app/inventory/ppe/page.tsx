@@ -1,4 +1,3 @@
-import PageLayout from "@/components/layout/PageLayout";
 import PpeWorkspace, {
   type PpeRow,
 } from "@/components/inventory/PpeWorkspace";
@@ -184,7 +183,7 @@ export default async function PpeInventoryPage() {
   }
 
   return (
-    <PageLayout>
+    
       <PpeWorkspace
         departmentName={departmentName}
         canManagePpe={canManagePpe}
@@ -193,6 +192,6 @@ export default async function PpeInventoryPage() {
         initialError={initialError}
         readinessState={readinessState}
       />
-    </PageLayout>
+    
   );
 }

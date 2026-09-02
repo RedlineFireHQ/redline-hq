@@ -1,4 +1,3 @@
-import PageLayout from "@/components/layout/PageLayout";
 import ScbaPackWorkspace from "@/components/inventory/ScbaPackWorkspace";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentMember } from "@/lib/current-member";
@@ -78,7 +77,7 @@ export default async function ScbaPacksInventoryPage() {
 	}
 
 	return (
-		<PageLayout>
+		
 			<ScbaPackWorkspace
 				departmentId={departmentId}
 				departmentName={departmentName}
@@ -86,6 +85,6 @@ export default async function ScbaPacksInventoryPage() {
 				initialError={initialError}
 				canDeletePack={canDeletePack}
 			/>
-		</PageLayout>
+		
 	);
 }

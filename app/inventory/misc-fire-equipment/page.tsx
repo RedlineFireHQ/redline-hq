@@ -1,6 +1,6 @@
-import PageLayout from "@/components/layout/PageLayout";
 import MiscFireEquipmentWorkspace, { type MiscFireEquipmentRow } from "@/components/inventory/MiscFireEquipmentWorkspace";
 import type { MiscFireEquipmentApparatusOption } from "@/components/inventory/MiscFireEquipmentFormModal";
+import { getActiveApparatusOptions } from "@/lib/database";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentMember } from "@/lib/current-member";
 
@@ -45,7 +45,7 @@ export default async function MiscFireEquipmentInventoryPage() {
 		const [
 			{ data: departmentData },
 			{ data: equipmentData, error },
-			{ data: apparatusData },
+			apparatusData,
 		] = await Promise.all([
 			supabase.from("departments").select("name").eq("id", departmentId).maybeSingle(),
 			supabase
@@ -53,7 +53,7 @@ export default async function MiscFireEquipmentInventoryPage() {
 				.select("id, equipment_name, asset_number, location_type, apparatus_id, other_location, status, date_placed_in_service, manufacturer, model, notes, photo_path, created_at, updated_at")
 				.eq("department_id", departmentId)
 				.order("equipment_name", { ascending: true }),
-			supabase.from("apparatus").select("id, name").eq("department_id", departmentId).order("name", { ascending: true }),
+			getActiveApparatusOptions({ client: supabase, departmentId }),
 		]);
 
 		departmentName = typeof departmentData?.name === "string" ? departmentData.name : null;
@@ -63,10 +63,10 @@ export default async function MiscFireEquipmentInventoryPage() {
 			initialError = error.message || "Unable to load miscellaneous fire equipment.";
 		}
 
-		apparatusOptions = ((apparatusData ?? []) as Array<Record<string, unknown>>)
+		apparatusOptions = apparatusData
 			.map((row) => ({
-				id: typeof row.id === "string" ? row.id : String(row.id ?? ""),
-				name: normalizeDisplayName(row.name, typeof row.id === "string" ? row.id : String(row.id ?? "")),
+				id: row.id,
+				name: normalizeDisplayName(row.name, row.id),
 			}))
 			.filter((row) => Boolean(row.id));
 
@@ -136,7 +136,7 @@ export default async function MiscFireEquipmentInventoryPage() {
 	}
 
 	return (
-		<PageLayout>
+		
 			<MiscFireEquipmentWorkspace
 				departmentName={departmentName}
 				canManageMiscFireEquipment={canManageMiscFireEquipment}
@@ -144,6 +144,6 @@ export default async function MiscFireEquipmentInventoryPage() {
 				initialRows={initialRows}
 				initialError={initialError}
 			/>
-		</PageLayout>
+		
 	);
 }

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import PageLayout from "@/components/layout/PageLayout";
+import { getActiveApparatusOptions } from "@/lib/database";
 import { MAINTENANCE_TYPE_OPTIONS } from "@/lib/maintenance";
 import { supabase } from "@/lib/supabase";
 
@@ -131,18 +132,15 @@ export default function MaintenancePage() {
     setIsLoading(true);
     setErrorMessage(null);
 
-    const [apparatusResult, membersResult] = await Promise.all([
-      supabase.from("apparatus").select("id, name").order("name"),
+    const [activeApparatusOptions, membersResult] = await Promise.all([
+      getActiveApparatusOptions(),
       supabase.from("members").select("id, first_name, last_name"),
     ]);
 
-    const normalizedApparatus = (apparatusResult.data ?? []).map((row) => {
-      const record = row as Record<string, unknown>;
-      const id = typeof record.id === "string" ? record.id : String(record.id ?? "");
-      const name = typeof record.name === "string" ? record.name : id;
-
-      return { id, name };
-    });
+    const normalizedApparatus = activeApparatusOptions.map((row) => ({
+      id: row.id,
+      name: typeof row.name === "string" ? row.name : row.id,
+    }));
 
     const apparatusMap = normalizedApparatus.reduce<Record<string, string>>((acc, apparatus) => {
       acc[apparatus.id] = apparatus.name;
@@ -195,10 +193,9 @@ export default function MaintenancePage() {
     setApparatusNameById(apparatusMap);
     setMemberNameById(membersMap);
 
-    if (apparatusResult.error || membersResult.error || recordsResult.error) {
+    if (membersResult.error || recordsResult.error) {
       setErrorMessage(
         recordsResult.error?.message ||
-          apparatusResult.error?.message ||
           membersResult.error?.message ||
           "Unable to load maintenance records."
       );
@@ -286,12 +283,20 @@ export default function MaintenancePage() {
   ]);
 
   return (
-    <PageLayout>
+    <PageLayout
+      environmentBackgroundUrl="/branding/images/Maintenancepage.png"
+      environmentBackgroundPosition="left center"
+    >
       <div className="space-y-8">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.28em] text-red-500">Operations</p>
-            <h1 className="mt-2 text-5xl font-black tracking-tight text-white">Maintenance</h1>
+            <h1
+              className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white"
+              style={{ fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif' }}
+            >
+              Maintenance
+            </h1>
             <p className="mt-3 max-w-3xl text-lg text-neutral-400">
               Track completed service work tied to deficiencies, apparatus readiness, and ongoing fleet reliability.
             </p>
@@ -407,7 +412,7 @@ export default function MaintenancePage() {
           ) : filteredRecords.length === 0 ? (
             <div className="px-6 py-10 text-sm text-zinc-400">No maintenance records found.</div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="max-h-[calc(3.5rem+8*3.75rem)] overflow-x-auto overflow-y-auto">
               <table className="min-w-full divide-y divide-white/10 text-sm">
                 <thead className="bg-[#0d0d0d] text-left text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">
                   <tr>

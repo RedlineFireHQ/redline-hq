@@ -1005,7 +1005,12 @@ export default function ReportsWorkspace({
 		<div className="space-y-6">
 			<section className="rounded-2xl border border-white/10 bg-[#111111] p-6 shadow-[0_20px_50px_rgba(0,0,0,0.3)]">
 				<p className="text-xs font-semibold uppercase tracking-[0.24em] text-red-500">Reports</p>
-				<h1 className="mt-2 text-4xl font-black tracking-tight text-white">Reports</h1>
+				<h1
+					className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white"
+					style={{ fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif' }}
+				>
+					Reports
+				</h1>
 				<p className="mt-2 text-sm text-zinc-400">Search and generate department reports.</p>
 				{departmentName ? (
 					<p className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">{departmentName}</p>

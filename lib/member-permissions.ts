@@ -84,3 +84,28 @@ export async function canManageApparatus(
 
   return Boolean(data as RpcBooleanRow);
 }
+
+export async function canManageDocuments(
+  supabase: SupabaseClient,
+  departmentId: string,
+  role: unknown,
+): Promise<boolean> {
+  if (!departmentId) {
+    return false;
+  }
+
+  if (isAdministratorRole(role)) {
+    return true;
+  }
+
+  const { data, error } = await supabase.rpc("member_has_app_permission", {
+    p_department_id: departmentId,
+    p_permission_key: "documents_management",
+  });
+
+  if (error) {
+    return false;
+  }
+
+  return Boolean(data as RpcBooleanRow);
+}

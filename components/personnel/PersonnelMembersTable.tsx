@@ -9,7 +9,6 @@ type PersonnelMemberRow = {
   last_name: string | null;
   rank: string | null;
   active: boolean | null;
-  status: string | null;
   department_role_name: string | null;
   role_requirement_label: string;
 };
@@ -26,12 +25,7 @@ export default function PersonnelMembersTable({
   const [statusFilter, setStatusFilter] = useState<"active" | "inactive" | "all">("active");
 
   function isMemberActive(member: PersonnelMemberRow) {
-    if (typeof member.active === "boolean") {
-      return member.active;
-    }
-
-    const statusKey = (member.status ?? "").trim().toLowerCase();
-    return statusKey === "active" || statusKey === "available";
+    return member.active !== false;
   }
 
   const filteredMembers = useMemo(() => {
@@ -108,14 +102,13 @@ export default function PersonnelMembersTable({
               <th className="px-6 py-4 text-left">Department Role</th>
               <th className="px-6 py-4 text-left">Role Requirements</th>
               <th className="px-6 py-4 text-left">Status</th>
-              <th className="px-6 py-4 text-left">Assigned Apparatus</th>
             </tr>
           </thead>
 
           <tbody>
             {filteredMembers.length === 0 ? (
               <tr>
-                <td className="px-6 py-8 text-center text-neutral-400" colSpan={6}>
+                <td className="px-6 py-8 text-center text-neutral-400" colSpan={5}>
                   No firefighters found matching your search.
                 </td>
               </tr>
@@ -156,11 +149,8 @@ export default function PersonnelMembersTable({
 
                   <td className="px-6 py-4">
                     {(() => {
-                      const normalizedStatus = member.status?.trim();
-                      const statusLabel = normalizedStatus || (member.active === false ? "Inactive" : "Active");
-                      const statusKey = statusLabel.toLowerCase();
-                      const isActive =
-                        member.active === true || statusKey === "active" || statusKey === "available";
+                      const isActive = isMemberActive(member);
+                      const statusLabel = isActive ? "Active" : "Inactive";
 
                       return (
                         <span
@@ -172,10 +162,6 @@ export default function PersonnelMembersTable({
                         </span>
                       );
                     })()}
-                  </td>
-
-                  <td className="px-6 py-4">
-                    Unassigned
                   </td>
                 </tr>
               ))

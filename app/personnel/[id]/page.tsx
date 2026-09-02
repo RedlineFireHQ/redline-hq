@@ -4,7 +4,6 @@ import EditMemberButton from "@/components/personnel/EditMemberButton";
 import MemberReadinessCard from "@/components/personnel/MemberReadinessCard";
 import PersonnelEmsTracksSection from "@/components/personnel/PersonnelEmsTracksSection";
 import PersonnelCertificationsSection from "@/components/personnel/PersonnelCertificationsSection";
-import PersonnelQualificationsSection from "@/components/personnel/PersonnelQualificationsSection";
 import RoleRequirementsSection from "@/components/personnel/RoleRequirementsSection";
 import CreateAuthAccountButton from "@/components/personnel/CreateAuthAccountButton";
 import type { AppPermissionOption } from "@/lib/app-permissions";
@@ -22,11 +21,17 @@ import {
   buildMemberReadinessScore,
   getCertificationStatus,
   type DeficiencyReadinessInput,
+  type ReadinessCoachItem,
+  type ReadinessFactor,
   type QualificationReadinessInput,
   type RequirementInput,
 } from "@/lib/readiness/member-readiness";
 import { buildScoredCertificationStatuses } from "@/lib/readiness/scored-certifications";
-import { getRoleRequirementComparison, type CatalogRow } from "@/lib/role-requirements";
+import {
+  buildCanonicalMemberCertificationRows,
+  buildQualificationReadinessAdapter,
+  type CatalogRow,
+} from "@/lib/role-requirements";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { calculateComplianceBucketHours } from "@/lib/training/compliance-buckets";
 import { notFound, redirect } from "next/navigation";
@@ -291,6 +296,112 @@ function normalizeDeficiencyPriority(value: DeficiencyAssignedRow["priority_info
   return {
     name: typeof relation?.name === "string" ? relation.name : null,
   };
+}
+
+type CoachActionViewModel = {
+  id: string;
+  title: string;
+  needsAttention: string;
+  action: string;
+  impactPercent: number | null;
+};
+
+const CATEGORY_WEIGHT_PERCENT: Partial<Record<ReadinessFactor["category"], number>> = {
+  certification: 40,
+  training: 40,
+  qualification: 10,
+  other: 10,
+};
+
+function roundToTenths(value: number) {
+  return Math.round(value * 10) / 10;
+}
+
+function parseCoachNeedsAndAction(item: ReadinessCoachItem) {
+  const explanation = item.explanation.trim();
+  const detailedMatch = explanation.match(/What is wrong:\s*([\s\S]*?)\s*Action:\s*([\s\S]+)$/i);
+
+  if (detailedMatch) {
+    const needsAttention = detailedMatch[1].replace(/\s*Why it matters:[\s\S]*$/i, "").trim();
+    const action = detailedMatch[2].trim();
+    return {
+      needsAttention: needsAttention || `${item.title} is not currently meeting the readiness target.`,
+      action: action || "Complete the recommended corrective action.",
+    };
+  }
+
+  return {
+    needsAttention: `${item.currentValue} (target: ${item.targetValue}).`,
+    action: explanation,
+  };
+}
+
+function calculateCoachImpactPercent(input: {
+  scorePercent: number | null;
+  factorId: string;
+  factors: ReadinessFactor[];
+}) {
+  if (input.scorePercent === null) {
+    return null;
+  }
+
+  const factor = input.factors.find((row) => row.id === input.factorId);
+  if (!factor || factor.completed) {
+    return null;
+  }
+
+  const categoryWeight = CATEGORY_WEIGHT_PERCENT[factor.category];
+  if (typeof categoryWeight !== "number" || categoryWeight <= 0) {
+    return null;
+  }
+
+  const categoryFactors = input.factors.filter((row) => row.category === factor.category);
+  const totalCategoryWeight = categoryFactors.reduce((total, row) => {
+    const weight = row.weightPercent ?? 1;
+    return weight > 0 ? total + weight : total;
+  }, 0);
+  const factorWeight = factor.weightPercent ?? 1;
+
+  if (totalCategoryWeight <= 0 || factorWeight <= 0) {
+    return null;
+  }
+
+  const completionGap = Math.max(0, 100 - factor.completionPercent);
+  if (completionGap <= 0) {
+    return null;
+  }
+
+  const categoryLift = (completionGap * factorWeight) / totalCategoryWeight;
+  const scoreLift = (categoryLift * categoryWeight) / 100;
+  const maxPossibleLift = Math.max(0, 100 - input.scorePercent);
+  const safeLift = Math.min(scoreLift, maxPossibleLift);
+
+  if (!Number.isFinite(safeLift) || safeLift <= 0) {
+    return null;
+  }
+
+  return roundToTenths(safeLift);
+}
+
+function buildCoachActionViewModels(input: {
+  scorePercent: number | null;
+  coachItems: ReadinessCoachItem[];
+  factors: ReadinessFactor[];
+}) {
+  return input.coachItems.slice(0, 3).map((item) => {
+    const parsed = parseCoachNeedsAndAction(item);
+    return {
+      id: item.factorId,
+      title: item.title,
+      needsAttention: parsed.needsAttention,
+      action: parsed.action,
+      impactPercent: calculateCoachImpactPercent({
+        scorePercent: input.scorePercent,
+        factorId: item.factorId,
+        factors: input.factors,
+      }),
+    } satisfies CoachActionViewModel;
+  });
 }
 
 interface PersonnelProfilePageProps {
@@ -801,6 +912,26 @@ export default async function PersonnelProfilePage({
 
   const totalTrainingHours = trainingHistory.reduce((total, item) => total + (item.hoursCredit ?? 0), 0);
 
+  const canonicalMemberCertificationRows = buildCanonicalMemberCertificationRows({
+    certificationTypes: certificationTypes.map((row) => ({ id: row.id, name: row.name, active: row.active } satisfies CatalogRow)),
+    qualificationTypes: qualificationTypes.map((row) => ({ id: row.id, name: row.name, active: row.active } satisfies CatalogRow)),
+    memberCertifications: memberCertifications,
+    memberQualifications: memberQualifications,
+  }).map((row) => ({
+    id: row.id ?? `${row.sourceTable}:${row.certification_id}`,
+    member_id: row.member_id ?? String(member.id),
+    certification_id: row.certification_id,
+    certificate_number: row.certificate_number ?? null,
+    issued_at: row.issued_at ?? "",
+    expires_at: row.expires_at,
+    supporting_document_id: row.supporting_document_id ?? null,
+    notes: row.notes ?? null,
+    created_by: row.created_by ?? null,
+    updated_by: row.updated_by ?? null,
+    created_at: row.created_at ?? row.issued_at ?? "",
+    updated_at: row.updated_at ?? row.created_at ?? row.issued_at ?? "",
+  }));
+
   const certificationNameById = new Map(certificationTypes.map((row) => [row.id, row.name]));
   const certificationTypeById = buildCertificationTypeMetaById(
     certificationTypes.map((row) => ({
@@ -810,7 +941,7 @@ export default async function PersonnelProfilePage({
     })),
   );
   const authoritativeEmsCertifications = resolveAuthoritativeEmsCertificationsForMember({
-    memberCertifications: memberCertifications.map((row) => ({
+    memberCertifications: canonicalMemberCertificationRows.map((row) => ({
       member_id: row.member_id,
       certification_id: row.certification_id,
       certificate_number: row.certificate_number,
@@ -829,7 +960,7 @@ export default async function PersonnelProfilePage({
     profile: findCurrentTrackProfile(emsTrackProfiles, "nremt"),
     authoritativeCertification: authoritativeEmsCertifications.nremt,
   });
-  const certificationStatuses = memberCertifications.map((row) => {
+  const certificationStatuses = canonicalMemberCertificationRows.map((row) => {
     const genericStatus = getCertificationStatus(row.expires_at, department.settings.certificationWarningDays);
     const certMeta = certificationTypeById.get(row.certification_id);
     const sourceTrack = certMeta?.authority === "iowa"
@@ -851,21 +982,21 @@ export default async function PersonnelProfilePage({
 
   const memberDepartmentRoleId = typeof member.department_role_id === "string" ? member.department_role_id : null;
   const departmentRoleById = new Map(departmentRoles.map((row) => [row.id, row.name]));
-  const roleRequirementComparison = getRoleRequirementComparison({
+  const qualificationReadinessAdapter = buildQualificationReadinessAdapter({
     memberDepartmentRoleId,
     certificationTypes: certificationTypes.map((row) => ({ id: row.id, name: row.name, active: row.active } satisfies CatalogRow)),
     qualificationTypes: qualificationTypes.map((row) => ({ id: row.id, name: row.name, active: row.active } satisfies CatalogRow)),
     roleRequiredCertifications,
     roleRequiredQualifications,
-    memberCertifications: memberCertifications.map((row) => ({ certification_id: row.certification_id, expires_at: row.expires_at })),
+    memberCertifications: canonicalMemberCertificationRows.map((row) => ({ certification_id: row.certification_id, expires_at: row.expires_at })),
     memberQualifications: memberQualifications.map((row) => ({ qualification_id: row.qualification_id })),
   });
   const qualificationReadiness: QualificationReadinessInput = {
     hasAssignedRole: memberDepartmentRoleId !== null,
     roleName: memberDepartmentRoleId ? departmentRoleById.get(memberDepartmentRoleId) ?? null : null,
-    requiredQualifications: roleRequirementComparison.requiredQualifications.map((item) => item.name),
-    completedQualifications: roleRequirementComparison.requiredQualifications.filter((item) => item.isCurrent).map((item) => item.name),
-    missingQualifications: roleRequirementComparison.requiredQualifications.filter((item) => !item.isCurrent).map((item) => item.name),
+    requiredQualifications: qualificationReadinessAdapter.requiredQualifications,
+    completedQualifications: qualificationReadinessAdapter.completedQualifications,
+    missingQualifications: qualificationReadinessAdapter.missingQualifications,
   };
   const scoredCertificationStatuses = buildScoredCertificationStatuses({
     memberDepartmentRoleId,
@@ -972,6 +1103,11 @@ export default async function PersonnelProfilePage({
   const readinessMessage = readinessScore.scorePercent === null
     ? readinessScore.configurationMessage
     : `${Math.round(readinessScore.remainingPercent ?? 0)}% to reach 100%`;
+  const coachActions = buildCoachActionViewModels({
+    scorePercent: readinessScore.scorePercent,
+    coachItems: readinessScore.coachItems,
+    factors: readinessScore.factors,
+  });
 
   return (
     <PageLayout
@@ -988,21 +1124,21 @@ export default async function PersonnelProfilePage({
         </p>
       </div>
 
-      <div className="mb-8">
-        <MemberReadinessCard
-          score={readinessScore.scorePercent}
-          message={readinessMessage}
-          coachMessage={readinessScore.coachItems[0]?.explanation ?? null}
-        />
-      </div>
+      <div className="mb-8 grid gap-6 xl:grid-cols-2">
+        <div>
+          <MemberReadinessCard
+            score={readinessScore.scorePercent}
+            message={readinessMessage}
+            coachActions={coachActions}
+          />
+        </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-6">
+        <div className="h-full rounded-xl border border-neutral-800 bg-neutral-900 p-6">
           <h2 className="mb-6 text-2xl font-semibold">
             Member Information
           </h2>
 
-          <div className="space-y-4 text-neutral-300">
+          <div className="space-y-4 text-neutral-300 lg:grid lg:grid-cols-2 lg:gap-x-10 lg:gap-y-4 lg:space-y-0">
             <p>
               <strong>Email:</strong> {email}
             </p>
@@ -1016,11 +1152,6 @@ export default async function PersonnelProfilePage({
             </p>
 
             <p>
-              <strong>Assigned Apparatus:</strong>{" "}
-              Unassigned
-            </p>
-
-            <p>
               <strong>Hire / Start Date:</strong> {hireStartDate ? formatDateOnly(hireStartDate) : "-"}
             </p>
 
@@ -1029,7 +1160,7 @@ export default async function PersonnelProfilePage({
             </p>
           </div>
 
-          <div className="mt-5">
+          <div className="mt-5 flex flex-wrap gap-3">
             <EditMemberButton
               memberId={String(member.id)}
               initialFirstName={firstName}
@@ -1060,32 +1191,6 @@ export default async function PersonnelProfilePage({
             departmentRoles={departmentRoles}
           />
         </div>
-
-        <PersonnelQualificationsSection
-          departmentId={currentMember.departmentId}
-          memberId={String(member.id)}
-          editorMemberId={currentMember.id}
-          canManageQualifications={currentMember.role === "administrator"}
-          memberDepartmentRoleId={memberDepartmentRoleId}
-          memberRoleName={memberDepartmentRoleId ? departmentRoleById.get(memberDepartmentRoleId) ?? null : null}
-          qualificationTypes={qualificationTypes}
-          memberQualifications={memberQualifications}
-          roleRequiredQualifications={roleRequiredQualifications}
-          departmentDocuments={departmentDocuments}
-        />
-      </div>
-
-      <div className="mt-6">
-        <RoleRequirementsSection
-          departmentRoles={departmentRoles}
-          memberDepartmentRoleId={typeof member.department_role_id === "string" ? member.department_role_id : null}
-          certificationTypes={certificationTypes}
-          qualificationTypes={qualificationTypes}
-          memberCertifications={memberCertifications}
-          memberQualifications={memberQualifications}
-          roleRequiredCertifications={roleRequiredCertifications}
-          roleRequiredQualifications={roleRequiredQualifications}
-        />
       </div>
 
       <div className="mt-6">
@@ -1095,7 +1200,7 @@ export default async function PersonnelProfilePage({
           memberId={String(member.id)}
           warningDays={department.settings.certificationWarningDays}
           certificationTypes={certificationTypes}
-          memberCertifications={memberCertifications}
+          memberCertifications={canonicalMemberCertificationRows}
           departmentDocuments={departmentDocuments}
         />
       </div>
@@ -1185,6 +1290,19 @@ export default async function PersonnelProfilePage({
             </div>
           </div>
         )}
+      </div>
+
+      <div className="mt-6">
+        <RoleRequirementsSection
+          departmentRoles={departmentRoles}
+          memberDepartmentRoleId={typeof member.department_role_id === "string" ? member.department_role_id : null}
+          certificationTypes={certificationTypes}
+          qualificationTypes={qualificationTypes}
+          memberCertifications={canonicalMemberCertificationRows}
+          memberQualifications={memberQualifications}
+          roleRequiredCertifications={roleRequiredCertifications}
+          roleRequiredQualifications={roleRequiredQualifications}
+        />
       </div>
     </PageLayout>
   );

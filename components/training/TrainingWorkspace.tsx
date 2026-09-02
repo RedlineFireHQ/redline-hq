@@ -1108,6 +1108,7 @@ export default function TrainingWorkspace({
           .insert({
             department_id: departmentId,
             category: "Department Documents",
+            source_kind: "training",
             title: materialTitle,
             description: null,
             document_number: null,
@@ -2649,7 +2650,10 @@ export default function TrainingWorkspace({
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-red-500">
             Training
           </p>
-          <h1 className="mt-3 text-4xl font-black tracking-tight text-white">
+          <h1
+          className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white"
+          style={{ fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif' }}
+          >
             My Training
           </h1>
           <p className="mt-2 max-w-3xl text-neutral-400">
@@ -3194,7 +3198,10 @@ export default function TrainingWorkspace({
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-red-500">
             Training
           </p>
-          <h1 className="mt-3 text-4xl font-black tracking-tight text-white">
+          <h1
+          className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white"
+          style={{ fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif' }}
+          >
             Training Workspace
           </h1>
           <p className="mt-2 max-w-3xl text-neutral-400">

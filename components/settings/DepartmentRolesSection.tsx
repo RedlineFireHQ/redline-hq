@@ -18,8 +18,6 @@ type DepartmentRoleRow = {
 type DepartmentRoleFormState = {
   name: string;
   code: string;
-  description: string;
-  sort_order: string;
   active: boolean;
 };
 
@@ -33,10 +31,17 @@ function emptyFormState(): DepartmentRoleFormState {
   return {
     name: "",
     code: "",
-    description: "",
-    sort_order: "0",
     active: true,
   };
+}
+
+function getNextSortOrder(roles: DepartmentRoleRow[]) {
+  if (roles.length === 0) {
+    return 0;
+  }
+
+  const maxSortOrder = roles.reduce((max, role) => Math.max(max, role.sort_order), 0);
+  return maxSortOrder + 1;
 }
 
 function normalizeValue(value: string) {
@@ -86,8 +91,6 @@ export default function DepartmentRolesSection({
     setFormState({
       name: role.name,
       code: role.code,
-      description: role.description ?? "",
-      sort_order: String(role.sort_order),
       active: role.active,
     });
     setIsModalOpen(true);
@@ -109,8 +112,9 @@ export default function DepartmentRolesSection({
 
     const name = formState.name.trim();
     const code = formState.code.trim();
-    const description = formState.description.trim();
-    const sortOrderValue = Number.parseInt(formState.sort_order, 10);
+    const existingRole = editingRoleId ? roles.find((role) => role.id === editingRoleId) ?? null : null;
+    const sortOrderValue = existingRole ? existingRole.sort_order : getNextSortOrder(roles);
+    const descriptionValue = existingRole?.description ?? null;
 
     if (!name) {
       setSaveError("Role name is required.");
@@ -119,11 +123,6 @@ export default function DepartmentRolesSection({
 
     if (!code) {
       setSaveError("Role code is required.");
-      return;
-    }
-
-    if (!Number.isFinite(sortOrderValue)) {
-      setSaveError("Sort order must be a valid number.");
       return;
     }
 
@@ -163,7 +162,7 @@ export default function DepartmentRolesSection({
           .update({
             name,
             code,
-            description: description || null,
+            description: descriptionValue,
             sort_order: sortOrderValue,
             active: formState.active,
             updated_by: currentMemberId,
@@ -188,7 +187,7 @@ export default function DepartmentRolesSection({
                   ...role,
                   name,
                   code,
-                  description: description || null,
+                  description: descriptionValue,
                   sort_order: sortOrderValue,
                   active: formState.active,
                   updated_at: new Date().toISOString(),
@@ -203,7 +202,7 @@ export default function DepartmentRolesSection({
             department_id: departmentId,
             name,
             code,
-            description: description || null,
+            description: null,
             sort_order: sortOrderValue,
             active: formState.active,
             created_by: currentMemberId,
@@ -278,43 +277,44 @@ export default function DepartmentRolesSection({
               <tr>
                 <th className="px-6 py-4 text-left text-xs uppercase tracking-[0.18em] text-neutral-400">Name</th>
                 <th className="px-6 py-4 text-left text-xs uppercase tracking-[0.18em] text-neutral-400">Code</th>
-                <th className="px-6 py-4 text-left text-xs uppercase tracking-[0.18em] text-neutral-400">Description</th>
-                <th className="px-6 py-4 text-left text-xs uppercase tracking-[0.18em] text-neutral-400">Sort</th>
                 <th className="px-6 py-4 text-left text-xs uppercase tracking-[0.18em] text-neutral-400">Status</th>
                 <th className="px-6 py-4 text-right text-xs uppercase tracking-[0.18em] text-neutral-400">Edit</th>
               </tr>
             </thead>
-            <tbody>
-              {orderedRoles.map((role) => (
-                <tr key={role.id} className="border-b border-neutral-800 transition hover:bg-neutral-800/60">
-                  <td className="px-6 py-4 font-medium text-white">{role.name}</td>
-                  <td className="px-6 py-4 text-neutral-300">{role.code}</td>
-                  <td className="px-6 py-4 text-neutral-300">{role.description?.trim() || "-"}</td>
-                  <td className="px-6 py-4 text-neutral-300">{role.sort_order}</td>
-                  <td className="px-6 py-4">
-                    <span
-                      className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] ${
-                        role.active
-                          ? "border-green-500/30 bg-green-500/10 text-green-300"
-                          : "border-neutral-600/40 bg-neutral-800 text-neutral-300"
-                      }`}
-                    >
-                      {role.active ? "Active" : "Inactive"}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <button
-                      type="button"
-                      onClick={() => openEditModal(role)}
-                      className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-zinc-200 transition hover:bg-white/[0.08]"
-                    >
-                      Edit
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
           </table>
+
+          <div className="max-h-[15.5rem] overflow-y-auto">
+            <table className="w-full">
+              <tbody>
+                {orderedRoles.map((role) => (
+                  <tr key={role.id} className="border-b border-neutral-800 transition hover:bg-neutral-800/60">
+                    <td className="px-6 py-4 font-medium text-white">{role.name}</td>
+                    <td className="px-6 py-4 text-neutral-300">{role.code}</td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] ${
+                          role.active
+                            ? "border-green-500/30 bg-green-500/10 text-green-300"
+                            : "border-neutral-600/40 bg-neutral-800 text-neutral-300"
+                        }`}
+                      >
+                        {role.active ? "Active" : "Inactive"}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <button
+                        type="button"
+                        onClick={() => openEditModal(role)}
+                        className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-zinc-200 transition hover:bg-white/[0.08]"
+                      >
+                        Edit
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -352,26 +352,6 @@ export default function DepartmentRolesSection({
                   <input
                     value={formState.code}
                     onChange={(event) => setFormState((current) => ({ ...current, code: event.target.value }))}
-                    className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Description</span>
-                  <textarea
-                    rows={4}
-                    value={formState.description}
-                    onChange={(event) => setFormState((current) => ({ ...current, description: event.target.value }))}
-                    className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Sort Order</span>
-                  <input
-                    type="number"
-                    value={formState.sort_order}
-                    onChange={(event) => setFormState((current) => ({ ...current, sort_order: event.target.value }))}
                     className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
                   />
                 </label>

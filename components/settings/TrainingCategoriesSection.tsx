@@ -237,35 +237,40 @@ export default function TrainingCategoriesSection({
                 <th className="px-6 py-4 text-right text-xs uppercase tracking-[0.18em] text-neutral-400">Edit</th>
               </tr>
             </thead>
-            <tbody>
-              {orderedCategories.map((category) => (
-                <tr key={category.id} className="border-b border-neutral-800 transition hover:bg-neutral-800/60">
-                  <td className="px-6 py-4 font-medium text-white">{category.name}</td>
-                  <td className="px-6 py-4 text-neutral-300">{category.description?.trim() || "-"}</td>
-                  <td className="px-6 py-4">
-                    <span
-                      className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] ${
-                        category.active
-                          ? "border-green-500/30 bg-green-500/10 text-green-300"
-                          : "border-neutral-600/40 bg-neutral-800 text-neutral-300"
-                      }`}
-                    >
-                      {category.active ? "Active" : "Inactive"}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <button
-                      type="button"
-                      onClick={() => openEditModal(category)}
-                      className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-zinc-200 transition hover:bg-white/[0.08]"
-                    >
-                      Edit
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
           </table>
+
+          <div className="max-h-[17.5rem] overflow-y-auto">
+            <table className="w-full">
+              <tbody>
+                {orderedCategories.map((category) => (
+                  <tr key={category.id} className="border-b border-neutral-800 transition hover:bg-neutral-800/60">
+                    <td className="px-6 py-4 font-medium text-white">{category.name}</td>
+                    <td className="px-6 py-4 text-neutral-300">{category.description?.trim() || "-"}</td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] ${
+                          category.active
+                            ? "border-green-500/30 bg-green-500/10 text-green-300"
+                            : "border-neutral-600/40 bg-neutral-800 text-neutral-300"
+                        }`}
+                      >
+                        {category.active ? "Active" : "Inactive"}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <button
+                        type="button"
+                        onClick={() => openEditModal(category)}
+                        className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-zinc-200 transition hover:bg-white/[0.08]"
+                      >
+                        Edit
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

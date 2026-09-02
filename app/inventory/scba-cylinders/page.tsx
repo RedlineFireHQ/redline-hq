@@ -1,4 +1,3 @@
-import PageLayout from "@/components/layout/PageLayout";
 import ScbaCylinderWorkspace from "@/components/inventory/ScbaCylinderWorkspace";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentMember } from "@/lib/current-member";
@@ -80,7 +79,7 @@ export default async function ScbaCylindersInventoryPage() {
 	}
 
 	return (
-		<PageLayout>
+		
 			<ScbaCylinderWorkspace
 				departmentId={departmentId}
 				departmentName={departmentName}
@@ -88,6 +87,6 @@ export default async function ScbaCylindersInventoryPage() {
 				initialError={initialError}
 				canDeleteCylinder={canDeleteCylinder}
 			/>
-		</PageLayout>
+		
 	);
 }

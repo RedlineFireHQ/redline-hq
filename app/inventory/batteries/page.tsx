@@ -1,11 +1,11 @@
 import { redirect } from "next/navigation";
-import PageLayout from "@/components/layout/PageLayout";
 import BatteryWorkspace, {
 	BatteryAssignmentRecord,
 	BatteryRecord,
 } from "@/components/inventory/BatteryWorkspace";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentMember } from "@/lib/current-member";
+import { getActiveApparatusOptions } from "@/lib/database";
 
 type ApparatusOption = {
 	id: string;
@@ -80,7 +80,7 @@ export default async function BatteriesPage() {
 		redirect("/login");
 	}
 
-	const [{ data: batteriesData }, { data: assignmentsData }, { data: apparatusData, error: apparatusError }] =
+	const [{ data: batteriesData }, { data: assignmentsData }, apparatusData] =
 		await Promise.all([
 			supabase
 				.from("batteries")
@@ -94,18 +94,14 @@ export default async function BatteriesPage() {
 				)
 				.eq("department_id", departmentId)
 				.order("assigned_at", { ascending: false }),
-			supabase
-				.from("apparatus")
-				.select("id, name")
-				.eq("department_id", departmentId)
-				.order("name", { ascending: true }),
+			getActiveApparatusOptions({ client: supabase, departmentId }),
 		]);
 
 	if (process.env.NODE_ENV !== "production") {
 		console.info("[batteries] apparatus load", {
 			departmentId,
-			apparatusCount: apparatusData?.length ?? 0,
-			apparatusError: apparatusError?.message ?? null,
+			apparatusCount: apparatusData.length,
+			apparatusError: null,
 		});
 	}
 
@@ -117,21 +113,21 @@ export default async function BatteriesPage() {
 		normalizeAssignmentRecord(row as Record<string, unknown>),
 	);
 
-	const apparatusOptions = ((apparatusData ?? []) as Record<string, unknown>[]).map(
+	const apparatusOptions = apparatusData.map(
 		(row) => ({
-			id: typeof row.id === "string" ? row.id : String(row.id ?? ""),
+			id: row.id,
 			name: typeof row.name === "string" ? row.name : null,
 		}) as ApparatusOption,
 	);
 
 	return (
-		<PageLayout>
+		
 			<BatteryWorkspace
 				departmentId={departmentId}
 				initialBatteries={batteries}
 				initialAssignments={assignments}
 				apparatusOptions={apparatusOptions}
 			/>
-		</PageLayout>
+		
 	);
 }

@@ -5,7 +5,6 @@ import QuickFactsCard from "@/components/apparatus/QuickFactsCard";
 import ServiceSpecificationsCard from "@/components/apparatus/ServiceSpecificationsCard";
 import ApparatusSimpleConfigurationCard from "@/components/apparatus/ApparatusSimpleConfigurationCard";
 import PageLayout from "@/components/layout/PageLayout";
-import { getArchivedApparatus, getApparatusById } from "@/lib/database";
 import { getCurrentMember } from "@/lib/current-member";
 import { canManageApparatus as hasApparatusManagementPermission } from "@/lib/member-permissions";
 import { getApparatusImagePath } from "@/lib/apparatus-images";
@@ -35,13 +34,73 @@ interface ApparatusInformationPageProps {
   }>;
 }
 
+type ArchivedApparatusRow = {
+  id: string;
+  name: string | null;
+  type: string | null;
+  department_id: string | null;
+  lifecycle_status: "active" | "archived" | null;
+};
+
+async function getArchivedApparatusForDepartment(
+  departmentId: string | null,
+  supabaseClient: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+): Promise<ArchivedApparatusRow[]> {
+  if (!departmentId) {
+    return [];
+  }
+
+  const { data, error } = await supabaseClient
+    .from("apparatus")
+    .select("id, name, type, department_id, lifecycle_status")
+    .eq("department_id", departmentId)
+    .eq("lifecycle_status", "archived")
+    .order("name");
+
+  if (error) {
+    console.error("[apparatus-information] archived apparatus query failed", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      departmentId,
+    });
+    return [];
+  }
+
+  return ((data ?? []) as Record<string, unknown>[]).map((row) => ({
+    id: typeof row.id === "string" ? row.id : String(row.id ?? ""),
+    name: typeof row.name === "string" ? row.name : null,
+    type: typeof row.type === "string" ? row.type : null,
+    department_id: typeof row.department_id === "string" ? row.department_id : null,
+    lifecycle_status:
+      row.lifecycle_status === "active" || row.lifecycle_status === "archived"
+        ? row.lifecycle_status
+        : null,
+  }));
+}
+
 export default async function ApparatusInformationPage({
   params,
 }: ApparatusInformationPageProps) {
   const { id } = await params;
   const supabase = await createSupabaseServerClient();
 
-  const truck = await getApparatusById(id, supabase);
+  const { data: truck, error: truckError } = await supabase
+    .from("apparatus")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (truckError) {
+    console.error("[apparatus-information] apparatus lookup failed", {
+      apparatusId: id,
+      code: truckError.code,
+      message: truckError.message,
+      details: truckError.details,
+      hint: truckError.hint,
+    });
+  }
 
   if (!truck) {
     notFound();
@@ -78,7 +137,9 @@ export default async function ApparatusInformationPage({
   const canEditServiceSpecifications = canManageThisApparatus;
   const canManageApparatusForThisTruck = canManageThisApparatus;
   const isArchived = truck.lifecycle_status === "archived";
-  const archivedApparatus = currentMember?.departmentId ? await getArchivedApparatus(currentMember.departmentId) : [];
+  const archivedApparatus = currentMember?.departmentId
+    ? await getArchivedApparatusForDepartment(currentMember.departmentId, supabase)
+    : [];
 
   const [checkRequirementResult, maintenanceRequirementRowsResult, maintenanceMethodRowsResult, departmentDefaultResult] = currentMember?.departmentId
     ? await Promise.all([

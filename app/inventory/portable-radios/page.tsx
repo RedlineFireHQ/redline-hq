@@ -1,4 +1,3 @@
-import PageLayout from "@/components/layout/PageLayout";
 import PortableRadioWorkspace from "@/components/inventory/PortableRadioWorkspace";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentMember } from "@/lib/current-member";
@@ -77,7 +76,7 @@ export default async function PortableRadiosInventoryPage() {
 	}
 
 	return (
-		<PageLayout>
+		
 			<PortableRadioWorkspace
 				departmentId={departmentId}
 				departmentName={departmentName}
@@ -85,6 +84,6 @@ export default async function PortableRadiosInventoryPage() {
 				initialError={initialError}
 				canDeleteRadio={canDeleteRadio}
 			/>
-		</PageLayout>
+		
 	);
 }

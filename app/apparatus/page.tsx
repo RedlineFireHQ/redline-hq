@@ -8,6 +8,7 @@ import MetricCard from "@/components/ui/MetricCard";
 import { getCurrentMember } from "@/lib/current-member";
 import { canManageApparatus } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import Link from "next/link";
 
 type ApparatusStatus = "Ready" | "Checks Due" | "Out of Service" | "Configuration Required";
 
@@ -153,14 +154,22 @@ export default async function ApparatusPage() {
           </div>
 
           <div className="flex flex-col items-end gap-3">
-            <AddApparatusButton
-              canAdd={canAddApparatus}
-              departmentCheckDefaultIntervalDays={
-                typeof departmentCheckDefault.data?.interval_days === "number"
-                  ? departmentCheckDefault.data.interval_days
-                  : null
-              }
-            />
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <AddApparatusButton
+                canAdd={canAddApparatus}
+                departmentCheckDefaultIntervalDays={
+                  typeof departmentCheckDefault.data?.interval_days === "number"
+                    ? departmentCheckDefault.data.interval_days
+                    : null
+                }
+              />
+              <Link
+                href="/apparatus/archived"
+                className="inline-flex items-center justify-center rounded-xl border border-white/15 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/[0.08]"
+              >
+                View Archived Apparatus
+              </Link>
+            </div>
             <div className="grid w-full max-w-[860px] grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
               <div className="[transform-origin:center] [transform:scale(0.92)]">
                 <MetricCard

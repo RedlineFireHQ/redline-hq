@@ -1,5 +1,4 @@
 import Link from "next/link";
-import PageLayout from "@/components/layout/PageLayout";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentMember } from "@/lib/current-member";
 
@@ -101,15 +100,15 @@ export default async function FireHoseTestingHistoryPage({
 
 	if (!departmentId) {
 		return (
-			<PageLayout>
+			
 				<div className="mx-auto max-w-5xl space-y-6">
 					<div>
-						<p className="text-sm font-semibold uppercase tracking-[0.3em] text-red-500">Fire Hose</p>
-						<h1 className="mt-2 text-4xl font-black tracking-tight text-white">Testing History</h1>
+						<p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">Fire Hose</p>
+						<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">Testing History</h1>
 						<p className="mt-3 max-w-2xl text-lg text-neutral-400">Unable to determine your department.</p>
 					</div>
 				</div>
-			</PageLayout>
+			
 		);
 	}
 
@@ -154,12 +153,12 @@ export default async function FireHoseTestingHistoryPage({
 		const hoseLength = hose?.booster_reel ? "N/A (Booster Reel Hose)" : `${hose?.hose_length ?? "-"} ft`;
 
 		return (
-			<PageLayout>
+			
 				<div className="mx-auto max-w-6xl space-y-8">
 					<div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
 						<div>
-							<p className="text-sm font-semibold uppercase tracking-[0.3em] text-red-500">Fire Hose</p>
-							<h1 className="mt-2 text-5xl font-black tracking-tight text-white">FIRE HOSE TESTING HISTORY</h1>
+							<p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">Fire Hose</p>
+							<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">FIRE HOSE TESTING HISTORY</h1>
 							<p className="mt-3 max-w-2xl text-lg text-neutral-400">
 								Hose {hose?.inventory_number ?? hoseId}
 								{hose ? ` • ${hoseSize} • ${hoseLength}` : ""}
@@ -224,24 +223,24 @@ export default async function FireHoseTestingHistoryPage({
 						</div>
 					</section>
 				</div>
-			</PageLayout>
+			
 		);
 	}
 
 	if (sessionError) {
 		return (
-			<PageLayout>
+			
 				<div className="mx-auto max-w-5xl space-y-6">
 					<div>
-						<p className="text-sm font-semibold uppercase tracking-[0.3em] text-red-500">Fire Hose</p>
-						<h1 className="mt-2 text-4xl font-black tracking-tight text-white">Testing History</h1>
+						<p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">Fire Hose</p>
+						<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">Testing History</h1>
 						<p className="mt-3 max-w-2xl text-lg text-neutral-400">Unable to load testing history right now.</p>
 					</div>
 					<div className="rounded-2xl border border-red-900 bg-[#242424] p-6 text-sm text-red-200">
 						{sessionError.message}
 					</div>
 				</div>
-			</PageLayout>
+			
 		);
 	}
 
@@ -281,12 +280,12 @@ export default async function FireHoseTestingHistoryPage({
 	}
 
 	return (
-		<PageLayout>
+		
 			<div className="mx-auto max-w-6xl space-y-8">
 				<div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
 					<div>
-						<p className="text-sm font-semibold uppercase tracking-[0.3em] text-red-500">Fire Hose</p>
-						<h1 className="mt-2 text-5xl font-black tracking-tight text-white">Testing History</h1>
+						<p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">Fire Hose</p>
+						<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">Testing History</h1>
 						<p className="mt-3 max-w-2xl text-lg text-neutral-400">
 							Recent hose testing sessions recorded by the department.
 						</p>
@@ -374,6 +373,6 @@ export default async function FireHoseTestingHistoryPage({
 					</div>
 				</section>
 			</div>
-		</PageLayout>
+		
 	);
 }

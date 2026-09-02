@@ -1648,8 +1648,8 @@ export default function GroundLadderWorkspace({
 
 <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
 						<div>
-							<p className="text-sm font-semibold uppercase tracking-[0.3em] text-red-500">Ground Ladder</p>
-							<h1 className="mt-2 text-5xl font-black tracking-tight text-white">{detailLadder.ladder_number}</h1>
+							<p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">Ground Ladder</p>
+							<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">{detailLadder.ladder_number}</h1>
 							<p className="mt-3 max-w-2xl text-lg text-neutral-400">
 								{detailLadder.ladder_type || "Ground Ladder"} • {formatLength(detailLadder.ladder_length_ft)}
 							</p>
@@ -1929,8 +1929,8 @@ export default function GroundLadderWorkspace({
 
 			<div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
 				<div>
-					<p className="text-sm font-semibold uppercase tracking-[0.3em] text-red-500">Inventory</p>
-					<h1 className="mt-2 text-5xl font-black tracking-tight text-white">Ground Ladders</h1>
+					<p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">Inventory</p>
+					<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">Ground Ladders</h1>
 					<p className="mt-3 max-w-2xl text-lg text-neutral-400">
 						Manage department ground ladder inventory.
 					</p>
@@ -1987,7 +1987,7 @@ export default function GroundLadderWorkspace({
 										className={summaryCardClasses(active, card.tone)}
 									>
 										<p className="text-xs uppercase tracking-[0.22em] text-neutral-500">{card.label}</p>
-										<p className="mt-2 text-4xl font-black text-white">{card.value}</p>
+										<p className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">{card.value}</p>
 									</button>
 								);
 							})}
@@ -1996,7 +1996,7 @@ export default function GroundLadderWorkspace({
 
 					<div className="w-full max-w-[220px] rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3">
 						<p className="text-xs uppercase tracking-[0.24em] text-neutral-500">Ground Ladder Readiness</p>
-						<p className="mt-1 text-4xl font-black text-white">{metrics.readinessScore}%</p>
+						<p className="mt-1 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">{metrics.readinessScore}%</p>
 						<p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-red-400">{metrics.inService} In Service / {metrics.totalActive} Active</p>
 						<p className="mt-3 text-sm text-neutral-400">Retired ladders are excluded from active readiness.</p>
 
@@ -2465,8 +2465,8 @@ function GroundLadderCategoryServiceTestModal({
 			<div className="max-h-[calc(100vh-3rem)] w-full max-w-6xl overflow-y-auto rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-6 shadow-[0_30px_90px_rgba(0,0,0,0.5)]">
 				<div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
 					<div>
-						<p className="text-sm font-semibold uppercase tracking-[0.3em] text-red-500">GROUND LADDERS</p>
-						<h3 className="mt-2 text-3xl font-black tracking-tight text-white">Session Testing</h3>
+						<p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">GROUND LADDERS</p>
+						<h3 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">Session Testing</h3>
 						<p className="mt-2 text-sm text-neutral-400">Set the shared session details once, then mark each ladder as Pass or Fail in the session.</p>
 					</div>
 

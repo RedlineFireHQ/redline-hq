@@ -1,4 +1,3 @@
-import PageLayout from "@/components/layout/PageLayout";
 import ThermalImagingCameraWorkspace from "@/components/inventory/ThermalImagingCameraWorkspace";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentMember } from "@/lib/current-member";
@@ -74,7 +73,7 @@ export default async function ThermalImagingCamerasInventoryPage() {
 	}
 
 	return (
-		<PageLayout>
+		
 			<ThermalImagingCameraWorkspace
 				departmentId={departmentId}
 				departmentName={departmentName}
@@ -82,6 +81,6 @@ export default async function ThermalImagingCamerasInventoryPage() {
 				initialError={initialError}
 				canDeleteCamera={canDeleteCamera}
 			/>
-		</PageLayout>
+		
 	);
 }

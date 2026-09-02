@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { getActiveApparatusOptions } from "@/lib/database";
 import { supabase } from "@/lib/supabase";
 import PageLayout from "@/components/layout/PageLayout";
 
@@ -563,16 +564,16 @@ async function fetchDeficiencies() {
 }
 
 async function fetchModalOptions() {
-	const [categoriesResult, prioritiesResult, apparatusResult] = await Promise.all([
+  const [categoriesResult, prioritiesResult, activeApparatusOptions] = await Promise.all([
 		supabase.from("deficiency_categories").select("*").order("display_order"),
 		supabase.from("deficiency_priorities").select("*").order("display_order"),
-		supabase.from("apparatus").select("*").order("name"),
+		getActiveApparatusOptions(),
 	]);
 
 	return {
 		categoriesResult,
 		prioritiesResult,
-		apparatusResult,
+		activeApparatusOptions,
 	};
 }
 
@@ -931,15 +932,15 @@ export default function DeficienciesPage() {
 			setIsOptionsLoading(true);
 			setOptionsErrorMessage(null);
 
-			const { categoriesResult, prioritiesResult, apparatusResult } =
+			const { categoriesResult, prioritiesResult, activeApparatusOptions } =
 				await fetchModalOptions();
 
 			console.log("Categories:", categoriesResult);
 			console.log("Priorities:", prioritiesResult);
-			console.log("Apparatus:", apparatusResult);
+			console.log("Apparatus:", activeApparatusOptions);
 			console.log(categoriesResult.data);
 			console.log(prioritiesResult.data);
-			console.log(apparatusResult.data);
+			console.log(activeApparatusOptions);
 
 			if (!isMounted) {
 				return;
@@ -947,13 +948,11 @@ export default function DeficienciesPage() {
 
 			if (
 				categoriesResult.error ||
-				prioritiesResult.error ||
-				apparatusResult.error
+				prioritiesResult.error
 			) {
 				setOptionsErrorMessage(
 					categoriesResult.error?.message ||
 						prioritiesResult.error?.message ||
-						apparatusResult.error?.message ||
 						"Unable to load form options."
 				);
 				setIsOptionsLoading(false);
@@ -971,8 +970,8 @@ export default function DeficienciesPage() {
 				)
 			);
 			setApparatusOptions(
-				(apparatusResult.data ?? []).map((record) =>
-					normalizeApparatusOption(record as Record<string, unknown>)
+				activeApparatusOptions.map((record) =>
+					normalizeApparatusOption(record as unknown as Record<string, unknown>)
 				)
 			);
 
@@ -1166,20 +1165,26 @@ export default function DeficienciesPage() {
 	}
 
 	return (
-		<PageLayout>
-			<main className="min-h-screen bg-[#090909] px-6 py-10 text-white">
+		<PageLayout
+			environmentBackgroundUrl="/branding/images/Deficencypage.png"
+			environmentBackgroundPosition="left center"
+		>
+			<main className="min-h-screen bg-transparent px-6 py-10 text-white">
 				<div className="mx-auto flex w-full max-w-7xl flex-col gap-8">
 				<div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
 					<div>
-						<p className="text-sm font-semibold uppercase tracking-[0.28em] text-red-500">
+						<p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">
 							Operations
 						</p>
 
-						<h1 className="mt-2 text-4xl font-black tracking-tight text-white md:text-5xl">
-							Deficiency Management
+						<h1
+							className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white"
+							style={{ fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif' }}
+						>
+							Deficiencies
 						</h1>
 
-						<p className="mt-3 max-w-2xl text-base text-zinc-400 md:text-lg">
+						<p className="mt-3 max-w-2xl text-lg text-neutral-400">
 							Track critical apparatus and equipment issues before they affect readiness.
 						</p>
 					</div>
@@ -1251,7 +1256,7 @@ export default function DeficienciesPage() {
 					) : filteredDeficiencies.length === 0 ? (
 						<div className="px-6 py-10 text-sm text-zinc-400">No deficiencies found.</div>
 					) : (
-						<div className="overflow-x-auto">
+						<div className="max-h-[calc(3.5rem+8*3.75rem)] overflow-x-auto overflow-y-auto">
 							<table className="min-w-full divide-y divide-white/10 text-sm">
 								<thead className="bg-[#0d0d0d] text-left text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">
 									<tr>

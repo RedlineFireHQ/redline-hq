@@ -210,6 +210,7 @@ async function createRevisionFromUpload({
     .insert({
       department_id: departmentId,
       category,
+      source_kind: "pre_plan",
       title,
       description: null,
       document_number: null,

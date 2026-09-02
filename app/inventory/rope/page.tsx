@@ -1,7 +1,7 @@
-import PageLayout from "@/components/layout/PageLayout";
 import RopeWorkspace, { type RopeRow } from "@/components/inventory/RopeWorkspace";
 import type { RopeApparatusOption } from "@/components/inventory/RopeFormModal";
 import type { RopeInspectionMemberOption } from "@/components/inventory/RopeInspectionModal";
+import { getActiveApparatusOptions } from "@/lib/database";
 import { getCurrentMember } from "@/lib/current-member";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -47,7 +47,7 @@ export default async function RopeInventoryPage() {
   let initialError: string | null = null;
 
   if (departmentId) {
-    const [{ data: departmentData }, { data: ropeData, error }, { data: inspectionData }, { data: apparatusData }, { data: memberData }, { data: deficiencyStatusData }, { data: deficiencyData }] = await Promise.all([
+    const [{ data: departmentData }, { data: ropeData, error }, { data: inspectionData }, apparatusData, { data: memberData }, { data: deficiencyStatusData }, { data: deficiencyData }] = await Promise.all([
       supabase.from("departments").select("name").eq("id", departmentId).maybeSingle(),
       supabase
         .from("rope_items")
@@ -60,11 +60,7 @@ export default async function RopeInventoryPage() {
         .eq("department_id", departmentId)
         .order("inspection_date", { ascending: false })
         .order("created_at", { ascending: false }),
-      supabase
-        .from("apparatus")
-        .select("id, name")
-        .eq("department_id", departmentId)
-        .order("name", { ascending: true }),
+      getActiveApparatusOptions({ client: supabase, departmentId }),
       supabase
         .from("members")
         .select("id, first_name, last_name, email")
@@ -89,14 +85,11 @@ export default async function RopeInventoryPage() {
     }
 
     const apparatusById = new Map(
-      ((apparatusData ?? []) as Record<string, unknown>[]).map((row) => [
-        typeof row.id === "string" ? row.id : String(row.id ?? ""),
-        typeof row.name === "string" ? row.name : null,
-      ]),
+      apparatusData.map((row) => [row.id, typeof row.name === "string" ? row.name : null]),
     );
 
-    apparatusOptions = ((apparatusData ?? []) as Record<string, unknown>[]).map((row) => ({
-      id: typeof row.id === "string" ? row.id : String(row.id ?? ""),
+    apparatusOptions = apparatusData.map((row) => ({
+      id: row.id,
       name: typeof row.name === "string" ? row.name : null,
     }));
 
@@ -163,7 +156,7 @@ export default async function RopeInventoryPage() {
   }
 
   return (
-    <PageLayout>
+    
       <RopeWorkspace
         departmentName={departmentName}
         canManageRope={canManageRope}
@@ -174,6 +167,6 @@ export default async function RopeInventoryPage() {
         currentMemberName={currentMember?.name ?? ""}
         initialError={initialError}
       />
-    </PageLayout>
+    
   );
 }

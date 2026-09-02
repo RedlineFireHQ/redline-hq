@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { getActiveApparatusOptions } from "@/lib/database";
 import { supabase } from "@/lib/supabase";
 
 type SelectOption = {
@@ -121,7 +122,7 @@ export default function EditDeficiencyButton({
 
 			const [apparatusResult, categoriesResult, prioritiesResult, statusesResult, deficiencyResult] =
 				await Promise.all([
-					supabase.from("apparatus").select("*").order("name"),
+					getActiveApparatusOptions(),
 					supabase
 						.from("deficiency_categories")
 						.select("*")
@@ -146,27 +147,45 @@ export default function EditDeficiencyButton({
 			}
 
 			if (
-				apparatusResult.error ||
 				categoriesResult.error ||
 				prioritiesResult.error ||
 				statusesResult.error
 			) {
 				setOptionsError(
-					apparatusResult.error?.message ||
-						categoriesResult.error?.message ||
-						prioritiesResult.error?.message ||
-						statusesResult.error?.message ||
-						"Unable to load edit options."
+					categoriesResult.error?.message ||
+					prioritiesResult.error?.message ||
+					statusesResult.error?.message ||
+					"Unable to load edit options."
 				);
 				setIsOptionsLoading(false);
 				setIsPhotoLoading(false);
 				return;
 			}
 
+			const normalizedApparatusOptions = apparatusResult.map((record) =>
+				normalizeSelectOption(record as unknown as Record<string, unknown>)
+			);
+
+			if (
+				typeof initialApparatusId === "string" &&
+				initialApparatusId.trim() &&
+				!normalizedApparatusOptions.some((option) => option.id === initialApparatusId)
+			) {
+				const { data: selectedApparatusData } = await supabase
+					.from("apparatus")
+					.select("id, name")
+					.eq("id", initialApparatusId)
+					.maybeSingle();
+
+				if (selectedApparatusData) {
+					normalizedApparatusOptions.unshift(
+						normalizeSelectOption(selectedApparatusData as Record<string, unknown>)
+					);
+				}
+			}
+
 			setApparatusOptions(
-				(apparatusResult.data ?? []).map((record) =>
-					normalizeSelectOption(record as Record<string, unknown>)
-				)
+				normalizedApparatusOptions
 			);
 
 			const normalizedCategoryOptions = (categoriesResult.data ?? []).map((record) =>
