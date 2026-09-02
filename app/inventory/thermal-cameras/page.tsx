@@ -10,7 +10,6 @@ type ThermalImagingCameraRecord = {
 	serial_number: string;
 	manufacturer: string | null;
 	model: string | null;
-	camera_unit_id: string | null;
 	status: "In Service" | "Unassigned" | "Out of Service" | "Lost" | "Stolen" | "Retired";
 	notes: string | null;
 	created_at: string;
@@ -60,13 +59,13 @@ export default async function ThermalImagingCamerasInventoryPage() {
 
 		const { data, error } = await supabase
 			.from("thermal_imaging_cameras")
-			.select("id, department_id, camera_number, serial_number, manufacturer, model, camera_unit_id, status, notes, created_at, updated_at")
+			.select("id, department_id, camera_number, serial_number, manufacturer, model, status, notes, created_at, updated_at")
 			.eq("department_id", departmentId)
 			.order("created_at", { ascending: false });
 
 		if (error) {
 			console.error("[thermal-cameras] initial load failed", error);
-			initialError = error.message || "Unable to load portable cameras.";
+			initialError = error.message || "Unable to load thermal imaging cameras.";
 		}
 
 		rows = [...((data ?? []) as ThermalImagingCameraRecord[])].sort((left, right) =>

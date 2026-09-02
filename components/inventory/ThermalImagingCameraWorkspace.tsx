@@ -15,7 +15,6 @@ type ThermalImagingCameraRecord = {
 	serial_number: string;
 	manufacturer: string | null;
 	model: string | null;
-	camera_unit_id: string | null;
 	status: "In Service" | "Unassigned" | "Out of Service" | "Lost" | "Stolen" | "Retired";
 	notes: string | null;
 	created_at: string;
@@ -236,12 +235,12 @@ export default function ThermalImagingCameraWorkspace({
 
 		const { data, error } = await supabase
 			.from("thermal_imaging_cameras")
-			.select("id, department_id, camera_number, serial_number, manufacturer, model, camera_unit_id, status, notes, created_at, updated_at")
+			.select("id, department_id, camera_number, serial_number, manufacturer, model, status, notes, created_at, updated_at")
 			.eq("department_id", departmentId)
 			.order("created_at", { ascending: false });
 
 		if (error) {
-			setToastMessage(error.message || "Unable to load portable cameras.");
+			setToastMessage(error.message || "Unable to load thermal imaging cameras.");
 			return;
 		}
 
@@ -412,7 +411,6 @@ export default function ThermalImagingCameraWorkspace({
 					row.serial_number,
 					row.manufacturer,
 					row.model,
-					row.camera_unit_id,
 				]
 					.map((value) => (typeof value === "string" ? value.toLowerCase() : ""))
 					.join(" ");
@@ -557,7 +555,6 @@ export default function ThermalImagingCameraWorkspace({
 				serial_number: serialNumber,
 				manufacturer: normalizeOptionalText(values.manufacturer) || null,
 				model: normalizeOptionalText(values.model) || null,
-				camera_unit_id: normalizeOptionalText(values.cameraUnitId) || null,
 				status: values.status,
 				notes: normalizeOptionalText(values.notes) || null,
 			};
@@ -573,7 +570,7 @@ export default function ThermalImagingCameraWorkspace({
 
 				if (error || !data) {
 					setIsSaving(false);
-					setToastMessage(error?.message || "Unable to save portable camera.");
+					setToastMessage(error?.message || "Unable to save thermal imaging camera.");
 					return;
 				}
 
@@ -639,7 +636,7 @@ export default function ThermalImagingCameraWorkspace({
 
 			setIsSaving(false);
 			if (error || !data || data.id !== editingRow.id) {
-				setToastMessage(error?.message || "Unable to update portable camera.");
+				setToastMessage(error?.message || "Unable to update thermal imaging camera.");
 				return;
 			}
 
@@ -803,7 +800,7 @@ export default function ThermalImagingCameraWorkspace({
 
 				if (updateStatusResult.error || !updateStatusResult.data) {
 					setIsSavingAssignment(false);
-					setToastMessage(updateStatusResult.error?.message || "Unable to update portable camera status.");
+					setToastMessage(updateStatusResult.error?.message || "Unable to update thermal imaging camera status.");
 					return;
 				}
 			}
@@ -817,12 +814,18 @@ export default function ThermalImagingCameraWorkspace({
 	};
 
 	const reportDeficiencyForRow = (row: ThermalImagingCameraRecord) => {
+		const activeAssignment = openAssignmentsByCameraId.get(row.id);
+		const defaultApparatusId =
+			activeAssignment?.assignment_type === "Apparatus" && activeAssignment.apparatus_id
+				? activeAssignment.apparatus_id
+				: "station-supply";
+
 		const params = new URLSearchParams();
 		params.set("returnTo", "/inventory/thermal-cameras");
 		params.set("inventoryCategory", "thermal-cameras");
 		params.set("inventoryItemId", row.id);
 		params.set("inventoryItemLabel", row.camera_number);
-		params.set("apparatusId", "station-supply");
+		params.set("apparatusId", defaultApparatusId);
 		router.push(`/deficiencies/report?${params.toString()}`);
 	};
 
@@ -855,8 +858,8 @@ export default function ThermalImagingCameraWorkspace({
 				<div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
 					<div className="min-w-0 flex-1">
 						<p className="text-xs font-semibold uppercase tracking-[0.28em] text-red-500">Inventory Module</p>
-						<h1 className="mt-2 text-4xl font-black tracking-tight text-white">Portable Cameras</h1>
-						<p className="mt-2 max-w-3xl text-sm text-neutral-400">Manage portable camera accountability, custody assignments, and deficiency linkage across your department.</p>
+						<h1 className="mt-2 text-4xl font-black tracking-tight text-white">Thermal Imaging Camera (TIC)</h1>
+						<p className="mt-2 max-w-3xl text-sm text-neutral-400">Manage thermal imaging camera accountability, custody assignments, and deficiency linkage across your department.</p>
 
 						<div className="mt-4 flex flex-wrap items-center gap-2">
 							<button
@@ -949,12 +952,12 @@ export default function ThermalImagingCameraWorkspace({
 			<section className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-5">
 				<div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
 					<div className="min-w-0 flex-1">
-						<label htmlFor="portable-camera-search" className="sr-only">Search portable cameras</label>
+						<label htmlFor="thermal-camera-search" className="sr-only">Search thermal imaging cameras</label>
 						<input
-							id="portable-camera-search"
+							id="thermal-camera-search"
 							value={searchTerm}
 							onChange={(event) => setSearchTerm(event.target.value)}
-							placeholder="Search camera number, serial number, manufacturer, model, or unit ID..."
+							placeholder="Search camera number, serial number, manufacturer, or model..."
 							className="w-full rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3 text-sm text-white placeholder:text-neutral-500 focus:border-red-500/40 focus:outline-none"
 						/>
 					</div>
@@ -976,7 +979,7 @@ export default function ThermalImagingCameraWorkspace({
 					<table className="min-w-full border-separate border-spacing-0 text-left">
 						<thead>
 							<tr>
-								{["Camera Number", "Serial Number", "Manufacturer", "Model", "Camera Unit ID", "Status", "Current Assignment", "Actions"].map((label) => (
+								{["Camera Number", "Serial Number", "Manufacturer", "Model", "Status", "Current Assignment", "Actions"].map((label) => (
 									<th
 										key={label}
 										scope="col"
@@ -990,13 +993,13 @@ export default function ThermalImagingCameraWorkspace({
 						<tbody>
 							{!hasRows ? (
 								<tr>
-									<td colSpan={8} className="border-b border-white/5 px-4 py-8 text-center text-sm text-neutral-400">
-										No portable cameras have been added yet.
+									<td colSpan={7} className="border-b border-white/5 px-4 py-8 text-center text-sm text-neutral-400">
+										No thermal imaging cameras have been added yet.
 									</td>
 								</tr>
 							) : !hasVisibleRows ? (
 								<tr>
-									<td colSpan={8} className="border-b border-white/5 px-4 py-8 text-center text-sm text-neutral-400">
+									<td colSpan={7} className="border-b border-white/5 px-4 py-8 text-center text-sm text-neutral-400">
 										No cameras match the current filters.
 									</td>
 								</tr>
@@ -1009,7 +1012,6 @@ export default function ThermalImagingCameraWorkspace({
 											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">{row.serial_number}</td>
 											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">{row.manufacturer ?? "-"}</td>
 											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">{row.model ?? "-"}</td>
-											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">{row.camera_unit_id ?? "-"}</td>
 											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">
 												<div className="flex items-center gap-2">
 													<span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusBadgeClasses(row.status, hasActiveDeficiency)}`}>
@@ -1074,7 +1076,7 @@ export default function ThermalImagingCameraWorkspace({
 							serialNumber: editingRow.serial_number,
 							manufacturer: editingRow.manufacturer ?? "",
 							model: editingRow.model ?? "",
-							cameraUnitId: editingRow.camera_unit_id ?? "",
+							
 							status: editingRow.status,
 							notes: editingRow.notes ?? "",
 						}
@@ -1090,7 +1092,7 @@ export default function ThermalImagingCameraWorkspace({
 			{isAssignmentModalOpen && assignmentRow ? (
 				<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6">
 					<div className="w-full max-w-2xl rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-6 shadow-[0_30px_90px_rgba(0,0,0,0.5)]">
-						<h3 className="text-xl font-black text-white">Assign Portable Camera</h3>
+								<h3 className="text-xl font-black text-white">Assign Thermal Imaging Camera</h3>
 						<p className="mt-1 text-sm text-neutral-400">{assignmentRow.camera_number} • {assignmentRow.serial_number}</p>
 
 						<div className="mt-5 grid gap-3 md:grid-cols-2">

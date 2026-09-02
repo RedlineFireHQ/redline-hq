@@ -35,12 +35,6 @@ export default async function TodaysReadinessPanel() {
     : unavailableCount > 0
       ? "Resolve readiness data issue"
       : "Configure readiness requirements";
-  let readinessGainLabel = "Scoring unavailable until configuration";
-  if (largestGapCandidate && largestGapCandidate.readiness.scorePercent !== null) {
-    readinessGainLabel = `${Math.max(1, Math.round(100 - largestGapCandidate.readiness.scorePercent))}% potential gain`;
-  } else if (unavailableCount > 0) {
-    readinessGainLabel = "Readiness data currently unavailable";
-  }
 
   return (
     <section className="relative h-full overflow-hidden rounded-[20px] border border-[rgba(239,43,45,0.30)] bg-[#170909]">
@@ -53,11 +47,11 @@ export default async function TodaysReadinessPanel() {
         {/* Header */}
 
         <p className="text-[14px] font-bold uppercase tracking-[2px] text-[#EF2B2D]">
-          TODAY&apos;S READINESS
+          APPARATUS READINESS
         </p>
 
         <p className="mt-2 max-w-[55%] text-[15px] leading-5 text-[#B3B3B3]">
-          How prepared we are for today&apos;s operations.
+          Current readiness across department apparatus.
         </p>
 
         {/* Main Content */}
@@ -118,20 +112,6 @@ export default async function TodaysReadinessPanel() {
               {largestGapLabel}
             </h3>
 
-            <p className="text-[15px] text-[#C8C8C8]">
-              Apparatus Readiness
-            </p>
-
-            <div className="mt-3 flex items-center gap-3">
-
-              <div className="h-2.5 w-2.5 rounded-full bg-[#22C55E]" />
-
-              <span className="text-[15px] font-bold text-[#22C55E]">
-                {readinessGainLabel}
-              </span>
-
-            </div>
-
           </div>
 
         </div>
@@ -141,6 +121,7 @@ export default async function TodaysReadinessPanel() {
         <Link
           href="/apparatus"
           className="
+            group
             mt-3
             flex
             h-12
@@ -148,19 +129,22 @@ export default async function TodaysReadinessPanel() {
             justify-center
             gap-3
             rounded-xl
-            bg-[#EF2B2D]
+            border
+            border-[#3A3A3A]
+            bg-[#121212]
             text-[15px]
             font-bold
             text-white
             transition-all
             duration-300
-            hover:bg-[#d91d1f]
-            hover:shadow-[0_0_24px_rgba(239,43,45,.45)]
+            hover:border-[#5A5A5A]
+            hover:bg-[#161616]
+            hover:shadow-[0_0_0_1px_rgba(239,43,45,0.35)]
           "
         >
-          View Today&apos;s Readiness
+          View Apparatus Readiness
 
-          <ArrowRight className="h-4 w-4" />
+          <ArrowRight className="h-4 w-4 text-[#EF2B2D] transition-colors duration-300 group-hover:text-[#ff6b6b]" />
 
         </Link>
 

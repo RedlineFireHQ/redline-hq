@@ -7,7 +7,6 @@ export type ThermalImagingCameraFormValues = {
 	serialNumber: string;
 	manufacturer: string;
 	model: string;
-	cameraUnitId: string;
 	status: "In Service" | "Unassigned" | "Out of Service" | "Lost" | "Stolen" | "Retired";
 	notes: string;
 };
@@ -51,7 +50,6 @@ const EMPTY_VALUES: ThermalImagingCameraFormValues = {
 	serialNumber: "",
 	manufacturer: "",
 	model: "",
-	cameraUnitId: "",
 	status: "In Service",
 	notes: "",
 };
@@ -121,7 +119,6 @@ export default function ThermalImagingCameraFormModal({
 				serialNumber: initialValues.serialNumber ?? "",
 				manufacturer: initialValues.manufacturer ?? "",
 				model: initialValues.model ?? "",
-				cameraUnitId: initialValues.cameraUnitId ?? "",
 				status: initialValues.status ?? "In Service",
 				notes: initialValues.notes ?? "",
 			});
@@ -136,7 +133,7 @@ export default function ThermalImagingCameraFormModal({
 		initialValues?.model,
 		initialValues?.notes,
 		initialValues?.cameraNumber,
-		initialValues?.cameraUnitId,
+
 		initialValues?.serialNumber,
 		initialValues?.status,
 		isOpen,
@@ -193,15 +190,6 @@ export default function ThermalImagingCameraFormModal({
 						<input
 							value={formValues.model}
 							onChange={(event) => setFormValues((current) => ({ ...current, model: event.target.value }))}
-							className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
-						/>
-					</label>
-
-					<label className="block">
-						<span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Camera / Unit ID</span>
-						<input
-							value={formValues.cameraUnitId}
-							onChange={(event) => setFormValues((current) => ({ ...current, cameraUnitId: event.target.value }))}
 							className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
 						/>
 					</label>

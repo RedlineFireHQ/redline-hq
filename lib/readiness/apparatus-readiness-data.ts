@@ -11,6 +11,7 @@ type ApparatusRow = {
   name: string;
   type: string | null;
   include_in_department_readiness: boolean | null;
+  lifecycle_status?: string | null;
   status: string | null;
   last_inspection_at: string | null;
   mileage: number | null;
@@ -302,11 +303,19 @@ function statusFromResult(result: ApparatusReadinessResult) {
     return "Configuration Required" as const;
   }
 
+  if (result.isScoreAvailable && result.bucketScores.apparatusChecks !== null) {
+    if (result.bucketScores.apparatusChecks < 20) {
+      return "Checks Due" as const;
+    }
+
+    return "Ready" as const;
+  }
+
   if (result.status === "ready") {
     return "Ready" as const;
   }
 
-  return "Checks Due" as const;
+  return "Ready" as const;
 }
 
 export function getStatusLabelForReadinessRow(row: ApparatusReadinessListRow): ApparatusReadinessDisplayStatus {
@@ -346,7 +355,7 @@ export async function calculateApparatusReadinessForApparatusId(apparatusId: str
 
   const { data: apparatusRowData } = await supabase
     .from("apparatus")
-    .select("id, department_id, name, type, include_in_department_readiness, status, last_inspection_at, mileage, engine_hours")
+    .select("id, department_id, name, type, include_in_department_readiness, lifecycle_status, status, last_inspection_at, mileage, engine_hours")
     .eq("id", apparatusId)
     .maybeSingle();
 
@@ -482,6 +491,7 @@ export async function calculateApparatusReadinessForApparatusId(apparatusId: str
   const maintenanceRequirementEvaluations: ApparatusMaintenanceRequirementEvaluation[] = maintenanceRequirementRows.map(
     (requirement) => {
       const latestRecord = findLatestRecordByType(maintenanceRecords, requirement.maintenance_type);
+      const hasMaintenanceHistory = Boolean(latestRecord);
       const serviceDate = latestRecord?.service_date ? new Date(latestRecord.service_date) : null;
       const now = new Date();
       const elapsedDays =
@@ -511,10 +521,10 @@ export async function calculateApparatusReadinessForApparatusId(apparatusId: str
       const methods = maintenanceMethodRows
         .filter((method) => method.apparatus_maintenance_requirement_id === requirement.id)
         .map((method) => {
-          let elapsedSinceService: number | null = null;
+          let elapsedSinceService: number | null = hasMaintenanceHistory ? null : 0;
 
           if (method.method_type === "time_days") {
-            elapsedSinceService = elapsedDays;
+            elapsedSinceService = hasMaintenanceHistory ? elapsedDays : 0;
           }
 
           if (method.method_type === "mileage") {
@@ -522,7 +532,9 @@ export async function calculateApparatusReadinessForApparatusId(apparatusId: str
             elapsedSinceService =
               baseMileage !== null && currentMileage !== null
                 ? Math.max(0, currentMileage - baseMileage)
-                : null;
+                : hasMaintenanceHistory
+                  ? null
+                  : 0;
           }
 
           if (method.method_type === "engine_hours") {
@@ -531,7 +543,9 @@ export async function calculateApparatusReadinessForApparatusId(apparatusId: str
             elapsedSinceService =
               baseHours !== null && currentEngineHours !== null
                 ? Math.max(0, currentEngineHours - baseHours)
-                : null;
+                : hasMaintenanceHistory
+                  ? null
+                  : 0;
           }
 
           return {
@@ -629,6 +643,9 @@ export function ensureApparatusReadinessRowContract(
     | {
         apparatus: ApparatusRow;
         readiness: ApparatusReadinessResult;
+        simulationData: {
+          maintenanceRequirements: ApparatusMaintenanceRequirementEvaluation[];
+        };
       }
     | null
     | undefined,
@@ -675,7 +692,8 @@ export async function getApparatusReadinessList() {
   const supabase = await createSupabaseServerClient();
   const { data } = await supabase
     .from("apparatus")
-    .select("id, department_id, name, type, include_in_department_readiness, status, last_inspection_at, mileage, engine_hours")
+    .select("id, department_id, name, type, include_in_department_readiness, lifecycle_status, status, last_inspection_at, mileage, engine_hours")
+    .eq("lifecycle_status", "active")
     .order("name");
 
   const apparatusRows = (data ?? []) as ApparatusRow[];

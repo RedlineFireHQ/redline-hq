@@ -24,3 +24,28 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.report-results-scrollbar {
+  scrollbar-gutter: stable both-edges;
+  scrollbar-width: thin;
+  scrollbar-color: #9ca3af #27272a;
+}
+
+.report-results-scrollbar::-webkit-scrollbar {
+  height: 12px;
+}
+
+.report-results-scrollbar::-webkit-scrollbar-track {
+  background: #27272a;
+  border-radius: 999px;
+}
+
+.report-results-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(90deg, #a1a1aa, #d4d4d8);
+  border: 2px solid #27272a;
+  border-radius: 999px;
+}
+
+.report-results-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(90deg, #d4d4d8, #e4e4e7);
+}

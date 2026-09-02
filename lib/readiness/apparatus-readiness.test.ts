@@ -7,6 +7,18 @@ import {
   type ApparatusReadinessInput,
 } from "./apparatus-readiness";
 import { ensureApparatusReadinessRowContract, getStatusLabelForReadinessRow } from "./apparatus-readiness-data";
+import {
+  getApparatusStateAfterDeficiencyResolution,
+  getOutOfServiceSourceForInspectionStatus,
+} from "../apparatus/out-of-service-source";
+import {
+  buildCompletionFootprint,
+  buildInspectionParticipantSummary,
+  buildParticipationCreditCounts,
+  evaluateApparatusCheckCompletion,
+  evaluateSessionDeficiencyReporter,
+  evaluateSessionHelperAdd,
+} from "./apparatus-check-completion-rules";
 
 function buildBaseInput(): ApparatusReadinessInput {
   return {
@@ -51,6 +63,64 @@ test("A. Perfect apparatus = 100%", () => {
   const result = calculateOverallApparatusReadiness(buildBaseInput());
   assert.equal(result.scorePercent, 100);
   assert.equal(result.status, "ready");
+});
+
+test("A2. Fully configured apparatus with no historical readiness events starts at 100%", () => {
+  const input = buildBaseInput();
+  input.apparatusCheck.lastCompletedAt = null;
+  input.maintenanceRequirements = [
+    {
+      requirementId: "req-1",
+      name: "Engine Service",
+      methods: [
+        {
+          methodType: "time_days",
+          intervalValue: 30,
+          dueSoonThresholdValue: 3,
+          earlyOverdueThresholdValue: 2,
+          moderateOverdueThresholdValue: 10,
+          elapsedSinceService: 0,
+        },
+      ],
+    },
+  ];
+
+  const result = calculateOverallApparatusReadiness(input);
+  assert.equal(result.isScoreAvailable, true);
+  assert.equal(result.bucketScores.apparatusChecks, 20);
+  assert.equal(result.bucketScores.maintenanceService, 20);
+  assert.equal(result.scorePercent, 100);
+  assert.equal(result.status, "ready");
+});
+
+test("A3. Unconfigured apparatus remains not scored and never assumes 100%", () => {
+  const result = calculateOverallApparatusReadiness({
+    now: new Date("2026-08-18T12:00:00.000Z"),
+    explicitOutOfService: false,
+    apparatusCheck: {
+      lastCompletedAt: null,
+      intervalDays: null,
+      scoreProfile: null,
+    },
+    conditionDeficiencies: [],
+    maintenanceRequirements: [],
+    equipmentRequirements: [],
+  });
+
+  assert.equal(result.isScoreAvailable, false);
+  assert.equal(result.scorePercent, null);
+  assert.equal(result.status, "not_scored");
+});
+
+test("A4. Configured apparatus with actual readiness deficiency follows locked scoring", () => {
+  const input = buildBaseInput();
+  input.maintenanceRequirements[0].methods[0].elapsedSinceService = 60;
+
+  const result = calculateOverallApparatusReadiness(input);
+  assert.equal(result.isScoreAvailable, true);
+  assert.equal(result.bucketScores.maintenanceService, 0);
+  assert.equal(result.scorePercent, 80);
+  assert.equal(result.status, "needs_attention");
 });
 
 test("B. Apparatus Check current", () => {
@@ -223,6 +293,7 @@ test("C9. Data contract returns explicit readiness for configuration-required ap
     department_id: "d-1",
     name: "Engine 1",
     type: "Engine",
+    include_in_department_readiness: true,
     status: "in_service",
     last_inspection_at: null,
     mileage: null,
@@ -246,6 +317,9 @@ test("C9. Data contract returns explicit readiness for configuration-required ap
     {
       apparatus,
       readiness: configurationRequiredReadiness,
+      simulationData: {
+        maintenanceRequirements: [],
+      },
     },
     new Date("2026-08-18T12:00:00.000Z")
   );
@@ -263,6 +337,7 @@ test("C10. Unexpected missing evaluation is marked Readiness Unavailable", () =>
     department_id: "d-1",
     name: "Rescue 2",
     type: "Rescue",
+    include_in_department_readiness: true,
     status: "in_service",
     last_inspection_at: null,
     mileage: null,
@@ -283,6 +358,7 @@ test("C11. OOS remains OOS even when evaluation is unavailable", () => {
     department_id: "d-1",
     name: "Rescue 3",
     type: "Rescue",
+    include_in_department_readiness: true,
     status: "out_of_service",
     last_inspection_at: null,
     mileage: null,
@@ -304,6 +380,7 @@ test("C12. Mixed apparatus rows keep explicit non-conflated states", () => {
       department_id: "d-1",
       name: "Engine 1",
       type: "Engine",
+      include_in_department_readiness: true,
       status: "in_service",
       last_inspection_at: null,
       mileage: null,
@@ -314,6 +391,7 @@ test("C12. Mixed apparatus rows keep explicit non-conflated states", () => {
       department_id: "d-1",
       name: "Truck 2",
       type: "Truck",
+      include_in_department_readiness: true,
       status: "in_service",
       last_inspection_at: null,
       mileage: null,
@@ -324,6 +402,7 @@ test("C12. Mixed apparatus rows keep explicit non-conflated states", () => {
       department_id: "d-1",
       name: "Rescue 3",
       type: "Rescue",
+      include_in_department_readiness: true,
       status: "out_of_service",
       last_inspection_at: null,
       mileage: null,
@@ -348,10 +427,16 @@ test("C12. Mixed apparatus rows keep explicit non-conflated states", () => {
     {
       apparatus: apparatusRows[0],
       readiness: calculateOverallApparatusReadiness(buildBaseInput()),
+      simulationData: {
+        maintenanceRequirements: [],
+      },
     },
     {
       apparatus: apparatusRows[1],
       readiness: configurationRequiredReadiness,
+      simulationData: {
+        maintenanceRequirements: [],
+      },
     },
     undefined,
   ];
@@ -377,6 +462,69 @@ test("C12. Mixed apparatus rows keep explicit non-conflated states", () => {
   assert.equal(rows[2].readinessState, "evaluation_error");
   assert.equal(rows[2].readiness.scorePercent, null);
   assert.equal(getStatusLabelForReadinessRow(rows[2]), "Out of Service");
+});
+
+test("C13. Current inspection and active deficiency are not the same as Checks Due", () => {
+  const result = calculateOverallApparatusReadiness({
+    ...buildBaseInput(),
+    conditionDeficiencies: [
+      { id: "d-1", priorityName: "Medium", isActive: true, countInCondition: true },
+    ],
+  });
+
+  assert.equal(result.bucketScores.apparatusChecks, 20);
+  assert.equal(result.status, "needs_attention");
+  assert.equal(getStatusLabelForReadinessRow({
+    apparatus: {
+      id: "a-1",
+      department_id: "d-1",
+      name: "Engine 430",
+      type: "Engine",
+      include_in_department_readiness: true,
+      status: "in_service",
+      last_inspection_at: "2026-09-01T00:00:00.000Z",
+      mileage: null,
+      engine_hours: null,
+    },
+    readiness: result,
+    simulationData: { maintenanceRequirements: [] },
+    readinessState: "evaluated",
+    evaluationErrorReason: "none",
+  }), "Ready");
+});
+
+test("C14. Overdue inspection is labeled Checks Due even when readiness is otherwise not ready", () => {
+  const result = calculateOverallApparatusReadiness({
+    ...buildBaseInput(),
+    apparatusCheck: {
+      lastCompletedAt: "2026-08-10T06:00:00.000Z",
+      intervalDays: 1,
+      scoreProfile: "daily",
+    },
+    conditionDeficiencies: [
+      { id: "d-1", priorityName: "Medium", isActive: true, countInCondition: true },
+    ],
+  });
+
+  assert.equal(result.bucketScores.apparatusChecks, 0);
+  assert.equal(result.status, "needs_attention");
+  assert.equal(getStatusLabelForReadinessRow({
+    apparatus: {
+      id: "a-2",
+      department_id: "d-1",
+      name: "Engine 431",
+      type: "Engine",
+      include_in_department_readiness: true,
+      status: "in_service",
+      last_inspection_at: "2026-08-10T00:00:00.000Z",
+      mileage: null,
+      engine_hours: null,
+    },
+    readiness: result,
+    simulationData: { maintenanceRequirements: [] },
+    readinessState: "evaluated",
+    evaluationErrorReason: "none",
+  }), "Checks Due");
 });
 
 test("D. One Minor deficiency", () => {
@@ -685,13 +833,16 @@ test("O. Optional equipment does not affect score", () => {
   assert.equal(result.bucketScores.requiredEquipment, 20);
 });
 
-test("O2. Missing required equipment configuration returns not scored", () => {
+test("O2. Empty maintenance and equipment configuration is neutral", () => {
   const input = buildBaseInput();
+  input.maintenanceRequirements = [];
   input.equipmentRequirements = [];
 
   const result = calculateOverallApparatusReadiness(input);
-  assert.equal(result.bucketScores.requiredEquipment, null);
-  assert.equal(result.status, "not_scored");
+  assert.equal(result.bucketScores.maintenanceService, 20);
+  assert.equal(result.bucketScores.requiredEquipment, 20);
+  assert.equal(result.scorePercent, 100);
+  assert.equal(result.status, "ready");
 });
 
 test("P. Score never falls below 0", () => {
@@ -752,4 +903,652 @@ test("R. Same issue is not double-counted between Condition and Equipment", () =
   assert.equal(result.bucketScores.conditionSafety, 40);
   assert.equal(result.bucketScores.requiredEquipment, 0);
   assert.equal(result.scorePercent, 80);
+});
+
+test("S1. Deficiency-driven OOS with one active deficiency remains OOS", () => {
+  const result = getApparatusStateAfterDeficiencyResolution({
+    apparatusStatus: "out_of_service",
+    outOfServiceSource: "deficiency",
+    remainingActiveDeficiencyCount: 1,
+  });
+
+  assert.equal(result.statusChanged, false);
+  assert.equal(result.nextStatus, "out_of_service");
+  assert.equal(result.nextOutOfServiceSource, "deficiency");
+});
+
+test("S2. Deficiency-driven OOS with multiple active deficiencies remains OOS until the last one is resolved", () => {
+  const withThreeRemaining = getApparatusStateAfterDeficiencyResolution({
+    apparatusStatus: "out_of_service",
+    outOfServiceSource: "deficiency",
+    remainingActiveDeficiencyCount: 3,
+  });
+  const withOneRemaining = getApparatusStateAfterDeficiencyResolution({
+    apparatusStatus: "out_of_service",
+    outOfServiceSource: "deficiency",
+    remainingActiveDeficiencyCount: 1,
+  });
+
+  assert.equal(withThreeRemaining.statusChanged, false);
+  assert.equal(withThreeRemaining.nextStatus, "out_of_service");
+  assert.equal(withOneRemaining.statusChanged, false);
+  assert.equal(withOneRemaining.nextStatus, "out_of_service");
+});
+
+test("S3. Deficiency-driven OOS returns to Ready when the last active deficiency is resolved", () => {
+  const result = getApparatusStateAfterDeficiencyResolution({
+    apparatusStatus: "out_of_service",
+    outOfServiceSource: "deficiency",
+    remainingActiveDeficiencyCount: 0,
+  });
+
+  assert.equal(result.statusChanged, true);
+  assert.equal(result.nextStatus, "ready");
+  assert.equal(result.nextOutOfServiceSource, null);
+});
+
+test("S4. Manual OOS remains OOS when a deficiency is resolved", () => {
+  const result = getApparatusStateAfterDeficiencyResolution({
+    apparatusStatus: "out_of_service",
+    outOfServiceSource: "manual",
+    remainingActiveDeficiencyCount: 0,
+  });
+
+  assert.equal(result.statusChanged, false);
+  assert.equal(result.nextStatus, "out_of_service");
+  assert.equal(result.nextOutOfServiceSource, "manual");
+});
+
+test("S5. Legacy OOS remains OOS when a deficiency is resolved", () => {
+  const result = getApparatusStateAfterDeficiencyResolution({
+    apparatusStatus: "out_of_service",
+    outOfServiceSource: null,
+    remainingActiveDeficiencyCount: 0,
+  });
+
+  assert.equal(result.statusChanged, false);
+  assert.equal(result.nextStatus, "out_of_service");
+  assert.equal(result.nextOutOfServiceSource, null);
+});
+
+test("S6. Ready inspection clears out_of_service_source", () => {
+  const result = getOutOfServiceSourceForInspectionStatus("ready");
+  assert.equal(result, null);
+});
+
+test("S7. Ready with deficiencies inspection clears out_of_service_source", () => {
+  const result = getOutOfServiceSourceForInspectionStatus("needs_attention");
+  assert.equal(result, null);
+});
+
+test("S8. OOS inspection marks out_of_service_source as deficiency", () => {
+  const result = getOutOfServiceSourceForInspectionStatus("out_of_service");
+  assert.equal(result, "deficiency");
+});
+
+test("T1. Ready with zero linked deficiencies is allowed", () => {
+  const result = evaluateApparatusCheckCompletion({
+    finalStatus: "ready",
+    linkedDeficiencyCount: 0,
+    hasForeignApparatusDeficiency: false,
+    hasForeignDepartmentDeficiency: false,
+    checklistRequired: false,
+    checklistComplete: true,
+    sessionCompleted: false,
+    isSessionOwner: true,
+    isDepartmentMatch: true,
+  });
+
+  assert.equal(result.allowCompletion, true);
+  assert.equal(result.reason, "ok");
+  assert.equal(result.outOfServiceSource, null);
+});
+
+test("T2. Ready with linked deficiencies is rejected", () => {
+  const result = evaluateApparatusCheckCompletion({
+    finalStatus: "ready",
+    linkedDeficiencyCount: 1,
+    hasForeignApparatusDeficiency: false,
+    hasForeignDepartmentDeficiency: false,
+    checklistRequired: false,
+    checklistComplete: true,
+    sessionCompleted: false,
+    isSessionOwner: true,
+    isDepartmentMatch: true,
+  });
+
+  assert.equal(result.allowCompletion, false);
+  assert.equal(result.reason, "ready_with_linked_deficiencies");
+});
+
+test("T3. Needs attention with one linked deficiency is allowed", () => {
+  const result = evaluateApparatusCheckCompletion({
+    finalStatus: "needs_attention",
+    linkedDeficiencyCount: 1,
+    hasForeignApparatusDeficiency: false,
+    hasForeignDepartmentDeficiency: false,
+    checklistRequired: false,
+    checklistComplete: true,
+    sessionCompleted: false,
+    isSessionOwner: true,
+    isDepartmentMatch: true,
+  });
+
+  assert.equal(result.allowCompletion, true);
+  assert.equal(result.outOfServiceSource, null);
+});
+
+test("T4. Needs attention with multiple linked deficiencies is allowed", () => {
+  const result = evaluateApparatusCheckCompletion({
+    finalStatus: "needs_attention",
+    linkedDeficiencyCount: 3,
+    hasForeignApparatusDeficiency: false,
+    hasForeignDepartmentDeficiency: false,
+    checklistRequired: false,
+    checklistComplete: true,
+    sessionCompleted: false,
+    isSessionOwner: true,
+    isDepartmentMatch: true,
+  });
+
+  assert.equal(result.allowCompletion, true);
+});
+
+test("T5. OOS with one linked deficiency is allowed and marked deficiency-driven", () => {
+  const result = evaluateApparatusCheckCompletion({
+    finalStatus: "out_of_service",
+    linkedDeficiencyCount: 1,
+    hasForeignApparatusDeficiency: false,
+    hasForeignDepartmentDeficiency: false,
+    checklistRequired: false,
+    checklistComplete: true,
+    sessionCompleted: false,
+    isSessionOwner: true,
+    isDepartmentMatch: true,
+  });
+
+  assert.equal(result.allowCompletion, true);
+  assert.equal(result.outOfServiceSource, "deficiency");
+});
+
+test("T6. OOS with multiple linked deficiencies is allowed and marked deficiency-driven", () => {
+  const result = evaluateApparatusCheckCompletion({
+    finalStatus: "out_of_service",
+    linkedDeficiencyCount: 4,
+    hasForeignApparatusDeficiency: false,
+    hasForeignDepartmentDeficiency: false,
+    checklistRequired: false,
+    checklistComplete: true,
+    sessionCompleted: false,
+    isSessionOwner: true,
+    isDepartmentMatch: true,
+  });
+
+  assert.equal(result.allowCompletion, true);
+  assert.equal(result.outOfServiceSource, "deficiency");
+});
+
+test("T7. OOS with zero linked deficiencies is rejected", () => {
+  const result = evaluateApparatusCheckCompletion({
+    finalStatus: "out_of_service",
+    linkedDeficiencyCount: 0,
+    hasForeignApparatusDeficiency: false,
+    hasForeignDepartmentDeficiency: false,
+    checklistRequired: false,
+    checklistComplete: true,
+    sessionCompleted: false,
+    isSessionOwner: true,
+    isDepartmentMatch: true,
+  });
+
+  assert.equal(result.allowCompletion, false);
+  assert.equal(result.reason, "status_requires_deficiency");
+});
+
+test("T8. Needs attention with zero linked deficiencies is rejected", () => {
+  const result = evaluateApparatusCheckCompletion({
+    finalStatus: "needs_attention",
+    linkedDeficiencyCount: 0,
+    hasForeignApparatusDeficiency: false,
+    hasForeignDepartmentDeficiency: false,
+    checklistRequired: false,
+    checklistComplete: true,
+    sessionCompleted: false,
+    isSessionOwner: true,
+    isDepartmentMatch: true,
+  });
+
+  assert.equal(result.allowCompletion, false);
+  assert.equal(result.reason, "status_requires_deficiency");
+});
+
+test("T9. Session owner mismatch is rejected", () => {
+  const result = evaluateApparatusCheckCompletion({
+    finalStatus: "out_of_service",
+    linkedDeficiencyCount: 1,
+    hasForeignApparatusDeficiency: false,
+    hasForeignDepartmentDeficiency: false,
+    checklistRequired: false,
+    checklistComplete: true,
+    sessionCompleted: false,
+    isSessionOwner: false,
+    isDepartmentMatch: true,
+  });
+
+  assert.equal(result.allowCompletion, false);
+  assert.equal(result.reason, "session_owner_mismatch");
+});
+
+test("T10. Session department mismatch is rejected", () => {
+  const result = evaluateApparatusCheckCompletion({
+    finalStatus: "out_of_service",
+    linkedDeficiencyCount: 1,
+    hasForeignApparatusDeficiency: false,
+    hasForeignDepartmentDeficiency: false,
+    checklistRequired: false,
+    checklistComplete: true,
+    sessionCompleted: false,
+    isSessionOwner: true,
+    isDepartmentMatch: false,
+  });
+
+  assert.equal(result.allowCompletion, false);
+  assert.equal(result.reason, "session_department_mismatch");
+});
+
+test("T11. Completed session is idempotently rejected as already completed", () => {
+  const result = evaluateApparatusCheckCompletion({
+    finalStatus: "ready",
+    linkedDeficiencyCount: 0,
+    hasForeignApparatusDeficiency: false,
+    hasForeignDepartmentDeficiency: false,
+    checklistRequired: false,
+    checklistComplete: true,
+    sessionCompleted: true,
+    isSessionOwner: true,
+    isDepartmentMatch: true,
+  });
+
+  assert.equal(result.allowCompletion, false);
+  assert.equal(result.reason, "already_completed");
+});
+
+test("T12. Checklist required and incomplete is rejected", () => {
+  const result = evaluateApparatusCheckCompletion({
+    finalStatus: "out_of_service",
+    linkedDeficiencyCount: 1,
+    hasForeignApparatusDeficiency: false,
+    hasForeignDepartmentDeficiency: false,
+    checklistRequired: true,
+    checklistComplete: false,
+    sessionCompleted: false,
+    isSessionOwner: true,
+    isDepartmentMatch: true,
+  });
+
+  assert.equal(result.allowCompletion, false);
+  assert.equal(result.reason, "checklist_incomplete");
+});
+
+test("T13. Checklist required and complete is allowed", () => {
+  const result = evaluateApparatusCheckCompletion({
+    finalStatus: "out_of_service",
+    linkedDeficiencyCount: 1,
+    hasForeignApparatusDeficiency: false,
+    hasForeignDepartmentDeficiency: false,
+    checklistRequired: true,
+    checklistComplete: true,
+    sessionCompleted: false,
+    isSessionOwner: true,
+    isDepartmentMatch: true,
+  });
+
+  assert.equal(result.allowCompletion, true);
+});
+
+test("T14. Foreign-apparatus deficiency linkage is rejected", () => {
+  const result = evaluateApparatusCheckCompletion({
+    finalStatus: "out_of_service",
+    linkedDeficiencyCount: 1,
+    hasForeignApparatusDeficiency: true,
+    hasForeignDepartmentDeficiency: false,
+    checklistRequired: false,
+    checklistComplete: true,
+    sessionCompleted: false,
+    isSessionOwner: true,
+    isDepartmentMatch: true,
+  });
+
+  assert.equal(result.allowCompletion, false);
+  assert.equal(result.reason, "linked_deficiency_scope_mismatch");
+});
+
+test("T15. Foreign-department deficiency linkage is rejected", () => {
+  const result = evaluateApparatusCheckCompletion({
+    finalStatus: "out_of_service",
+    linkedDeficiencyCount: 1,
+    hasForeignApparatusDeficiency: false,
+    hasForeignDepartmentDeficiency: true,
+    checklistRequired: false,
+    checklistComplete: true,
+    sessionCompleted: false,
+    isSessionOwner: true,
+    isDepartmentMatch: true,
+  });
+
+  assert.equal(result.allowCompletion, false);
+  assert.equal(result.reason, "linked_deficiency_scope_mismatch");
+});
+
+test("T16. Old or unrelated deficiencies cannot satisfy a new OOS session", () => {
+  const result = evaluateApparatusCheckCompletion({
+    finalStatus: "out_of_service",
+    linkedDeficiencyCount: 0,
+    hasForeignApparatusDeficiency: false,
+    hasForeignDepartmentDeficiency: false,
+    checklistRequired: false,
+    checklistComplete: true,
+    sessionCompleted: false,
+    isSessionOwner: true,
+    isDepartmentMatch: true,
+  });
+
+  assert.equal(result.allowCompletion, false);
+  assert.equal(result.reason, "status_requires_deficiency");
+});
+
+test("T17. Active deficiency count keeps deficiency-driven OOS out of service", () => {
+  const result = getApparatusStateAfterDeficiencyResolution({
+    apparatusStatus: "out_of_service",
+    outOfServiceSource: "deficiency",
+    remainingActiveDeficiencyCount: 2,
+  });
+
+  assert.equal(result.statusChanged, false);
+  assert.equal(result.nextStatus, "out_of_service");
+});
+
+test("T18. Final active deficiency resolution returns deficiency-driven OOS to ready", () => {
+  const result = getApparatusStateAfterDeficiencyResolution({
+    apparatusStatus: "out_of_service",
+    outOfServiceSource: "deficiency",
+    remainingActiveDeficiencyCount: 0,
+  });
+
+  assert.equal(result.statusChanged, true);
+  assert.equal(result.nextStatus, "ready");
+});
+
+test("T19. Legacy OOS with null source remains protected", () => {
+  const result = getApparatusStateAfterDeficiencyResolution({
+    apparatusStatus: "out_of_service",
+    outOfServiceSource: null,
+    remainingActiveDeficiencyCount: 0,
+  });
+
+  assert.equal(result.statusChanged, false);
+  assert.equal(result.nextStatus, "out_of_service");
+});
+
+test("T20. Manual OOS remains protected from automatic return", () => {
+  const result = getApparatusStateAfterDeficiencyResolution({
+    apparatusStatus: "out_of_service",
+    outOfServiceSource: "manual",
+    remainingActiveDeficiencyCount: 0,
+  });
+
+  assert.equal(result.statusChanged, false);
+  assert.equal(result.nextStatus, "out_of_service");
+});
+
+test("T21. Single completion session can link multiple deficiencies to one inspection atomically (rule simulation)", () => {
+  const result = evaluateApparatusCheckCompletion({
+    finalStatus: "needs_attention",
+    linkedDeficiencyCount: 3,
+    hasForeignApparatusDeficiency: false,
+    hasForeignDepartmentDeficiency: false,
+    checklistRequired: true,
+    checklistComplete: true,
+    sessionCompleted: false,
+    isSessionOwner: true,
+    isDepartmentMatch: true,
+  });
+
+  assert.equal(result.allowCompletion, true);
+  assert.equal(result.reason, "ok");
+});
+
+test("U1. Primary only completion creates one inspection row with zero retained helpers (rule simulation)", () => {
+  const completion = evaluateApparatusCheckCompletion({
+    finalStatus: "ready",
+    linkedDeficiencyCount: 0,
+    hasForeignApparatusDeficiency: false,
+    hasForeignDepartmentDeficiency: false,
+    checklistRequired: false,
+    checklistComplete: true,
+    sessionCompleted: false,
+    isSessionOwner: true,
+    isDepartmentMatch: true,
+  });
+  const footprint = buildCompletionFootprint({
+    completionAllowed: completion.allowCompletion,
+    helperMemberIds: [],
+  });
+
+  assert.equal(completion.allowCompletion, true);
+  assert.equal(footprint.inspectionRowsCreated, 1);
+  assert.equal(footprint.completedSessionRows, 1);
+  assert.equal(footprint.retainedHelperRows, 0);
+});
+
+test("U2. One helper completion retains helper and still creates one inspection row (rule simulation)", () => {
+  const completion = evaluateApparatusCheckCompletion({
+    finalStatus: "needs_attention",
+    linkedDeficiencyCount: 1,
+    hasForeignApparatusDeficiency: false,
+    hasForeignDepartmentDeficiency: false,
+    checklistRequired: true,
+    checklistComplete: true,
+    sessionCompleted: false,
+    isSessionOwner: true,
+    isDepartmentMatch: true,
+  });
+  const footprint = buildCompletionFootprint({
+    completionAllowed: completion.allowCompletion,
+    helperMemberIds: ["adam"],
+  });
+
+  assert.equal(completion.allowCompletion, true);
+  assert.equal(footprint.inspectionRowsCreated, 1);
+  assert.equal(footprint.retainedHelperRows, 1);
+});
+
+test("U3. Multiple helpers completion retains all helpers and keeps one inspection row (rule simulation)", () => {
+  const completion = evaluateApparatusCheckCompletion({
+    finalStatus: "out_of_service",
+    linkedDeficiencyCount: 2,
+    hasForeignApparatusDeficiency: false,
+    hasForeignDepartmentDeficiency: false,
+    checklistRequired: true,
+    checklistComplete: true,
+    sessionCompleted: false,
+    isSessionOwner: true,
+    isDepartmentMatch: true,
+  });
+  const footprint = buildCompletionFootprint({
+    completionAllowed: completion.allowCompletion,
+    helperMemberIds: ["adam", "ron"],
+  });
+
+  assert.equal(completion.allowCompletion, true);
+  assert.equal(footprint.inspectionRowsCreated, 1);
+  assert.equal(footprint.retainedHelperRows, 2);
+});
+
+test("U4. Duplicate helper add is rejected", () => {
+  const decision = evaluateSessionHelperAdd({
+    sessionState: "in_progress",
+    isSessionOwner: true,
+    targetMemberExists: true,
+    targetMemberActive: true,
+    targetMemberDepartmentMatchesSession: true,
+    isTargetPrimaryInspector: false,
+    alreadyParticipant: true,
+  });
+
+  assert.equal(decision.allowed, false);
+  assert.equal(decision.reason, "duplicate_helper");
+});
+
+test("U5. Cross-department, inactive, and primary-as-helper adds are rejected", () => {
+  const crossDepartment = evaluateSessionHelperAdd({
+    sessionState: "in_progress",
+    isSessionOwner: true,
+    targetMemberExists: true,
+    targetMemberActive: true,
+    targetMemberDepartmentMatchesSession: false,
+    isTargetPrimaryInspector: false,
+    alreadyParticipant: false,
+  });
+  const inactive = evaluateSessionHelperAdd({
+    sessionState: "in_progress",
+    isSessionOwner: true,
+    targetMemberExists: true,
+    targetMemberActive: false,
+    targetMemberDepartmentMatchesSession: true,
+    isTargetPrimaryInspector: false,
+    alreadyParticipant: false,
+  });
+  const primaryAsHelper = evaluateSessionHelperAdd({
+    sessionState: "in_progress",
+    isSessionOwner: true,
+    targetMemberExists: true,
+    targetMemberActive: true,
+    targetMemberDepartmentMatchesSession: true,
+    isTargetPrimaryInspector: true,
+    alreadyParticipant: false,
+  });
+
+  assert.equal(crossDepartment.allowed, false);
+  assert.equal(crossDepartment.reason, "target_member_department_mismatch");
+  assert.equal(inactive.allowed, false);
+  assert.equal(inactive.reason, "target_member_inactive");
+  assert.equal(primaryAsHelper.allowed, false);
+  assert.equal(primaryAsHelper.reason, "primary_cannot_be_helper");
+});
+
+test("U6. Helper deficiency reporting allows owner/helper and rejects non-participant", () => {
+  const owner = evaluateSessionDeficiencyReporter({
+    sessionState: "in_progress",
+    reporterExists: true,
+    reporterIsActive: true,
+    reporterDepartmentMatchesSession: true,
+    reporterIsSessionOwner: true,
+    reporterIsSessionHelper: false,
+  });
+  const helper = evaluateSessionDeficiencyReporter({
+    sessionState: "in_progress",
+    reporterExists: true,
+    reporterIsActive: true,
+    reporterDepartmentMatchesSession: true,
+    reporterIsSessionOwner: false,
+    reporterIsSessionHelper: true,
+  });
+  const nonParticipant = evaluateSessionDeficiencyReporter({
+    sessionState: "in_progress",
+    reporterExists: true,
+    reporterIsActive: true,
+    reporterDepartmentMatchesSession: true,
+    reporterIsSessionOwner: false,
+    reporterIsSessionHelper: false,
+  });
+
+  assert.equal(owner.allowed, true);
+  assert.equal(helper.allowed, true);
+  assert.equal(nonParticipant.allowed, false);
+  assert.equal(nonParticipant.reason, "reporter_not_participant");
+});
+
+test("U7. Helper deficiency reporting rejects cross-department, inactive, and completed-session reporters", () => {
+  const crossDepartment = evaluateSessionDeficiencyReporter({
+    sessionState: "in_progress",
+    reporterExists: true,
+    reporterIsActive: true,
+    reporterDepartmentMatchesSession: false,
+    reporterIsSessionOwner: false,
+    reporterIsSessionHelper: true,
+  });
+  const inactive = evaluateSessionDeficiencyReporter({
+    sessionState: "in_progress",
+    reporterExists: true,
+    reporterIsActive: false,
+    reporterDepartmentMatchesSession: true,
+    reporterIsSessionOwner: false,
+    reporterIsSessionHelper: true,
+  });
+  const completedSession = evaluateSessionDeficiencyReporter({
+    sessionState: "completed",
+    reporterExists: true,
+    reporterIsActive: true,
+    reporterDepartmentMatchesSession: true,
+    reporterIsSessionOwner: false,
+    reporterIsSessionHelper: true,
+  });
+
+  assert.equal(crossDepartment.allowed, false);
+  assert.equal(crossDepartment.reason, "reporter_department_mismatch");
+  assert.equal(inactive.allowed, false);
+  assert.equal(inactive.reason, "reporter_inactive");
+  assert.equal(completedSession.allowed, false);
+  assert.equal(completedSession.reason, "session_inactive");
+});
+
+test("U8. Participation credits are one per inspection for owner and helpers, with no owner double-count", () => {
+  const credits = buildParticipationCreditCounts([
+    {
+      inspectionId: "inspection-1",
+      ownerMemberId: "tom",
+      helperMemberIds: ["adam", "ron", "tom", "adam"],
+    },
+  ]);
+
+  assert.equal(credits.tom, 1);
+  assert.equal(credits.adam, 1);
+  assert.equal(credits.ron, 1);
+  assert.equal(credits["non-participant"] ?? 0, 0);
+});
+
+test("U9. History participant summary omits Assisted By for primary-only inspections", () => {
+  const primaryOnly = buildInspectionParticipantSummary({
+    inspectorName: "Tom Smith",
+    helperNames: [],
+  });
+  const withHelpers = buildInspectionParticipantSummary({
+    inspectorName: "Tom Smith",
+    helperNames: ["Adam Smith", "Ron Jones"],
+  });
+
+  assert.equal(primaryOnly.inspector, "Tom Smith");
+  assert.equal(primaryOnly.assistedBy, null);
+  assert.equal(withHelpers.assistedBy, "Adam Smith, Ron Jones");
+});
+
+test("U10. Only one inspection row is produced regardless of helper count (rule simulation)", () => {
+  const zeroHelpers = buildCompletionFootprint({
+    completionAllowed: true,
+    helperMemberIds: [],
+  });
+  const oneHelper = buildCompletionFootprint({
+    completionAllowed: true,
+    helperMemberIds: ["adam"],
+  });
+  const twoHelpers = buildCompletionFootprint({
+    completionAllowed: true,
+    helperMemberIds: ["adam", "ron"],
+  });
+
+  assert.equal(zeroHelpers.inspectionRowsCreated, 1);
+  assert.equal(oneHelper.inspectionRowsCreated, 1);
+  assert.equal(twoHelpers.inspectionRowsCreated, 1);
+  assert.equal(twoHelpers.retainedHelperRows, 2);
 });

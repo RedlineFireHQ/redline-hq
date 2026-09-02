@@ -1,10 +1,183 @@
-import Link from "next/link";
+import { redirect } from "next/navigation";
 import PageLayout from "@/components/layout/PageLayout";
-import { members } from "@/lib/members";
+import AddMemberButton from "@/components/personnel/AddMemberButton";
+import PersonnelMembersTable from "@/components/personnel/PersonnelMembersTable";
+import type { AppPermissionOption } from "@/lib/app-permissions";
+import { getCurrentMember } from "@/lib/current-member";
+import { canManagePersonnel } from "@/lib/member-permissions";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
+import {
+  getRoleRequirementStatus,
+  type DepartmentRoleRow,
+  type MemberCertificationRow,
+  type MemberQualificationRow,
+  type RoleRequiredCertificationRow,
+  type RoleRequiredQualificationRow,
+} from "@/lib/role-requirements";
 
-export default function PersonnelPage() {
+type PersonnelMemberRow = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  rank: string | null;
+  active: boolean | null;
+  status: string | null;
+  department_role_id: string | null;
+  department_role_name: string | null;
+  role_requirement_label: string;
+};
+
+type MemberCertificationQueryRow = {
+  member_id: string | null;
+  certification_id: string | null;
+  expires_at: string | null;
+};
+
+type MemberQualificationQueryRow = {
+  member_id: string | null;
+  qualification_id: string | null;
+};
+
+export default async function PersonnelPage() {
+  const supabase = await createSupabaseServerClient();
+  const currentMember = await getCurrentMember(supabase);
+
+  if (!currentMember?.departmentId) {
+    redirect("/login");
+  }
+
+  const hasPersonnelAccess = await canManagePersonnel(
+    supabase,
+    currentMember.departmentId,
+    currentMember.role,
+  );
+
+  if (!hasPersonnelAccess) {
+    redirect("/");
+  }
+
+  const { data, error } = await supabase
+    .from("members")
+    .select("id, first_name, last_name, rank, active, status, department_role_id")
+    .eq("department_id", currentMember.departmentId)
+    .order("last_name", { ascending: true })
+    .order("first_name", { ascending: true });
+  const [{ data: departmentRolesData }, { data: memberCertificationsData }, { data: memberQualificationsData }, { data: roleRequiredCertificationsData }, { data: roleRequiredQualificationsData }, { data: appPermissionsData, error: appPermissionsError }] = await Promise.all([
+    supabase
+      .from("department_roles")
+      .select("id, name, active")
+      .eq("department_id", currentMember.departmentId),
+    supabase
+      .from("member_certifications")
+      .select("member_id, certification_id, expires_at")
+      .eq("department_id", currentMember.departmentId),
+    supabase
+      .from("member_qualifications")
+      .select("member_id, qualification_id")
+      .eq("department_id", currentMember.departmentId),
+    supabase
+      .from("role_required_certifications")
+      .select("department_role_id, certification_id")
+      .eq("department_id", currentMember.departmentId),
+    supabase
+      .from("role_required_qualifications")
+      .select("department_role_id, qualification_id")
+      .eq("department_id", currentMember.departmentId),
+    supabase
+      .from("app_permissions")
+      .select("key, label, description, active, sort_order")
+      .eq("active", true)
+      .order("sort_order", { ascending: true })
+      .order("label", { ascending: true }),
+  ]);
+
+  if (appPermissionsError) {
+    throw new Error(appPermissionsError.message || "Unable to load app permissions.");
+  }
+
+  const permissionOptions: AppPermissionOption[] = (appPermissionsData ?? []).map((row) => ({
+    key: typeof row.key === "string" ? row.key : "",
+    label: typeof row.label === "string" ? row.label : "",
+    description: typeof row.description === "string" ? row.description : null,
+    active: typeof row.active === "boolean" ? row.active : true,
+    sort_order: typeof row.sort_order === "number" ? row.sort_order : 0,
+  })).filter((row) => row.key.length > 0 && row.label.length > 0);
+
+  const departmentRoles: DepartmentRoleRow[] = (departmentRolesData ?? []).map((row) => ({
+    id: String(row.id),
+    name: typeof row.name === "string" ? row.name : "",
+    active: typeof row.active === "boolean" ? row.active : true,
+  }));
+
+  const memberCertificationsByMemberId = new Map<string, MemberCertificationRow[]>();
+  for (const row of (memberCertificationsData ?? []) as MemberCertificationQueryRow[]) {
+    if (typeof row.member_id !== "string" || typeof row.certification_id !== "string") {
+      continue;
+    }
+
+    const currentRows = memberCertificationsByMemberId.get(row.member_id) ?? [];
+    currentRows.push({
+      certification_id: row.certification_id,
+      expires_at: typeof row.expires_at === "string" ? row.expires_at : null,
+    });
+    memberCertificationsByMemberId.set(row.member_id, currentRows);
+  }
+
+  const memberQualificationsByMemberId = new Map<string, MemberQualificationRow[]>();
+  for (const row of (memberQualificationsData ?? []) as MemberQualificationQueryRow[]) {
+    if (typeof row.member_id !== "string" || typeof row.qualification_id !== "string") {
+      continue;
+    }
+
+    const currentRows = memberQualificationsByMemberId.get(row.member_id) ?? [];
+    currentRows.push({
+      qualification_id: row.qualification_id,
+    });
+    memberQualificationsByMemberId.set(row.member_id, currentRows);
+  }
+
+  const roleRequiredCertifications: RoleRequiredCertificationRow[] = (roleRequiredCertificationsData ?? []).map((row) => ({
+    department_role_id: typeof row.department_role_id === "string" ? row.department_role_id : "",
+    certification_id: typeof row.certification_id === "string" ? row.certification_id : "",
+  }));
+
+  const roleRequiredQualifications: RoleRequiredQualificationRow[] = (roleRequiredQualificationsData ?? []).map((row) => ({
+    department_role_id: typeof row.department_role_id === "string" ? row.department_role_id : "",
+    qualification_id: typeof row.qualification_id === "string" ? row.qualification_id : "",
+  }));
+
+  const departmentRoleLookup = new Map(departmentRoles.map((role) => [role.id, role.name]));
+
+  if (error) {
+    throw new Error(error.message || "Unable to load personnel members.");
+  }
+
+  const members: PersonnelMemberRow[] = (data ?? []).map((row) => ({
+    id: String(row.id),
+    first_name: typeof row.first_name === "string" ? row.first_name : null,
+    last_name: typeof row.last_name === "string" ? row.last_name : null,
+    rank: typeof row.rank === "string" ? row.rank : null,
+    active: typeof row.active === "boolean" ? row.active : null,
+    status: typeof row.status === "string" ? row.status : null,
+    department_role_id: typeof row.department_role_id === "string" ? row.department_role_id : null,
+    department_role_name:
+      typeof row.department_role_id === "string"
+        ? departmentRoleLookup.get(row.department_role_id) ?? null
+        : null,
+    role_requirement_label: getRoleRequirementStatus({
+      memberDepartmentRoleId: typeof row.department_role_id === "string" ? row.department_role_id : null,
+      roleRequiredCertifications,
+      roleRequiredQualifications,
+      memberCertifications: memberCertificationsByMemberId.get(String(row.id)) ?? [],
+      memberQualifications: memberQualificationsByMemberId.get(String(row.id)) ?? [],
+    }).label,
+  }));
+
   return (
-    <PageLayout>
+    <PageLayout
+      environmentBackgroundUrl="/branding/images/Personnelpage.png"
+      environmentBackgroundPosition="left center"
+    >
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-4xl font-bold">Personnel</h1>
@@ -14,65 +187,10 @@ export default function PersonnelPage() {
           </p>
         </div>
 
-        <button className="rounded-lg bg-red-600 px-5 py-3 font-semibold transition hover:bg-red-700">
-          + Add Firefighter
-        </button>
+        <AddMemberButton permissionOptions={permissionOptions} />
       </div>
 
-      <div className="mb-6">
-        <input
-          type="text"
-          placeholder="Search firefighters..."
-          className="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-4 py-3 text-white placeholder:text-neutral-500 focus:border-red-600 focus:outline-none"
-        />
-      </div>
-
-      <div className="overflow-hidden rounded-xl border border-neutral-800 bg-neutral-900">
-        <table className="w-full">
-          <thead className="border-b border-neutral-800 bg-neutral-950">
-            <tr>
-              <th className="px-6 py-4 text-left">Name</th>
-              <th className="px-6 py-4 text-left">Rank</th>
-              <th className="px-6 py-4 text-left">Status</th>
-              <th className="px-6 py-4 text-left">Assigned Apparatus</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {members.map((member) => (
-              <tr
-                key={member.id}
-                className="border-b border-neutral-800 transition hover:bg-neutral-800"
-              >
-                <td className="px-6 py-4 font-medium">
-                  <Link
-                    href={`/personnel/${member.id}`}
-                    className="text-white transition hover:text-red-500"
-                  >
-                    {member.firstName} {member.lastName}
-                  </Link>
-                </td>
-
-                <td className="px-6 py-4">{member.rank}</td>
-
-                <td className="px-6 py-4">
-                  <span
-                    className={`rounded-full px-3 py-1 text-sm font-medium text-white ${
-                      member.active ? "bg-green-600" : "bg-red-600"
-                    }`}
-                  >
-                    {member.active ? "Active" : "Inactive"}
-                  </span>
-                </td>
-
-                <td className="px-6 py-4">
-                  {member.apparatusAssignments.join(", ")}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <PersonnelMembersTable members={members} />
     </PageLayout>
   );
 }

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
-type ApparatusStatus = "Ready" | "Checks Due" | "Out of Service";
+type ApparatusStatus = "Ready" | "Checks Due" | "Out of Service" | "Configuration Required";
 
 type ApparatusUnit = {
   id: string;
@@ -27,6 +27,10 @@ function getStatusClasses(status: ApparatusStatus): string {
 
   if (status === "Checks Due") {
     return "border-amber-500/30 bg-amber-500/15 text-amber-300";
+  }
+
+  if (status === "Configuration Required") {
+    return "border-sky-500/35 bg-sky-500/15 text-sky-200";
   }
 
   return "border-red-500/35 bg-red-500/15 text-red-300";

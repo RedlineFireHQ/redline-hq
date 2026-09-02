@@ -10,6 +10,7 @@ export type ReadinessFactor = {
   id: string;
   title: string;
   category: ReadinessFactorCategory;
+  weightPercent?: number;
   statusLabel: string;
   appliesTo: string;
   unitLabel: string;
@@ -49,7 +50,7 @@ export type ReadinessScoreState = {
   remainingPercent: number | null;
   qualificationsScore: number | null;
   qualificationsMaxScore: number;
-  qualificationsStatus: "no_role" | "not_configured" | "complete" | "missing";
+  qualificationsStatus: "no_role" | "not_configured" | "no_requirements" | "complete" | "missing";
   missingQualifications: string[];
   completedRequirements: number;
   incompleteRequirements: number;
@@ -87,11 +88,45 @@ export type RequirementInput = {
   active: boolean;
 };
 
+export type TrainingAssignmentInput = {
+  id: string;
+  title: string;
+  category_id: string | null;
+  due_at: string | null;
+  hours_credit: number | string | null;
+  is_required: boolean;
+  review_required: boolean;
+  status: string;
+};
+
+export type TrainingAssignmentMemberInput = {
+  id: string;
+  training_assignment_id: string;
+  completion_status: string;
+  due_at: string | null;
+  completed_at: string | null;
+  hours_earned: number | string | null;
+};
+
+type DateInput = string | Date;
+
 type CertificationRequirementStatus = {
   certificationId: string;
   certificationName: string;
   status: CertificationStatus;
 };
+
+function getCertificationCompletionPercent(status: CertificationStatus) {
+  if (status === "expired") {
+    return 0;
+  }
+
+  if (status === "expiring_soon") {
+    return 50;
+  }
+
+  return 100;
+}
 
 const QUALIFICATIONS_BUCKET_MAX = 10;
 const DEFICIENCIES_BUCKET_MAX = 10;
@@ -118,8 +153,24 @@ function getAverageCategoryCompletionPercent(factors: ReadinessFactor[], categor
     return 0;
   }
 
-  const totalCompletionPercent = categoryFactors.reduce((total, factor) => total + factor.completionPercent, 0);
-  return clampRange(totalCompletionPercent / categoryFactors.length, 0, 100);
+  let weightedCompletionPercent = 0;
+  let totalWeight = 0;
+
+  for (const factor of categoryFactors) {
+    const factorWeight = factor.weightPercent ?? 1;
+    if (factorWeight <= 0) {
+      continue;
+    }
+
+    weightedCompletionPercent += factor.completionPercent * factorWeight;
+    totalWeight += factorWeight;
+  }
+
+  if (totalWeight <= 0) {
+    return 0;
+  }
+
+  return clampRange(weightedCompletionPercent / totalWeight, 0, 100);
 }
 
 export function calculateQualificationsBucketScore(completedRequiredQualifications: number, totalRequiredQualifications: number) {
@@ -331,6 +382,25 @@ function parseLocalDate(value: string) {
   return new Date(`${value}T00:00:00`);
 }
 
+function toStartOfLocalDay(value: Date) {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+}
+
+function parseDateInput(value: DateInput | null | undefined) {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : toStartOfLocalDay(value);
+  }
+
+  if (typeof value === "string") {
+    const parsed = /^\d{4}-\d{2}-\d{2}$/.test(value)
+      ? parseLocalDate(value)
+      : new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : toStartOfLocalDay(parsed);
+  }
+
+  return null;
+}
+
 function getTodayKey() {
   const now = new Date();
   const year = now.getFullYear();
@@ -369,6 +439,119 @@ function clampPercent(value: number) {
   }
 
   return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function getDaysBetween(start: Date, end: Date) {
+  const millisecondsPerDay = 24 * 60 * 60 * 1000;
+  return Math.max(0, Math.floor((end.getTime() - start.getTime()) / millisecondsPerDay));
+}
+
+function getAnnualTrainingCompletionPercentFromDeficit(input: {
+  expectedHoursToDate: number;
+  completedHours: number;
+  annualRequiredHours: number;
+  proratedAnnualRequirementHours: number;
+}) {
+  const expectedHoursToDate = Math.max(0, input.expectedHoursToDate);
+  const completedHours = Math.max(0, input.completedHours);
+  const annualRequiredHours = Math.max(0, input.annualRequiredHours);
+  const proratedAnnualRequirementHours = Math.max(0, input.proratedAnnualRequirementHours);
+
+  if (expectedHoursToDate <= 0 || annualRequiredHours <= 0 || proratedAnnualRequirementHours <= 0) {
+    return {
+      completionPercent: 100,
+      trainingPointsEarned: TRAINING_WEIGHT_PERCENT,
+      expectedDeficitHours: 0,
+      pointsPerApplicableHour: 0,
+    };
+  }
+
+  const expectedDeficitHours = Math.max(0, expectedHoursToDate - completedHours);
+  const pointsPerApplicableHour = TRAINING_WEIGHT_PERCENT / annualRequiredHours;
+  const deductedPoints = expectedDeficitHours * pointsPerApplicableHour;
+  const trainingPointsEarned = clampRange(TRAINING_WEIGHT_PERCENT - deductedPoints, 0, TRAINING_WEIGHT_PERCENT);
+  const completionPercent = clampPercent((trainingPointsEarned / TRAINING_WEIGHT_PERCENT) * 100);
+
+  return {
+    completionPercent,
+    trainingPointsEarned,
+    expectedDeficitHours,
+    pointsPerApplicableHour,
+  };
+}
+
+function getAnnualHoursProgress(input: {
+  annualRequiredHours: number;
+  completedHours: number;
+  evaluationDate?: DateInput;
+  memberStartDate?: DateInput | null;
+}) {
+  const annualRequiredHours = Math.max(0, input.annualRequiredHours);
+  const completedHours = Math.max(0, input.completedHours);
+
+  if (annualRequiredHours <= 0) {
+    return {
+      completionPercent: 100,
+      completed: true,
+      expectedHoursToDate: 0,
+      proratedAnnualRequirementHours: 0,
+      monthlyPaceHours: 0,
+      shortfallHours: 0,
+      trainingPointsEarned: TRAINING_WEIGHT_PERCENT,
+      pointsPerApplicableHour: 0,
+    };
+  }
+
+  const evaluationDate = parseDateInput(input.evaluationDate) ?? toStartOfLocalDay(new Date());
+  const yearStart = new Date(evaluationDate.getFullYear(), 0, 1);
+  const nextYearStart = new Date(evaluationDate.getFullYear() + 1, 0, 1);
+  const yearLengthDays = getDaysBetween(yearStart, nextYearStart);
+
+  const memberStartDate = parseDateInput(input.memberStartDate);
+  const effectiveStartDate = memberStartDate && memberStartDate > yearStart ? memberStartDate : yearStart;
+  const activeStartDate = effectiveStartDate > nextYearStart ? nextYearStart : effectiveStartDate;
+
+  const activeDaysInYear = getDaysBetween(activeStartDate, nextYearStart);
+  if (activeDaysInYear <= 0 || yearLengthDays <= 0) {
+    return {
+      completionPercent: 100,
+      completed: true,
+      expectedHoursToDate: 0,
+      proratedAnnualRequirementHours: 0,
+      monthlyPaceHours: 0,
+      shortfallHours: 0,
+      trainingPointsEarned: TRAINING_WEIGHT_PERCENT,
+      pointsPerApplicableHour: 0,
+    };
+  }
+
+  const proratedAnnualRequirementHours = annualRequiredHours * (activeDaysInYear / yearLengthDays);
+  const averageDaysPerMonth = yearLengthDays / 12;
+  const activeMonthsInYear = activeDaysInYear / averageDaysPerMonth;
+  const monthlyPaceHours = activeMonthsInYear > 0 ? proratedAnnualRequirementHours / activeMonthsInYear : 0;
+
+  const elapsedActiveDays = clampRange(getDaysBetween(activeStartDate, evaluationDate), 0, activeDaysInYear);
+  const expectedHoursToDate = proratedAnnualRequirementHours * (elapsedActiveDays / activeDaysInYear);
+  const trainingCompletion = getAnnualTrainingCompletionPercentFromDeficit({
+    expectedHoursToDate,
+    completedHours,
+    annualRequiredHours,
+    proratedAnnualRequirementHours,
+  });
+  const completionPercent = trainingCompletion.completionPercent;
+  const completed = expectedHoursToDate <= 0 || completedHours >= expectedHoursToDate;
+  const shortfallHours = Math.max(0, expectedHoursToDate - completedHours);
+
+  return {
+    completionPercent,
+    completed,
+    expectedHoursToDate,
+    proratedAnnualRequirementHours,
+    monthlyPaceHours,
+    shortfallHours,
+    trainingPointsEarned: trainingCompletion.trainingPointsEarned,
+    pointsPerApplicableHour: trainingCompletion.pointsPerApplicableHour,
+  };
 }
 
 function normalizeRequirementKind(value: string): TrainingRequirementKind | null {
@@ -462,15 +645,28 @@ function getPeriodLabel(periodType: string | undefined, configPeriodLabel: strin
   return "Custom";
 }
 
+function normalizeTrainingLookupKey(value: string | null | undefined) {
+  return (value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ");
+}
+
 export function buildMemberReadinessScore(input: {
   requirementRows: RequirementInput[];
   departmentHours: number;
   categoryHours: Array<{ categoryId: string | null; categoryName: string; hours: number }>;
   categoryNameById: Map<string, string>;
+  trainingAssignments?: TrainingAssignmentInput[];
+  assignmentMembers?: TrainingAssignmentMemberInput[];
   certificationStatuses?: CertificationRequirementStatus[];
+  scoredCertificationStatuses?: CertificationRequirementStatus[];
   qualificationReadiness?: QualificationReadinessInput;
   deficiencyItems?: DeficiencyReadinessInput[];
   currentMemberId?: string;
+  evaluationDate?: DateInput;
+  memberStartDate?: DateInput | null;
 }): ReadinessScoreState {
   const activeRequirements = input.requirementRows.filter((row) => row.active);
   if (activeRequirements.length === 0) {
@@ -503,9 +699,60 @@ export function buildMemberReadinessScore(input: {
     categoryHoursById.set(row.categoryId, row.hours);
   }
 
+  const categoryIdsByNormalizedName = new Map<string, Set<string>>();
+  for (const [categoryId, categoryName] of input.categoryNameById.entries()) {
+    const normalizedName = normalizeTrainingLookupKey(categoryName);
+    const existingIds = categoryIdsByNormalizedName.get(normalizedName);
+    if (existingIds) {
+      existingIds.add(categoryId);
+    } else {
+      categoryIdsByNormalizedName.set(normalizedName, new Set([categoryId]));
+    }
+  }
+
+  const resolveTopicCategoryId = (requiredTopic: string | null | undefined) => {
+    const normalizedTopic = normalizeTrainingLookupKey(requiredTopic);
+    if (!normalizedTopic) {
+      return null;
+    }
+
+    const matchedCategoryIds = categoryIdsByNormalizedName.get(normalizedTopic);
+    if (!matchedCategoryIds || matchedCategoryIds.size !== 1) {
+      return null;
+    }
+
+    return Array.from(matchedCategoryIds)[0] ?? null;
+  };
+
   const factors: ReadinessFactor[] = [];
   let completedRequirements = 0;
   let incompleteRequirements = 0;
+  const explicitCertificationRequirementIds = new Set<string>();
+
+  const annualTrainingRequirements: Array<{
+    row: RequirementInput;
+    requirementName: string;
+    config: ReturnType<typeof parseRequirementConfig>;
+    appliesTo: string;
+    periodLabel: string;
+    minimumHours: number;
+  }> = [];
+  const categoryTrainingRequirements: Array<{
+    row: RequirementInput;
+    requirementName: string;
+    config: ReturnType<typeof parseRequirementConfig>;
+    appliesTo: string;
+    periodLabel: string;
+    minimumHours: number;
+  }> = [];
+  const recurringTrainingRequirements: Array<{
+    row: RequirementInput;
+    requirementName: string;
+    config: ReturnType<typeof parseRequirementConfig>;
+    appliesTo: string;
+    periodLabel: string;
+    minimumHours: number;
+  }> = [];
 
   const certificationStatusById = new Map<string, CertificationStatus>();
   const certificationNameById = new Map<string, string>();
@@ -526,81 +773,17 @@ export function buildMemberReadinessScore(input: {
     const appliesTo = config.appliesTo ?? "All Members";
     const periodLabel = getPeriodLabel(row.period_type, config.periodLabel);
 
-    if (kind === "annual_hours") {
-      const completionPercent = minimumHours > 0 ? clampPercent((input.departmentHours / minimumHours) * 100) : 0;
-      const completed = minimumHours > 0 && input.departmentHours >= minimumHours;
-      if (completed) {
-        completedRequirements += 1;
-      } else {
-        incompleteRequirements += 1;
-      }
-
-      factors.push({
-        id: row.id,
-        title: requirementName,
-        category: "training",
-        statusLabel: completed ? "Complete" : "Incomplete",
-        appliesTo,
-        unitLabel: config.unitLabel ?? "hours",
-        periodLabel,
-        standardReference: config.standardReference,
-        requiredValue: formatHours(minimumHours),
-        currentValue: formatHours(input.departmentHours),
-        completionPercent,
-        completed,
-        actionNeeded: completed
-          ? "No action needed."
-          : `Complete ${formatHours(Math.max(0, minimumHours - input.departmentHours))} more training hours.`,
-      });
-
-      continue;
-    }
-
-    if (kind === "category_hours") {
-      const categoryId = row.category_id;
-      const categoryName = categoryId
-        ? input.categoryNameById.get(categoryId) || "Category"
-        : "Category";
-      const currentHours = categoryId ? categoryHoursById.get(categoryId) ?? 0 : 0;
-      const completionPercent = minimumHours > 0 ? clampPercent((currentHours / minimumHours) * 100) : 0;
-      const completed = minimumHours > 0 && currentHours >= minimumHours;
-      if (completed) {
-        completedRequirements += 1;
-      } else {
-        incompleteRequirements += 1;
-      }
-
-      factors.push({
-        id: row.id,
-        title: requirementName,
-        category: "training",
-        statusLabel: completed ? "Complete" : "Incomplete",
-        appliesTo,
-        unitLabel: config.unitLabel ?? "hours",
-        periodLabel,
-        standardReference: config.standardReference,
-        requiredValue: `${formatHours(minimumHours)} in ${categoryName}`,
-        currentValue: `${formatHours(currentHours)} in ${categoryName}`,
-        completionPercent,
-        completed,
-        actionNeeded: completed
-          ? "No action needed."
-          : `Complete ${formatHours(Math.max(0, minimumHours - currentHours))} more hours in ${categoryName}.`,
-      });
-
-      continue;
-    }
-
     if (
       kind === "recurring" &&
       config.requirementSource === "certification" &&
       config.certificationId
     ) {
       const certificationId = config.certificationId;
+      explicitCertificationRequirementIds.add(certificationId);
       const status = certificationStatusById.get(certificationId) ?? "expired";
       const certificationName = certificationNameById.get(certificationId) ?? "Certification";
-      const completed = status !== "expired";
-      const completionPercent = completed ? 100 : 0;
+      const completionPercent = getCertificationCompletionPercent(status);
+      const completed = completionPercent >= 100;
 
       if (completed) {
         completedRequirements += 1;
@@ -629,22 +812,288 @@ export function buildMemberReadinessScore(input: {
       continue;
     }
 
-    // Topic/recurring requirements are represented but not yet evaluable without additional config fields.
-    incompleteRequirements += 1;
+    if (kind === "annual_hours") {
+      annualTrainingRequirements.push({ row, requirementName, config, appliesTo, periodLabel, minimumHours });
+      continue;
+    }
+
+    if (kind === "category_hours") {
+      categoryTrainingRequirements.push({ row, requirementName, config, appliesTo, periodLabel, minimumHours });
+      continue;
+    }
+
+    if (kind === "topic" || kind === "recurring") {
+      recurringTrainingRequirements.push({ row, requirementName, config, appliesTo, periodLabel, minimumHours });
+      continue;
+    }
+  }
+
+  if (annualTrainingRequirements.length > 0) {
+    const annualRequiredHours = annualTrainingRequirements.reduce(
+      (total, requirement) => total + Math.max(0, requirement.minimumHours),
+      0,
+    );
+    const annualProgress = getAnnualHoursProgress({
+      annualRequiredHours,
+      completedHours: input.departmentHours,
+      evaluationDate: input.evaluationDate,
+      memberStartDate: input.memberStartDate,
+    });
+    const annualRequirement = annualTrainingRequirements[0];
+    const annualRequirementTitle = annualTrainingRequirements.length === 1
+      ? annualRequirement.requirementName
+      : "Annual Training Pace";
+    const annualRequirementAppliesTo = annualTrainingRequirements[0].appliesTo;
+
+    const annualCompleted = annualProgress.completed;
+    if (annualCompleted) {
+      completedRequirements += 1;
+    } else {
+      incompleteRequirements += 1;
+    }
+
     factors.push({
-      id: row.id,
-      title: requirementName,
-      category: kind === "topic" ? "training" : "other",
-      statusLabel: "Configuration Needed",
-      appliesTo,
-      unitLabel: config.unitLabel ?? "custom",
-      periodLabel,
-      standardReference: config.standardReference,
-      requiredValue: "Configured requirement",
-      currentValue: "Evaluation pending",
-      completionPercent: 0,
-      completed: false,
-      actionNeeded: "Requirement needs additional configuration before completion can be calculated.",
+      id: annualTrainingRequirements.length === 1 ? annualRequirement.row.id : "training-annual-pace",
+      title: annualRequirementTitle,
+      category: "training",
+      weightPercent: 20,
+      statusLabel: annualCompleted ? "Complete" : "Incomplete",
+      appliesTo: annualRequirementAppliesTo,
+      unitLabel: annualRequirement.config.unitLabel ?? "hours",
+      periodLabel: annualRequirement.periodLabel,
+      standardReference: annualRequirement.config.standardReference,
+      requiredValue: formatHours(annualRequiredHours),
+      currentValue: formatHours(input.departmentHours),
+      completionPercent: annualProgress.completionPercent,
+      completed: annualCompleted,
+      actionNeeded: annualCompleted
+        ? "On pace for annual training requirement."
+        : `Pace target is ${formatHours(annualProgress.monthlyPaceHours)} per month (${formatHours(annualProgress.expectedHoursToDate)} expected by now). Complete ${formatHours(annualProgress.shortfallHours)} more training hours to get back on pace. This requirement is worth ${annualProgress.pointsPerApplicableHour.toFixed(2)} readiness points per applicable hour.`,
+    });
+  }
+
+  if (categoryTrainingRequirements.length > 0) {
+    const categoryScoredRequirements = categoryTrainingRequirements
+      .map((requirement) => {
+        const categoryId = requirement.row.category_id ?? resolveTopicCategoryId(requirement.row.required_topic);
+        return {
+          requirement,
+          categoryId,
+          requiredHours: Math.max(0, requirement.minimumHours),
+        };
+      })
+      .filter((row) => row.categoryId !== null && row.requiredHours > 0);
+
+    if (categoryScoredRequirements.length > 0) {
+      const categoryRequiredHours = categoryScoredRequirements.reduce(
+        (total, row) => total + row.requiredHours,
+        0,
+      );
+      const categoryCurrentHours = categoryScoredRequirements.reduce((total, row) => {
+        const currentCategoryHours = categoryHoursById.get(row.categoryId ?? "") ?? 0;
+        return total + Math.min(currentCategoryHours, row.requiredHours);
+      }, 0);
+    const categoryNames = Array.from(
+      new Set(
+          categoryScoredRequirements
+          .map((row) => row.categoryId)
+          .filter((categoryId): categoryId is string => Boolean(categoryId))
+          .map((categoryId) => input.categoryNameById.get(categoryId) ?? "Category"),
+      ),
+    );
+    const categoryLabel = categoryNames.length > 0 ? categoryNames.join(", ") : "Configured categories";
+    const categoryCompleted = categoryRequiredHours > 0 && categoryCurrentHours >= categoryRequiredHours;
+    if (categoryCompleted) {
+      completedRequirements += 1;
+    } else {
+      incompleteRequirements += 1;
+    }
+
+    factors.push({
+      id: categoryScoredRequirements.length === 1
+        ? categoryScoredRequirements[0].requirement.row.id
+        : "training-category-hours",
+      title: categoryScoredRequirements.length === 1
+        ? categoryScoredRequirements[0].requirement.requirementName
+        : "Required Category Hours",
+      category: "training",
+      weightPercent: 10,
+      statusLabel: categoryCompleted ? "Complete" : "Incomplete",
+      appliesTo: categoryScoredRequirements[0].requirement.appliesTo,
+      unitLabel: categoryScoredRequirements[0].requirement.config.unitLabel ?? "hours",
+      periodLabel: categoryScoredRequirements[0].requirement.periodLabel,
+      standardReference: categoryScoredRequirements[0].requirement.config.standardReference,
+      requiredValue: `${formatHours(categoryRequiredHours)} in ${categoryLabel}`,
+      currentValue: `${formatHours(categoryCurrentHours)} in ${categoryLabel}`,
+      completionPercent: categoryRequiredHours > 0 ? clampPercent((categoryCurrentHours / categoryRequiredHours) * 100) : 0,
+      completed: categoryCompleted,
+      actionNeeded: categoryCompleted
+        ? "No action needed."
+        : `Complete ${formatHours(Math.max(0, categoryRequiredHours - categoryCurrentHours))} more hours in ${categoryLabel}.`,
+    });
+    }
+  }
+
+  if (recurringTrainingRequirements.length > 0) {
+    const recurringCurrentHoursByRequirement = recurringTrainingRequirements.map((requirement) => {
+      const categoryId = requirement.row.category_id ?? resolveTopicCategoryId(requirement.row.required_topic);
+      const currentHours = categoryId ? (categoryHoursById.get(categoryId) ?? 0) : 0;
+      return {
+        requirement,
+        categoryId,
+        currentHours,
+      };
+    });
+
+    const recurringScoredRequirements = recurringCurrentHoursByRequirement.filter((row) => row.categoryId !== null && row.requirement.minimumHours > 0);
+
+    if (recurringScoredRequirements.length > 0) {
+      const recurringRequiredHours = recurringScoredRequirements.reduce(
+        (total, row) => total + Math.max(0, row.requirement.minimumHours),
+        0,
+      );
+      const recurringCurrentHours = recurringScoredRequirements.reduce(
+        (total, row) => total + Math.min(row.currentHours, Math.max(0, row.requirement.minimumHours)),
+        0,
+      );
+      const recurringCompleted = recurringRequiredHours > 0 && recurringCurrentHours >= recurringRequiredHours;
+      if (recurringCompleted) {
+        completedRequirements += 1;
+      } else {
+        incompleteRequirements += 1;
+      }
+
+      factors.push({
+        id: recurringScoredRequirements.length === 1
+          ? recurringScoredRequirements[0].requirement.row.id
+          : "training-required-recurring",
+        title: recurringScoredRequirements.length === 1
+          ? recurringScoredRequirements[0].requirement.requirementName
+          : "Required / Recurring Training",
+        category: "training",
+        weightPercent: 6,
+        statusLabel: recurringCompleted ? "Complete" : "Incomplete",
+        appliesTo: recurringScoredRequirements[0].requirement.appliesTo,
+        unitLabel: recurringScoredRequirements[0].requirement.config.unitLabel ?? "hours",
+        periodLabel: recurringScoredRequirements[0].requirement.periodLabel,
+        standardReference: recurringScoredRequirements[0].requirement.config.standardReference,
+        requiredValue: `${formatHours(recurringRequiredHours)} of recurring/required training`,
+        currentValue: `${formatHours(recurringCurrentHours)} completed`,
+        completionPercent: clampPercent((recurringCurrentHours / recurringRequiredHours) * 100),
+        completed: recurringCompleted,
+        actionNeeded: recurringCompleted
+          ? "No action needed."
+          : `Complete ${formatHours(Math.max(0, recurringRequiredHours - recurringCurrentHours))} more recurring/required training hours.`,
+      });
+    }
+  }
+
+  const assignmentById = new Map((input.trainingAssignments ?? []).map((row) => [row.id, row]));
+  const requiredAssignmentRows: Array<{ memberRow: TrainingAssignmentMemberInput; assignment: TrainingAssignmentInput }> = [];
+  const seenAssignmentIds = new Set<string>();
+  for (const memberRow of input.assignmentMembers ?? []) {
+    const assignment = assignmentById.get(memberRow.training_assignment_id);
+    if (!assignment || assignment.status === "archived" || assignment.is_required !== true) {
+      continue;
+    }
+
+    if (seenAssignmentIds.has(assignment.id)) {
+      continue;
+    }
+
+    seenAssignmentIds.add(assignment.id);
+    requiredAssignmentRows.push({ memberRow, assignment });
+  }
+
+  if (requiredAssignmentRows.length > 0) {
+    const requiredAssignmentHours = requiredAssignmentRows.reduce(
+      (total, row) => total + parseHours(row.assignment.hours_credit),
+      0,
+    );
+    const completedAssignmentHours = requiredAssignmentRows.reduce((total, row) => {
+      const normalizedStatus = row.memberRow.completion_status.trim().toLowerCase();
+      if (normalizedStatus !== "approved") {
+        return total;
+      }
+
+      const rowHours = parseHours(row.memberRow.hours_earned);
+      const assignmentHours = parseHours(row.assignment.hours_credit);
+      return total + (rowHours > 0 ? rowHours : assignmentHours);
+    }, 0);
+    const assignmentCompleted = requiredAssignmentHours > 0 && completedAssignmentHours >= requiredAssignmentHours;
+    if (assignmentCompleted) {
+      completedRequirements += 1;
+    } else {
+      incompleteRequirements += 1;
+    }
+
+    factors.push({
+      id: requiredAssignmentRows.length === 1
+        ? requiredAssignmentRows[0].assignment.id
+        : "training-assigned-required",
+      title: requiredAssignmentRows.length === 1
+        ? requiredAssignmentRows[0].assignment.title
+        : "Assigned Required Training",
+      category: "training",
+      weightPercent: 4,
+      statusLabel: assignmentCompleted ? "Complete" : "Incomplete",
+      appliesTo: "Assigned Member",
+      unitLabel: "hours",
+      periodLabel: "Current",
+      standardReference: null,
+      requiredValue: formatHours(requiredAssignmentHours),
+      currentValue: formatHours(completedAssignmentHours),
+      completionPercent: requiredAssignmentHours > 0 ? clampPercent((completedAssignmentHours / requiredAssignmentHours) * 100) : 0,
+      completed: assignmentCompleted,
+      actionNeeded: assignmentCompleted
+        ? "No action needed."
+        : `Complete ${formatHours(Math.max(0, requiredAssignmentHours - completedAssignmentHours))} more assigned training hours.`,
+    });
+  }
+
+  const synthesizedCertificationStatuses = (input.scoredCertificationStatuses ?? []).filter(
+    (row) => !explicitCertificationRequirementIds.has(row.certificationId),
+  );
+
+  for (const row of synthesizedCertificationStatuses) {
+    const completionPercent = getCertificationCompletionPercent(row.status);
+    const completed = completionPercent >= 100;
+
+    if (completed) {
+      completedRequirements += 1;
+    } else {
+      incompleteRequirements += 1;
+    }
+
+    factors.push({
+      id: `certification:${row.certificationId}`,
+      title: row.certificationName,
+      category: "certification",
+      statusLabel:
+        row.status === "expired"
+          ? "Expired or Missing"
+          : row.status === "expiring_soon"
+            ? "Expiring Soon"
+            : "Current",
+      appliesTo: "Current Member",
+      unitLabel: "certification",
+      periodLabel: "Current",
+      standardReference: null,
+      requiredValue: `Current ${row.certificationName}`,
+      currentValue:
+        row.status === "expired"
+          ? "Expired or Missing"
+          : row.status === "expiring_soon"
+            ? "Expiring Soon"
+            : "Current",
+      completionPercent,
+      completed,
+      actionNeeded:
+        row.status === "current"
+          ? "No action needed."
+          : row.status === "expiring_soon"
+            ? `Renew ${row.certificationName} before it expires.`
+            : `Renew or add a current ${row.certificationName} certification.`,
     });
   }
 
@@ -674,23 +1123,24 @@ export function buildMemberReadinessScore(input: {
       actionNeeded: "Ask your administrator to assign your current department role so required qualifications can be evaluated.",
     });
   } else if (qualificationReadiness.requiredQualifications.length === 0) {
-    qualificationsStatus = "not_configured";
-    qualificationsConfigurationMessage = "No required qualifications are configured for your current role.";
-    incompleteRequirements += 1;
+    qualificationsStatus = "no_requirements";
+    qualificationsScore = QUALIFICATIONS_BUCKET_MAX;
+    qualificationsConfigurationMessage = "No required qualifications apply to your current role.";
+    completedRequirements += 1;
     factors.push({
       id: "qualifications-current-role",
       title: "Qualifications (Current Role)",
       category: "qualification",
-      statusLabel: "Not Configured",
+      statusLabel: "No Required Qualifications",
       appliesTo: qualificationReadiness.roleName ?? "Assigned Role",
       unitLabel: "qualifications",
       periodLabel: "Current",
       standardReference: null,
       requiredValue: `${QUALIFICATIONS_BUCKET_MAX.toFixed(1)} / ${QUALIFICATIONS_BUCKET_MAX}`,
-      currentValue: "No required qualifications configured",
-      completionPercent: 0,
-      completed: false,
-      actionNeeded: "No required qualifications are configured for your current role.",
+      currentValue: `${QUALIFICATIONS_BUCKET_MAX.toFixed(1)} / ${QUALIFICATIONS_BUCKET_MAX}`,
+      completionPercent: 100,
+      completed: true,
+      actionNeeded: "No action needed.",
     });
   } else {
     missingQualifications = qualificationReadiness.missingQualifications;
@@ -795,7 +1245,7 @@ export function buildMemberReadinessScore(input: {
     periodLabel: "Active",
     standardReference: "Redline Ready Deficiencies Locked Model",
     requiredValue: "0.0% penalty",
-    currentValue: `${deficiencyPenaltyPercent.toFixed(1)}% penalty from ${impactingDeficiencies.length} active impacting deficiency${impactingDeficiencies.length === 1 ? "" : "ies"}`,
+    currentValue: `${deficiencyPenaltyPercent.toFixed(1)}% penalty from ${impactingDeficiencies.length} active impacting deficienc${impactingDeficiencies.length === 1 ? "y" : "ies"}`,
     completionPercent: deficiencyCompletionPercent,
     completed: deficiencyPenaltyPercent === 0,
     actionNeeded: deficiencyActionNeeded,
@@ -805,8 +1255,13 @@ export function buildMemberReadinessScore(input: {
     .filter((factor) => !factor.completed)
     .map((factor) => {
       let remainingValue = "Action required";
-      if (factor.currentValue.includes("hrs") && factor.requiredValue.includes("hrs")) {
-        remainingValue = factor.actionNeeded.replace("Complete ", "").replace(" more ", " ");
+      if (factor.category === "training") {
+        const remainingHoursMatch = factor.actionNeeded.match(
+          /Complete\s+([0-9]+(?:\.[0-9]+)?)\s*(?:hrs?|hours?)?\s+more\s+/i,
+        );
+        if (remainingHoursMatch) {
+          remainingValue = `${remainingHoursMatch[1]} hrs`;
+        }
       }
 
       return {
@@ -823,7 +1278,10 @@ export function buildMemberReadinessScore(input: {
     .sort((a, b) => a.title.localeCompare(b.title));
 
   const certificationsCategoryPercent = getAverageCategoryCompletionPercent(factors, "certification");
-  const trainingCategoryPercent = getAverageCategoryCompletionPercent(factors, "training");
+  const trainingCategoryFactors = factors.filter((factor) => factor.category === "training");
+  const trainingCategoryPercent = trainingCategoryFactors.length === 0
+    ? 100
+    : getAverageCategoryCompletionPercent(factors, "training");
   const qualificationsCategoryPercent = qualificationsScore === null
     ? null
     : clampRange((qualificationsScore / QUALIFICATIONS_BUCKET_MAX) * 100, 0, 100);

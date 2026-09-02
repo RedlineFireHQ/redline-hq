@@ -6,16 +6,35 @@ import {
   Gauge,
 } from "lucide-react";
 import { MapPin } from "lucide-react";
+import { getElliottWeather } from "@/lib/weather/weatherapi";
 
-export default function WeatherPanel() {
+function formatTemperature(value: number | null) {
+  return value === null ? "--" : `${Math.round(value)}°F`;
+}
+
+function formatHumidity(value: number | null) {
+  return value === null ? "--" : `${Math.round(value)}%`;
+}
+
+function formatWind(direction: string | null, speed: number | null) {
+  if (!direction && speed === null) {
+    return "--";
+  }
+
+  const roundedSpeed = speed === null ? "--" : `${Math.round(speed)} mph`;
+  return direction ? `${direction} ${roundedSpeed}` : roundedSpeed;
+}
+
+export default async function WeatherPanel() {
+  const weather = await getElliottWeather();
   const weatherDetails = [
-    { label: "Humidity", value: "61%", icon: Droplets },
-    { label: "Wind", value: "S 12 mph", icon: Wind },
-    { label: "Feels Like", value: "87°F", icon: Gauge },
+    { label: "Humidity", value: formatHumidity(weather.humidityPercent), icon: Droplets },
+    { label: "Wind", value: formatWind(weather.windDirection, weather.windMph), icon: Wind },
+    { label: "Feels Like", value: formatTemperature(weather.feelsLikeF), icon: Gauge },
   ];
 
   return (
-    <section className="relative flex h-full flex-col rounded-[20px] border border-[rgba(255,255,255,0.08)] bg-[#111111] p-6 shadow-lg">
+    <section className="relative flex h-[155px] flex-col rounded-[20px] border border-[rgba(255,255,255,0.08)] bg-[#111111] p-3 shadow-lg">
       {/* Header */}
       <div className="flex items-center justify-between">
         <Image
@@ -23,45 +42,47 @@ export default function WeatherPanel() {
           alt="Redline HQ Weather"
           width={180}
           height={30}
-          className="h-[80px] w-[180px]"
+          className="h-[50px] w-[219px]"
           priority
         />
 
         <div className="flex items-center gap-1">
-          <MapPin className="h-4 w-4 text-[#A1A1AA]" />
-          <p className="text-[13px] font-[500] text-[#A1A1AA]">Elliott, IA</p>
+          <MapPin className="h-3.5 w-3.5 text-[#A1A1AA]" />
+          <p className="text-[11px] font-[500] text-[#A1A1AA]">{weather.locationName}</p>
         </div>
       </div>
 
       {/* Current Conditions */}
-      <div className="mt-4 grid grid-cols-[1.15fr_0.85fr] gap-4">
-        <div className="flex flex-col items-center justify-center rounded-[14px] bg-[#0d0d0d] py-5">
-          <div className="relative flex h-[76px] w-[76px] items-center justify-center">
-            <div className="absolute left-3 top-3 h-6 w-6 rounded-full bg-[#F59E0B]" />
-            <Cloud className="relative z-10 h-[64px] w-[64px] text-white" />
+      <div className="mt-2 grid min-h-0 flex-1 grid-cols-[1.1fr_0.9fr] gap-2">
+        <div className="flex min-h-0 flex-col justify-center rounded-[12px] bg-[#0d0d0d] px-2 py-1.5">
+          <div className="flex items-center gap-2">
+            <div className="relative flex h-[28px] w-[28px] items-center justify-center">
+              <div className="absolute left-1 top-1 h-2.5 w-2.5 rounded-full bg-[#F59E0B]" />
+              <Cloud className="relative z-10 h-[22px] w-[22px] text-white" />
+            </div>
+
+            <p className="text-[28px] font-bold leading-none text-white">
+              {formatTemperature(weather.temperatureF)}
+            </p>
           </div>
 
-          <p className="mt-1 text-[46px] font-bold leading-none text-white">
-            85°F
-          </p>
-
-          <p className="text-[18px] font-[500] text-[#A1A1AA]">
-            Partly Cloudy
+          <p className="mt-1 text-[12px] font-[500] leading-none text-[#A1A1AA]">
+            {weather.conditionText}
           </p>
         </div>
 
-        <div className="flex flex-col justify-center gap-3 rounded-[14px] bg-[#0d0d0d] p-4">
+        <div className="flex min-h-0 flex-col justify-center gap-1.5 rounded-[12px] bg-[#0d0d0d] p-2">
           {weatherDetails.map(({ label, value, icon: Icon }) => (
             <div
               key={label}
-              className="flex items-center justify-between gap-3"
+              className="flex items-center justify-between gap-2"
             >
               <div className="flex items-center gap-2">
-                <Icon className="h-4 w-4 text-[#A1A1AA]" />
-                <p className="text-[13px] text-[#A1A1AA]">{label}</p>
+                <Icon className="h-3.5 w-3.5 text-[#A1A1AA]" />
+                <p className="text-[11px] text-[#A1A1AA]">{label}</p>
               </div>
 
-              <p className="text-[14px] font-[600] text-white">{value}</p>
+              <p className="text-[12px] font-[600] text-white">{value}</p>
             </div>
           ))}
         </div>

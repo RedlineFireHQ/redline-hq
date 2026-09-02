@@ -10,9 +10,36 @@ type Deficiency = {
 	deficiency_number: string | null;
 	description: string | null;
 	location: string | null;
+	pie_equipment_id: string | null;
+	ems_equipment_id: string | null;
+	ppe_item_id: string | null;
+	rope_item_id: string | null;
+	fire_extinguisher_id: string | null;
+	misc_fire_equipment_id: string | null;
 	fire_hose_id: string | null;
 	scba_cylinder_id: string | null;
 	scba_pack_id: string | null;
+	pie_equipment: {
+		equipment_number: string | null;
+	} | null;
+	ems_equipment: {
+		equipment_name: string | null;
+	} | null;
+	ppe_item: {
+		item_name: string | null;
+	} | null;
+	rope_item: {
+		rope_name: string | null;
+		rope_identifier: string | null;
+	} | null;
+	fire_extinguisher: {
+		extinguisher_number: string | null;
+		extinguisher_type: string | null;
+	} | null;
+	misc_fire_equipment: {
+		equipment_name: string | null;
+		asset_number: string | null;
+	} | null;
 	fire_hose: {
 		inventory_number: string | null;
 	} | null;
@@ -172,6 +199,30 @@ function normalizeDeficiencyRelation(value: unknown): { name: string | null } | 
 	return null;
 }
 
+function normalizeFireExtinguisherRelation(value: unknown): { extinguisher_number: string | null; extinguisher_type: string | null } | null {
+	if (Array.isArray(value)) {
+		const first = value[0] as Record<string, unknown> | undefined;
+		if (!first) {
+			return null;
+		}
+
+		return {
+			extinguisher_number: typeof first.extinguisher_number === "string" ? first.extinguisher_number : null,
+			extinguisher_type: typeof first.extinguisher_type === "string" ? first.extinguisher_type : null,
+		};
+	}
+
+	if (value && typeof value === "object") {
+		const relation = value as Record<string, unknown>;
+		return {
+			extinguisher_number: typeof relation.extinguisher_number === "string" ? relation.extinguisher_number : null,
+			extinguisher_type: typeof relation.extinguisher_type === "string" ? relation.extinguisher_type : null,
+		};
+	}
+
+	return null;
+}
+
 function normalizeFireHoseRelation(
 	value: unknown,
 ): { inventory_number: string | null } | null {
@@ -259,10 +310,153 @@ function normalizeScbaPackRelation(
 	return null;
 }
 
+function normalizePieEquipmentRelation(
+	value: unknown,
+): { equipment_number: string | null } | null {
+	if (Array.isArray(value)) {
+		const first = value[0] as Record<string, unknown> | undefined;
+		if (!first) {
+			return null;
+		}
+
+		const equipmentNumber = first.equipment_number;
+		return {
+			equipment_number:
+				typeof equipmentNumber === "string" ? equipmentNumber : null,
+		};
+	}
+
+	if (value && typeof value === "object") {
+		const relation = value as Record<string, unknown>;
+		const equipmentNumber = relation.equipment_number;
+
+		return {
+			equipment_number:
+				typeof equipmentNumber === "string" ? equipmentNumber : null,
+		};
+	}
+
+	return null;
+}
+
+function normalizeEmsEquipmentRelation(
+	value: unknown,
+): { equipment_name: string | null } | null {
+	if (Array.isArray(value)) {
+		const first = value[0] as Record<string, unknown> | undefined;
+		if (!first) {
+			return null;
+		}
+
+		const equipmentName = first.equipment_name;
+		return {
+			equipment_name:
+				typeof equipmentName === "string" ? equipmentName : null,
+		};
+	}
+
+	if (value && typeof value === "object") {
+		const relation = value as Record<string, unknown>;
+		const equipmentName = relation.equipment_name;
+
+		return {
+			equipment_name:
+				typeof equipmentName === "string" ? equipmentName : null,
+		};
+	}
+
+	return null;
+}
+
+function normalizePpeItemRelation(
+	value: unknown,
+): { item_name: string | null } | null {
+	if (Array.isArray(value)) {
+		const first = value[0] as Record<string, unknown> | undefined;
+		if (!first) {
+			return null;
+		}
+
+		const itemName = first.item_name;
+		return {
+			item_name: typeof itemName === "string" ? itemName : null,
+		};
+	}
+
+	if (value && typeof value === "object") {
+		const relation = value as Record<string, unknown>;
+		const itemName = relation.item_name;
+
+		return {
+			item_name: typeof itemName === "string" ? itemName : null,
+		};
+	}
+
+	return null;
+}
+
+function normalizeRopeRelation(
+	value: unknown,
+): { rope_name: string | null; rope_identifier: string | null } | null {
+	if (Array.isArray(value)) {
+		const first = value[0] as Record<string, unknown> | undefined;
+		if (!first) {
+			return null;
+		}
+
+		return {
+			rope_name: typeof first.rope_name === "string" ? first.rope_name : null,
+			rope_identifier: typeof first.rope_identifier === "string" ? first.rope_identifier : null,
+		};
+	}
+
+	if (value && typeof value === "object") {
+		const relation = value as Record<string, unknown>;
+		return {
+			rope_name: typeof relation.rope_name === "string" ? relation.rope_name : null,
+			rope_identifier: typeof relation.rope_identifier === "string" ? relation.rope_identifier : null,
+		};
+	}
+
+	return null;
+}
+
+function normalizeMiscFireEquipmentRelation(
+	value: unknown,
+): { equipment_name: string | null; asset_number: string | null } | null {
+	if (Array.isArray(value)) {
+		const first = value[0] as Record<string, unknown> | undefined;
+		if (!first) {
+			return null;
+		}
+
+		return {
+			equipment_name: typeof first.equipment_name === "string" ? first.equipment_name : null,
+			asset_number: typeof first.asset_number === "string" ? first.asset_number : null,
+		};
+	}
+
+	if (value && typeof value === "object") {
+		const relation = value as Record<string, unknown>;
+		return {
+			equipment_name: typeof relation.equipment_name === "string" ? relation.equipment_name : null,
+			asset_number: typeof relation.asset_number === "string" ? relation.asset_number : null,
+		};
+	}
+
+	return null;
+}
+
 function normalizeDeficienciesData(data: unknown[] | null): Deficiency[] {
 	return (data ?? []).map((record) => {
 		const row = record as Record<string, unknown>;
 		const idValue = row.id;
+		const pieEquipmentIdValue = row.pie_equipment_id;
+		const emsEquipmentIdValue = row.ems_equipment_id;
+		const ppeItemIdValue = row.ppe_item_id;
+		const ropeItemIdValue = row.rope_item_id;
+		const fireExtinguisherIdValue = row.fire_extinguisher_id;
+		const miscFireEquipmentIdValue = row.misc_fire_equipment_id;
 		const fireHoseIdValue = row.fire_hose_id;
 		const scbaCylinderIdValue = row.scba_cylinder_id;
 		const scbaPackIdValue = row.scba_pack_id;
@@ -273,11 +467,25 @@ function normalizeDeficienciesData(data: unknown[] | null): Deficiency[] {
 				typeof row.deficiency_number === "string" ? row.deficiency_number : null,
 			description: typeof row.description === "string" ? row.description : null,
 			location: typeof row.location === "string" ? row.location : null,
+			pie_equipment_id: typeof pieEquipmentIdValue === "string" ? pieEquipmentIdValue : null,
+			ems_equipment_id: typeof emsEquipmentIdValue === "string" ? emsEquipmentIdValue : null,
+			ppe_item_id: typeof ppeItemIdValue === "string" ? ppeItemIdValue : null,
+			rope_item_id: typeof ropeItemIdValue === "string" ? ropeItemIdValue : null,
+			fire_extinguisher_id:
+				typeof fireExtinguisherIdValue === "string" ? fireExtinguisherIdValue : null,
+			misc_fire_equipment_id:
+				typeof miscFireEquipmentIdValue === "string" ? miscFireEquipmentIdValue : null,
 			fire_hose_id: typeof fireHoseIdValue === "string" ? fireHoseIdValue : null,
 			scba_cylinder_id:
 				typeof scbaCylinderIdValue === "string" ? scbaCylinderIdValue : null,
 			scba_pack_id:
 				typeof scbaPackIdValue === "string" ? scbaPackIdValue : null,
+			pie_equipment: normalizePieEquipmentRelation(row.pie_equipment),
+			ems_equipment: normalizeEmsEquipmentRelation(row.ems_equipment),
+			ppe_item: normalizePpeItemRelation(row.ppe_item),
+			rope_item: normalizeRopeRelation(row.rope_item),
+			fire_extinguisher: normalizeFireExtinguisherRelation(row.fire_extinguisher),
+			misc_fire_equipment: normalizeMiscFireEquipmentRelation(row.misc_fire_equipment),
 			fire_hose: normalizeFireHoseRelation(row.fire_hose),
 			scba_cylinder: normalizeScbaCylinderRelation(row.scba_cylinder),
 			scba_pack: normalizeScbaPackRelation(row.scba_pack),
@@ -303,6 +511,30 @@ function getDeficiencyEquipmentCategoryLabel(deficiency: Deficiency) {
 		return "SCBA Pack";
 	}
 
+	if (deficiency.pie_equipment_id) {
+		return "PIE Equipment";
+	}
+
+	if (deficiency.ems_equipment_id) {
+		return "EMS Equipment";
+	}
+
+	if (deficiency.ppe_item_id) {
+		return "PPE";
+	}
+
+	if (deficiency.rope_item_id) {
+		return "Rope";
+	}
+
+	if (deficiency.fire_extinguisher_id) {
+		return "Fire Extinguisher";
+	}
+
+	if (deficiency.misc_fire_equipment_id) {
+		return "Miscellaneous Fire Equipment";
+	}
+
 	return deficiency.category?.name ?? "Uncategorized";
 }
 
@@ -312,7 +544,7 @@ async function fetchDeficiencies() {
 	const result = await supabase
 		.from("deficiencies")
 		.select(
-			"id, deficiency_number, description, reported_at, fire_hose_id, scba_cylinder_id, scba_pack_id, fire_hose:fire_hose_id(inventory_number), scba_cylinder:scba_cylinder_id(cylinder_number), scba_pack:scba_pack_id(pack_number), category:deficiency_categories!fk_deficiencies_category(name), priority:deficiency_priorities!fk_deficiencies_priority(name), status:deficiency_statuses!fk_deficiencies_status(name), apparatus:apparatus!fk_deficiencies_apparatus(name)"
+			"id, deficiency_number, description, reported_at, fire_hose_id, scba_cylinder_id, scba_pack_id, pie_equipment_id, ems_equipment_id, ppe_item_id, rope_item_id, fire_extinguisher_id, misc_fire_equipment_id, fire_hose:fire_hose_id(inventory_number), scba_cylinder:scba_cylinder_id(cylinder_number), scba_pack:scba_pack_id(pack_number), pie_equipment:pie_equipment_id(equipment_number), ems_equipment:ems_equipment_id(equipment_name), ppe_item:ppe_item_id(item_name), rope_item:rope_item_id(rope_name, rope_identifier), fire_extinguisher:fire_extinguisher_id(extinguisher_number, extinguisher_type), misc_fire_equipment:misc_fire_equipment_id(equipment_name, asset_number), category:deficiency_categories!fk_deficiencies_category(name), priority:deficiency_priorities!fk_deficiencies_priority(name), status:deficiency_statuses!fk_deficiencies_status(name), apparatus:apparatus!fk_deficiencies_apparatus(name)"
 		)
 		.order("reported_at", { ascending: false });
 
@@ -475,6 +707,8 @@ export default function DeficienciesPage() {
 				deficiency.deficiency_number ?? "",
 				getDeficiencyEquipmentCategoryLabel(deficiency),
 				deficiency.apparatus?.name ?? "",
+				deficiency.ppe_item?.item_name ?? "",
+				deficiency.ems_equipment?.equipment_name ?? "",
 				deficiency.fire_hose?.inventory_number ?? "",
 				deficiency.scba_cylinder?.cylinder_number ?? "",
 				deficiency.scba_pack?.pack_number ?? "",
@@ -1063,6 +1297,41 @@ export default function DeficienciesPage() {
 																	SCBA Pack - {deficiency.scba_pack?.pack_number ?? "Unknown"}
 																</p>
 															</div>
+																		) : deficiency.ems_equipment_id ? (
+																			<div>
+																				<p>Station Supply</p>
+																				<p>
+																					EMS Equipment - {deficiency.ems_equipment?.equipment_name ?? "Unknown"}
+																				</p>
+																			</div>
+																			) : deficiency.ppe_item_id ? (
+																				<div>
+																					<p>Station Supply</p>
+																					<p>
+																						PPE - {deficiency.ppe_item?.item_name ?? "Unknown"}
+																					</p>
+																				</div>
+																			) : deficiency.rope_item_id ? (
+																				<div>
+																					<p>Station Supply</p>
+																					<p>
+																						Rope - {deficiency.rope_item?.rope_name ?? deficiency.rope_item?.rope_identifier ?? "Unknown"}
+																					</p>
+																				</div>
+																		) : deficiency.fire_extinguisher_id ? (
+																			<div>
+																				<p>Station Supply</p>
+																				<p>
+																					Fire Extinguisher - {deficiency.fire_extinguisher?.extinguisher_number ?? "Unknown"}
+																				</p>
+																			</div>
+																		) : deficiency.misc_fire_equipment_id ? (
+																			<div>
+																				<p>Station Supply</p>
+																				<p>
+																					Misc Fire Equipment - {deficiency.misc_fire_equipment?.equipment_name ?? "Unknown"}
+																				</p>
+																			</div>
 														) : (
 															"Unknown Apparatus"
 														)}

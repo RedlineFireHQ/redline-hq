@@ -1,7 +1,6 @@
 import Image from "next/image";
-import { ChevronRight, CheckCircle2 } from "lucide-react";
+import { ChevronRight, CheckCircle2, ArrowRight } from "lucide-react";
 import Link from "next/link";
-import PrimaryActionButton from "./PrimaryActionButton";
 import { getApparatusReadinessList, getStatusLabelForReadinessRow } from "@/lib/readiness/apparatus-readiness-data";
 import { getApparatusImagePath } from "@/lib/apparatus-images";
 
@@ -43,7 +42,7 @@ export default async function ApparatusPanel() {
 
         {/* Header */}
 
-        <div className="flex items-center justify-between border-b border-white/10 px-6 py-5">
+        <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
 
           <div>
 
@@ -53,7 +52,7 @@ export default async function ApparatusPanel() {
 
             <div className="mt-2 h-px w-[150px] bg-gradient-to-r from-red-500 via-red-400 to-transparent" />
 
-            <p className="mt-3 text-[19px] font-medium text-neutral-200">
+            <p className="mt-2 text-[19px] font-medium text-neutral-200">
               Fleet Readiness at a Glance
             </p>
 
@@ -61,14 +60,14 @@ export default async function ApparatusPanel() {
 
           <Link
             href="/apparatus"
-            className="group inline-flex h-10 items-center gap-2 rounded-xl border border-red-500/40 bg-gradient-to-b from-[#ff3b3b] to-[#b90d0d] px-5 text-[13px] font-semibold text-white shadow-[0_0_18px_rgba(239,43,45,.30)] transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_26px_rgba(239,43,45,.45)]"
+            className="group inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[#3A3A3A] bg-[#131313] px-4 text-[13px] font-semibold text-white transition-all duration-300 hover:border-[#5A5A5A] hover:bg-[#171717] hover:shadow-[0_0_0_1px_rgba(239,43,45,0.25)]"
           >
 
             View All Apparatus
 
             <ChevronRight
-              size={17}
-              className="transition-transform duration-300 group-hover:translate-x-1"
+              size={15}
+              className="text-[#EF2B2D] transition-colors duration-300 group-hover:text-[#ff6b6b]"
             />
 
           </Link>
@@ -77,7 +76,7 @@ export default async function ApparatusPanel() {
 
         {/* Apparatus Cards */}
 
-        <div className="overflow-x-scroll apparatus-scroll">
+        <div className="apparatus-scroll overflow-x-auto pb-2 [scrollbar-width:auto] [scrollbar-color:#666_#1f1f1f] [&::-webkit-scrollbar]:h-2.5 [&::-webkit-scrollbar-track]:bg-[#1f1f1f] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#666] hover:[&::-webkit-scrollbar-thumb]:bg-[#8a8a8a]">
 
           <div className="flex gap-5 px-6 py-5 min-w-max">
 
@@ -111,8 +110,13 @@ export default async function ApparatusPanel() {
               return (
                 <div
                   key={apparatus.id}
-                  className="group w-[260px] flex-shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-[#111111] text-left transition-all duration-300 hover:-translate-y-1 hover:border-red-500/40 hover:shadow-[0_18px_45px_rgba(239,43,45,.18)]"
+                  className="group relative w-[260px] flex-shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-[#111111] text-left transition-all duration-300 hover:-translate-y-1 hover:border-red-500/40 hover:shadow-[0_18px_45px_rgba(239,43,45,.18)]"
                 >
+                <Link
+                  href={`/apparatus/${apparatus.id}`}
+                  aria-label={`View ${apparatus.name}`}
+                  className="absolute inset-0 z-10"
+                />
 
                 {/* Photo */}
 
@@ -192,8 +196,14 @@ export default async function ApparatusPanel() {
 
                   </div>
 
-                  <div className="mt-2 border-t border-white/10 pt-2">
-                    <PrimaryActionButton label="Apparatus Check" href={`/apparatus/${apparatus.id}/daily-check`} />
+                  <div className="relative z-20 mt-2 border-t border-white/10 pt-2">
+                    <Link
+                      href={`/apparatus/${apparatus.id}/daily-check`}
+                      className="group inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-[#3A3A3A] bg-[#131313] px-4 text-[13px] font-semibold text-white transition-all duration-300 hover:border-[#5A5A5A] hover:bg-[#171717] hover:shadow-[0_0_0_1px_rgba(239,43,45,0.25)]"
+                    >
+                      Apparatus Check
+                      <ArrowRight size={15} className="text-[#EF2B2D] transition-colors duration-300 group-hover:text-[#ff6b6b]" />
+                    </Link>
 
                   </div>
 

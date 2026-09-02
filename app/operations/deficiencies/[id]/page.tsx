@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import PageLayout from "@/components/layout/PageLayout";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -25,9 +26,23 @@ type DeficiencyDetail = {
 	fire_hose_id: string | null;
 	scba_cylinder_id: string | null;
 	scba_pack_id: string | null;
+	pie_equipment_id: string | null;
+	ems_equipment_id: string | null;
+	ppe_item_id: string | null;
+	rope_item_id: string | null;
+	fire_extinguisher_id: string | null;
+	misc_fire_equipment_id: string | null;
 	fire_hose_inventory_number: string | null;
 	scba_cylinder_number: string | null;
 	scba_pack_number: string | null;
+	pie_equipment_number: string | null;
+	ems_equipment_name: string | null;
+	ppe_item_name: string | null;
+	rope_item_name: string | null;
+	fire_extinguisher_number: string | null;
+	fire_extinguisher_type: string | null;
+	misc_fire_equipment_name: string | null;
+	misc_fire_equipment_asset_number: string | null;
 	apparatus: DeficiencyRelation | null;
 	category: DeficiencyRelation | null;
 	priority: DeficiencyRelation | null;
@@ -87,6 +102,12 @@ function normalizeDeficiencyDetail(data: unknown): DeficiencyDetail {
 	const fireHoseIdValue = row.fire_hose_id;
 	const scbaCylinderIdValue = row.scba_cylinder_id;
 	const scbaPackIdValue = row.scba_pack_id;
+	const pieEquipmentIdValue = row.pie_equipment_id;
+	const emsEquipmentIdValue = row.ems_equipment_id;
+	const ppeItemIdValue = row.ppe_item_id;
+	const ropeItemIdValue = row.rope_item_id;
+	const fireExtinguisherIdValue = row.fire_extinguisher_id;
+	const miscFireEquipmentIdValue = row.misc_fire_equipment_id;
 
 	return {
 		id: typeof row.id === "string" ? row.id : String(row.id ?? ""),
@@ -109,6 +130,14 @@ function normalizeDeficiencyDetail(data: unknown): DeficiencyDetail {
 		fire_hose_id: typeof fireHoseIdValue === "string" ? fireHoseIdValue : null,
 		scba_cylinder_id: typeof scbaCylinderIdValue === "string" ? scbaCylinderIdValue : null,
 		scba_pack_id: typeof scbaPackIdValue === "string" ? scbaPackIdValue : null,
+		pie_equipment_id: typeof pieEquipmentIdValue === "string" ? pieEquipmentIdValue : null,
+		ems_equipment_id: typeof emsEquipmentIdValue === "string" ? emsEquipmentIdValue : null,
+		ppe_item_id: typeof ppeItemIdValue === "string" ? ppeItemIdValue : null,
+		rope_item_id: typeof ropeItemIdValue === "string" ? ropeItemIdValue : null,
+		fire_extinguisher_id:
+			typeof fireExtinguisherIdValue === "string" ? fireExtinguisherIdValue : null,
+		misc_fire_equipment_id:
+			typeof miscFireEquipmentIdValue === "string" ? miscFireEquipmentIdValue : null,
 		fire_hose_inventory_number:
 			typeof row.fire_hose_inventory_number === "string"
 				? row.fire_hose_inventory_number
@@ -119,6 +148,20 @@ function normalizeDeficiencyDetail(data: unknown): DeficiencyDetail {
 				: null,
 		scba_pack_number:
 			typeof row.scba_pack_number === "string" ? row.scba_pack_number : null,
+		pie_equipment_number:
+			typeof row.pie_equipment_number === "string" ? row.pie_equipment_number : null,
+		ems_equipment_name:
+			typeof row.ems_equipment_name === "string" ? row.ems_equipment_name : null,
+		ppe_item_name: typeof row.ppe_item_name === "string" ? row.ppe_item_name : null,
+		rope_item_name: typeof row.rope_item_name === "string" ? row.rope_item_name : null,
+		fire_extinguisher_number:
+			typeof row.fire_extinguisher_number === "string" ? row.fire_extinguisher_number : null,
+		fire_extinguisher_type:
+			typeof row.fire_extinguisher_type === "string" ? row.fire_extinguisher_type : null,
+		misc_fire_equipment_name:
+			typeof row.misc_fire_equipment_name === "string" ? row.misc_fire_equipment_name : null,
+		misc_fire_equipment_asset_number:
+			typeof row.misc_fire_equipment_asset_number === "string" ? row.misc_fire_equipment_asset_number : null,
 		apparatus: normalizeDeficiencyRelation(row.apparatus_info),
 		category: normalizeDeficiencyRelation(row.category_info),
 		priority: normalizeDeficiencyRelation(row.priority_info),
@@ -230,7 +273,7 @@ export default async function DeficiencyDetailPage({
 	const { data, error } = await supabase
 		.from("deficiencies")
 		.select(
-			"*, fire_hose:fire_hose_id(inventory_number), scba_cylinder:scba_cylinder_id(cylinder_number), scba_pack:scba_pack_id(pack_number), category_info:deficiency_categories!fk_deficiencies_category(*), priority_info:deficiency_priorities!fk_deficiencies_priority(*), status_info:deficiency_statuses!fk_deficiencies_status(*), apparatus_info:apparatus!fk_deficiencies_apparatus(*)"
+			"*, fire_hose:fire_hose_id(inventory_number), scba_cylinder:scba_cylinder_id(cylinder_number), scba_pack:scba_pack_id(pack_number), pie_equipment:pie_equipment_id(equipment_number), ems_equipment:ems_equipment_id(equipment_name), ppe_item:ppe_item_id(item_name), rope_item:rope_item_id(rope_name, rope_identifier), fire_extinguisher:fire_extinguisher_id(extinguisher_number, extinguisher_type), misc_fire_equipment:misc_fire_equipment_id(equipment_name, asset_number), category_info:deficiency_categories!fk_deficiencies_category(*), priority_info:deficiency_priorities!fk_deficiencies_priority(*), status_info:deficiency_statuses!fk_deficiencies_status(*), apparatus_info:apparatus!fk_deficiencies_apparatus(*)"
 		)
 		.eq("id", id)
 		.maybeSingle();
@@ -241,6 +284,12 @@ export default async function DeficiencyDetailPage({
 		const fireHoseRelation = Array.isArray(row.fire_hose) ? row.fire_hose[0] : row.fire_hose;
 		const scbaCylinderRelation = Array.isArray(row.scba_cylinder) ? row.scba_cylinder[0] : row.scba_cylinder;
 		const scbaPackRelation = Array.isArray(row.scba_pack) ? row.scba_pack[0] : row.scba_pack;
+		const pieEquipmentRelation = Array.isArray(row.pie_equipment) ? row.pie_equipment[0] : row.pie_equipment;
+		const emsEquipmentRelation = Array.isArray(row.ems_equipment) ? row.ems_equipment[0] : row.ems_equipment;
+		const ppeItemRelation = Array.isArray(row.ppe_item) ? row.ppe_item[0] : row.ppe_item;
+		const ropeItemRelation = Array.isArray(row.rope_item) ? row.rope_item[0] : row.rope_item;
+		const fireExtinguisherRelation = Array.isArray(row.fire_extinguisher) ? row.fire_extinguisher[0] : row.fire_extinguisher;
+		const miscFireEquipmentRelation = Array.isArray(row.misc_fire_equipment) ? row.misc_fire_equipment[0] : row.misc_fire_equipment;
 
 		normalizedDetailSource = {
 			...row,
@@ -255,6 +304,40 @@ export default async function DeficiencyDetailPage({
 			scba_pack_number:
 				scbaPackRelation && typeof scbaPackRelation === "object"
 					? (scbaPackRelation as Record<string, unknown>).pack_number
+					: null,
+			pie_equipment_number:
+				pieEquipmentRelation && typeof pieEquipmentRelation === "object"
+					? (pieEquipmentRelation as Record<string, unknown>).equipment_number
+					: null,
+			ems_equipment_name:
+				emsEquipmentRelation && typeof emsEquipmentRelation === "object"
+					? (emsEquipmentRelation as Record<string, unknown>).equipment_name
+					: null,
+			ppe_item_name:
+				ppeItemRelation && typeof ppeItemRelation === "object"
+					? (ppeItemRelation as Record<string, unknown>).item_name
+					: null,
+			rope_item_name:
+				ropeItemRelation && typeof ropeItemRelation === "object"
+					? ((ropeItemRelation as Record<string, unknown>).rope_name as string | undefined) ??
+					  ((ropeItemRelation as Record<string, unknown>).rope_identifier as string | undefined) ??
+					  null
+					: null,
+			fire_extinguisher_number:
+				fireExtinguisherRelation && typeof fireExtinguisherRelation === "object"
+					? ((fireExtinguisherRelation as Record<string, unknown>).extinguisher_number as string | undefined) ?? null
+					: null,
+			fire_extinguisher_type:
+				fireExtinguisherRelation && typeof fireExtinguisherRelation === "object"
+					? ((fireExtinguisherRelation as Record<string, unknown>).extinguisher_type as string | undefined) ?? null
+					: null,
+			misc_fire_equipment_name:
+				miscFireEquipmentRelation && typeof miscFireEquipmentRelation === "object"
+					? ((miscFireEquipmentRelation as Record<string, unknown>).equipment_name as string | undefined) ?? null
+					: null,
+			misc_fire_equipment_asset_number:
+				miscFireEquipmentRelation && typeof miscFireEquipmentRelation === "object"
+					? ((miscFireEquipmentRelation as Record<string, unknown>).asset_number as string | undefined) ?? null
 					: null,
 		};
 	}
@@ -322,6 +405,16 @@ export default async function DeficiencyDetailPage({
 				? `Station Supply - SCBA Cylinder ${deficiency.scba_cylinder_number ?? "Unknown"}`
 				: deficiency.scba_pack_id
 					? `Station Supply - SCBA Pack ${deficiency.scba_pack_number ?? "Unknown"}`
+					: deficiency.ems_equipment_id
+						? `Station Supply - EMS Equipment ${deficiency.ems_equipment_name ?? "Unknown"}`
+						: deficiency.ppe_item_id
+							? `Station Supply - PPE ${deficiency.ppe_item_name ?? "Unknown"}`
+							: deficiency.fire_extinguisher_id
+								? `Station Supply - Fire Extinguisher ${deficiency.fire_extinguisher_number ?? "Unknown"}`
+								: deficiency.misc_fire_equipment_id
+									? `Station Supply - Misc Fire Equipment ${deficiency.misc_fire_equipment_name ?? "Unknown"}`
+								: deficiency.rope_item_id
+									? `Station Supply - Rope ${deficiency.rope_item_name ?? "Unknown"}`
 					: "Unknown Apparatus";
 	const statusName = deficiency.status?.name ?? "Unknown";
 	const priorityName = deficiency.priority?.name ?? "Not set";
@@ -331,7 +424,19 @@ export default async function DeficiencyDetailPage({
 			? "SCBA Cylinder"
 			: deficiency.scba_pack_id
 				? "SCBA Pack"
-				: deficiency.category?.name ?? "Uncategorized";
+				: deficiency.ems_equipment_id
+					? "EMS Equipment"
+					: deficiency.ppe_item_id
+						? "PPE"
+						: deficiency.fire_extinguisher_id
+							? "Fire Extinguisher"
+							: deficiency.misc_fire_equipment_id
+								? "Miscellaneous Fire Equipment"
+						: deficiency.rope_item_id
+							? "Rope"
+				: deficiency.pie_equipment_id
+					? "PIE Equipment"
+					: deficiency.category?.name ?? "Uncategorized";
 	const isResolved = statusName.trim().toLowerCase() === "resolved";
 	const reportedByMemberIds = Array.from(
 		new Set(
@@ -523,6 +628,29 @@ export default async function DeficiencyDetailPage({
 								{formatDateTime(deficiency.updated_at)}
 							</p>
 						</div>
+
+						{deficiency.ppe_item_id ? (
+							<div className="rounded-xl border border-white/10 bg-[#0d0d0d] p-4">
+								<p className="text-xs uppercase tracking-[0.2em] text-zinc-500">PPE Link</p>
+								<Link href="/inventory/ppe" className="mt-2 inline-flex text-sm font-semibold text-red-300 transition hover:text-red-200">
+									{deficiency.ppe_item_name ?? "Open PPE Inventory"}
+								</Link>
+							</div>
+						) : deficiency.fire_extinguisher_id ? (
+							<div className="rounded-xl border border-white/10 bg-[#0d0d0d] p-4">
+								<p className="text-xs uppercase tracking-[0.2em] text-zinc-500">Fire Extinguisher Link</p>
+								<Link href={`/inventory/fire-extinguishers?selectedItemId=${encodeURIComponent(deficiency.fire_extinguisher_id)}&refresh=${encodeURIComponent(deficiency.updated_at ?? deficiency.id)}`} className="mt-2 inline-flex text-sm font-semibold text-red-300 transition hover:text-red-200">
+									{deficiency.fire_extinguisher_number ?? "Open Fire Extinguisher Inventory"}
+								</Link>
+							</div>
+						) : deficiency.misc_fire_equipment_id ? (
+							<div className="rounded-xl border border-white/10 bg-[#0d0d0d] p-4">
+								<p className="text-xs uppercase tracking-[0.2em] text-zinc-500">Misc Fire Equipment Link</p>
+								<Link href={`/inventory/misc-fire-equipment?selectedItemId=${encodeURIComponent(deficiency.misc_fire_equipment_id)}&refresh=${encodeURIComponent(deficiency.updated_at ?? deficiency.id)}`} className="mt-2 inline-flex text-sm font-semibold text-red-300 transition hover:text-red-200">
+									{deficiency.misc_fire_equipment_name ?? "Open Misc Fire Equipment Inventory"}
+								</Link>
+							</div>
+						) : null}
 					</div>
 
 					<div className="mt-6 rounded-xl border border-white/10 bg-[#0d0d0d] p-5">
@@ -548,9 +676,12 @@ export default async function DeficiencyDetailPage({
 								rel="noreferrer"
 								className="mt-3 inline-block overflow-hidden rounded-lg border border-white/10 transition hover:border-red-500/40"
 							>
-								<img
+								<Image
 									src={photoUrl}
 									alt="Deficiency photo"
+									width={1200}
+									height={800}
+									unoptimized
 									className="h-40 w-auto max-w-full object-cover"
 								/>
 							</a>

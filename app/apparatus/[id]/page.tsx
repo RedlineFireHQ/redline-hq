@@ -1,11 +1,11 @@
 import PageLayout from "@/components/layout/PageLayout";
 import PerformMaintenanceButton from "@/components/maintenance/PerformMaintenanceButton";
 import ApparatusHistoryCards from "@/components/apparatus/ApparatusHistoryCards";
-import TaskList from "@/components/ui/TaskList";
+import AssignedInventoryPanel from "@/components/apparatus/AssignedInventoryPanel";
 import { getCurrentMember } from "@/lib/current-member";
 import { getApparatusImagePath } from "@/lib/apparatus-images";
 import { getApparatusById } from "@/lib/database";
-import { tasks } from "@/lib/tasks";
+import { calculateApparatusReadinessForApparatusId } from "@/lib/readiness/apparatus-readiness-data";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -18,11 +18,14 @@ type InspectionHistoryRow = {
   member_id: string | null;
 };
 
-type InspectionMemberRow = {
+type InspectionSessionRow = {
   id: string;
-  first_name: string | null;
-  last_name: string | null;
-  name: string | null;
+  completed_inspection_id: string | null;
+};
+
+type SessionHelperRow = {
+  session_id: string;
+  member_id: string;
 };
 
 type DeficiencyHistoryRow = {
@@ -32,13 +35,6 @@ type DeficiencyHistoryRow = {
   reported_by: string | null;
   priority: string | null;
   status: string | null;
-};
-
-type DeficiencyMemberRow = {
-  id: string;
-  first_name: string | null;
-  last_name: string | null;
-  name: string | null;
 };
 
 type MaintenanceHistoryRow = {
@@ -61,50 +57,18 @@ export default async function ApparatusDetailPage({
   params,
 }: ApparatusPageProps) {
   const { id } = await params;
+  const supabase = await createSupabaseServerClient();
 
-  const truck = await getApparatusById(id);
+  const truck = await getApparatusById(id, supabase);
 
   if (!truck) {
     notFound();
   }
 
-  const apparatusTasks = tasks.filter(
-    (task) => task.apparatusId === truck.id
-  );
   const apparatusImageUrl = getApparatusImagePath(truck.name);
-
-  const assignedAssets = [
-    {
-      id: "asset-holmatro-cutter-32x",
-      name: "Holmatro Cutter 32X",
-      category: "Rescue Tools",
-      location: "Engine 430 - Driver Side Compartment B",
-      inspectionStatus: "Current",
-      statusClass: "text-green-300",
-      lastInspection: "Jul 27, 2026",
-    },
-    {
-      id: "asset-scba-spare-cylinder-rack",
-      name: "SCBA Spare Cylinder Rack",
-      category: "Air Supply",
-      location: "Engine 430 - Crew Cab Rear",
-      inspectionStatus: "Due This Week",
-      statusClass: "text-amber-300",
-      lastInspection: "Jul 22, 2026",
-    },
-    {
-      id: "asset-tft-blitzfire-monitor",
-      name: "TFT Blitzfire Monitor",
-      category: "Water Flow Equipment",
-      location: "Engine 430 - Top Side Tray",
-      inspectionStatus: "Needs Attention",
-      statusClass: "text-red-300",
-      lastInspection: "Jul 10, 2026",
-    },
-  ];
-
-  const supabase = await createSupabaseServerClient();
   const currentMember = await getCurrentMember(supabase);
+  const readinessEvaluation = await calculateApparatusReadinessForApparatusId(truck.id);
+  const readiness = readinessEvaluation?.readiness ?? null;
 
   console.log("[apparatus-detail] deficiency history diagnostics", {
     routeApparatusId: id,
@@ -163,13 +127,70 @@ export default async function ApparatusDetailPage({
     .order("created_at", { ascending: false });
 
   const inspectionHistory = (inspectionHistoryData ?? []) as InspectionHistoryRow[];
-  const inspectionMemberIds = Array.from(
+  const inspectionIds = Array.from(
+    new Set(inspectionHistory.map((inspection) => inspection.id).filter((inspectionId) => Boolean(inspectionId))),
+  );
+  const inspectionOwnerMemberIds = Array.from(
     new Set(
       inspectionHistory
         .map((inspection) => inspection.member_id)
         .filter((memberId): memberId is string => Boolean(memberId))
     )
   );
+
+  let inspectionHelperMemberIdsByInspectionId: Record<string, string[]> = {};
+  let helperMemberIds: string[] = [];
+
+  if (inspectionIds.length > 0) {
+    const { data: inspectionSessionsRowsRaw } = await supabase
+      .from("apparatus_check_sessions")
+      .select("id, completed_inspection_id")
+      .eq("apparatus_id", id)
+      .in("completed_inspection_id", inspectionIds);
+
+    const inspectionSessionsRows = (inspectionSessionsRowsRaw ?? []) as InspectionSessionRow[];
+    const inspectionIdBySessionId = inspectionSessionsRows.reduce<Record<string, string>>((accumulator, row) => {
+      if (!row.id || !row.completed_inspection_id) {
+        return accumulator;
+      }
+
+      accumulator[row.id] = row.completed_inspection_id;
+      return accumulator;
+    }, {});
+    const sessionIds = Object.keys(inspectionIdBySessionId);
+
+    if (sessionIds.length > 0) {
+      const { data: sessionHelperRowsRaw } = await supabase
+        .from("apparatus_check_session_members")
+        .select("session_id, member_id")
+        .in("session_id", sessionIds);
+
+      const sessionHelperRows = (sessionHelperRowsRaw ?? []) as SessionHelperRow[];
+      const helperMap: Record<string, string[]> = {};
+
+      for (const row of sessionHelperRows) {
+        const inspectionIdForRow = inspectionIdBySessionId[row.session_id];
+        if (!inspectionIdForRow) {
+          continue;
+        }
+
+        const existing = helperMap[inspectionIdForRow] ?? [];
+        existing.push(row.member_id);
+        helperMap[inspectionIdForRow] = existing;
+      }
+
+      inspectionHelperMemberIdsByInspectionId = helperMap;
+      helperMemberIds = Array.from(
+        new Set(
+          sessionHelperRows
+            .map((row) => row.member_id)
+            .filter((memberId): memberId is string => typeof memberId === "string" && memberId.length > 0),
+        ),
+      );
+    }
+  }
+
+  const inspectionMemberIds = Array.from(new Set([...inspectionOwnerMemberIds, ...helperMemberIds]));
 
   let inspectionMemberNameById: Record<string, string> = {};
 
@@ -372,95 +393,629 @@ export default async function ApparatusDetailPage({
     );
   }
 
-  const latestInspection = inspectionHistory[0] ?? null;
-  const currentTimestamp = Date.now();
-  const latestInspectionDate = latestInspection?.created_at ? new Date(latestInspection.created_at) : null;
-  const hasCurrentInspection =
-    latestInspectionDate !== null &&
-    !Number.isNaN(latestInspectionDate.getTime()) &&
-    currentTimestamp - latestInspectionDate.getTime() <= 24 * 60 * 60 * 1000;
-
-  const openCriticalDeficiencyCount = deficiencyHistory.reduce((count, deficiency) => {
-    const priorityName = deficiency.priority
-      ? (deficiencyPriorityNameById[deficiency.priority] ?? "").trim().toLowerCase()
-      : "";
-    const statusName = deficiency.status
-      ? (deficiencyStatusNameById[deficiency.status] ?? "").trim().toLowerCase()
-      : "";
-
-    const isCriticalPriority = priorityName === "critical" || priorityName === "high";
-    const isOpenStatus = statusName !== "closed" && statusName !== "resolved";
-
-    if (isCriticalPriority && isOpenStatus) {
-      return count + 1;
+  const formatAssignedInventoryDate = (value: string | null | undefined) => {
+    if (!value) {
+      return "Not recorded";
     }
 
-    return count;
-  }, 0);
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return value;
+    }
 
-  const hasNoCriticalDeficiencies = openCriticalDeficiencyCount === 0;
+    return parsed.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  };
 
-  const latestMaintenance = maintenanceHistory[0] ?? null;
-  const latestMaintenanceDate = latestMaintenance?.service_date ? new Date(latestMaintenance.service_date) : null;
-  const hasCurrentMaintenance =
-    latestMaintenanceDate !== null &&
-    !Number.isNaN(latestMaintenanceDate.getTime()) &&
-    currentTimestamp - latestMaintenanceDate.getTime() <= 30 * 24 * 60 * 60 * 1000;
+  const compareWithToday = (value: string | null | undefined) => {
+    if (!value) {
+      return null;
+    }
 
-  const pumpTestDueInDays = 18;
-  const inventoryItemsExpiringCount = 2;
+    const parsed = new Date(`${value}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
 
-  const readinessPenalty =
-    (hasCurrentInspection ? 0 : 30) +
-    (hasNoCriticalDeficiencies ? 0 : 35) +
-    (hasCurrentMaintenance ? 0 : 20) +
-    (pumpTestDueInDays <= 30 ? 5 : 0) +
-    (inventoryItemsExpiringCount > 0 ? 4 : 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-  const readinessScore = Math.max(0, Math.min(100, 100 - readinessPenalty));
+    if (parsed.getTime() < today.getTime()) {
+      return "past";
+    }
+
+    if (parsed.getTime() === today.getTime()) {
+      return "today";
+    }
+
+    return "future";
+  };
+
+  const statusClassForAssignedInventory = (status: string | null | undefined) => {
+    if (status === "Current") {
+      return "text-green-300";
+    }
+
+    if (status === "Due Today" || status === "No Service Test" || status === "Not Tracked") {
+      return "text-amber-300";
+    }
+
+    if (status === "Needs Attention" || status === "Overdue") {
+      return "text-red-300";
+    }
+
+    return "text-neutral-300";
+  };
+
+  const getDueDateInspectionStatus = (dueDate: string | null | undefined) => {
+    if (!dueDate) {
+      return "Not Tracked";
+    }
+
+    const comparison = compareWithToday(dueDate);
+    if (comparison === "past") {
+      return "Overdue";
+    }
+
+    if (comparison === "today") {
+      return "Due Today";
+    }
+
+    return "Current";
+  };
+
+  const getGroundLadderInspectionStatus = (latestTest: { next_test_due_date?: string | null } | null | undefined) => {
+    if (!latestTest || !latestTest.next_test_due_date) {
+      return "No Service Test";
+    }
+
+    return getDueDateInspectionStatus(latestTest.next_test_due_date);
+  };
+
+  const getRopeInspectionStatus = (latestInspection: { result?: string | null; inspection_date?: string | null } | null | undefined) => {
+    if (!latestInspection || !latestInspection.inspection_date) {
+      return "Not Tracked";
+    }
+
+    const normalizedResult = typeof latestInspection.result === "string" ? latestInspection.result.trim().toLowerCase() : "";
+    if (normalizedResult === "fail") {
+      return "Needs Attention";
+    }
+
+    return "Current";
+  };
+
+  const getGasMonitorInspectionStatus = (latestCalibrationDate: string | null | undefined, calibrationIntervalMonths: number) => {
+    if (!latestCalibrationDate) {
+      return "Not Tracked";
+    }
+
+    const intervalMs = calibrationIntervalMonths * 30 * 24 * 60 * 60 * 1000;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dueDate = new Date(`${latestCalibrationDate}T00:00:00`);
+    dueDate.setTime(dueDate.getTime() + intervalMs);
+
+    if (dueDate.getTime() < today.getTime()) {
+      return "Overdue";
+    }
+
+    if (dueDate.getTime() === today.getTime()) {
+      return "Due Today";
+    }
+
+    return "Current";
+  };
+
+  const [
+    { data: assignedFireExtinguishersData },
+    { data: assignedMiscEquipmentData },
+    { data: assignedRopeData },
+    { data: assignedGroundLadderAssignmentsData },
+    { data: assignedPortableRadioAssignmentsData },
+    { data: assignedGasMonitorAssignmentsData },
+    { data: assignedBatteryAssignmentsData },
+    { data: assignedThermalCameraAssignmentsData },
+    { data: assignedPieAssignmentsData },
+    { data: assignedFireHoseData },
+  ] = await Promise.all([
+    supabase
+      .from("fire_extinguishers")
+      .select("id, extinguisher_number, extinguisher_type, status, updated_at, created_at")
+      .eq("apparatus_id", truck.id)
+      .eq("location_type", "Apparatus"),
+    supabase
+      .from("misc_fire_equipment")
+      .select("id, equipment_name, asset_number, status, updated_at, created_at")
+      .eq("apparatus_id", truck.id)
+      .eq("location_type", "Apparatus"),
+    supabase
+      .from("rope_items")
+      .select("id, rope_name, rope_identifier, status, updated_at, created_at")
+      .eq("apparatus_id", truck.id)
+      .eq("location_type", "Apparatus"),
+    supabase
+      .from("ground_ladder_assignments")
+      .select("ground_ladder_id")
+      .eq("apparatus_id", truck.id)
+      .is("ended_at", null),
+    supabase
+      .from("portable_radio_assignments")
+      .select("portable_radio_id")
+      .eq("apparatus_id", truck.id)
+      .is("ended_at", null),
+    supabase
+      .from("gas_monitor_assignments")
+      .select("gas_monitor_id")
+      .eq("apparatus_id", truck.id)
+      .is("ended_at", null),
+    supabase
+      .from("battery_assignments")
+      .select("battery_id")
+      .eq("apparatus_id", truck.id)
+      .is("ended_at", null),
+    supabase
+      .from("thermal_imaging_camera_assignments")
+      .select("thermal_imaging_camera_id")
+      .eq("apparatus_id", truck.id)
+      .is("ended_at", null),
+    supabase
+      .from("pie_equipment_assignments")
+      .select("pie_equipment_id")
+      .eq("apparatus_id", truck.id)
+      .is("ended_at", null),
+    supabase
+      .from("fire_hose")
+      .select("id, inventory_number, status, updated_at, created_at")
+      .eq("apparatus_id", truck.id),
+  ]);
+
+  const groundLadderIds = Array.from(
+    new Set(
+      (assignedGroundLadderAssignmentsData ?? [])
+        .map((row) => String((row as Record<string, unknown>).ground_ladder_id ?? ""))
+        .filter(Boolean),
+    ),
+  );
+  const portableRadioIds = Array.from(
+    new Set(
+      (assignedPortableRadioAssignmentsData ?? [])
+        .map((row) => String((row as Record<string, unknown>).portable_radio_id ?? ""))
+        .filter(Boolean),
+    ),
+  );
+  const gasMonitorIds = Array.from(
+    new Set(
+      (assignedGasMonitorAssignmentsData ?? [])
+        .map((row) => String((row as Record<string, unknown>).gas_monitor_id ?? ""))
+        .filter(Boolean),
+    ),
+  );
+  const batteryIds = Array.from(
+    new Set(
+      (assignedBatteryAssignmentsData ?? [])
+        .map((row) => String((row as Record<string, unknown>).battery_id ?? ""))
+        .filter(Boolean),
+    ),
+  );
+  const thermalCameraIds = Array.from(
+    new Set(
+      (assignedThermalCameraAssignmentsData ?? [])
+        .map((row) => String((row as Record<string, unknown>).thermal_imaging_camera_id ?? ""))
+        .filter(Boolean),
+    ),
+  );
+  const pieEquipmentIds = Array.from(
+    new Set(
+      (assignedPieAssignmentsData ?? [])
+        .map((row) => String((row as Record<string, unknown>).pie_equipment_id ?? ""))
+        .filter(Boolean),
+    ),
+  );
+
+  const [
+    { data: assignedGroundLadderData },
+    { data: assignedPortableRadioData },
+    { data: assignedGasMonitorData },
+    { data: assignedBatteryData },
+    { data: assignedThermalCameraData },
+    { data: assignedPieData },
+  ] = await Promise.all([
+    groundLadderIds.length > 0
+      ? supabase
+          .from("ground_ladders")
+          .select("id, ladder_number, status, updated_at, created_at")
+          .in("id", groundLadderIds)
+      : Promise.resolve({ data: [] }),
+    portableRadioIds.length > 0
+      ? supabase
+          .from("portable_radios")
+          .select("id, radio_number, status, updated_at, created_at")
+          .in("id", portableRadioIds)
+      : Promise.resolve({ data: [] }),
+    gasMonitorIds.length > 0
+      ? supabase
+          .from("gas_monitors")
+          .select("id, monitor_number, status, updated_at, created_at")
+          .in("id", gasMonitorIds)
+      : Promise.resolve({ data: [] }),
+    batteryIds.length > 0
+      ? supabase
+          .from("batteries")
+          .select("id, battery_number, status, updated_at, created_at")
+          .in("id", batteryIds)
+      : Promise.resolve({ data: [] }),
+    thermalCameraIds.length > 0
+      ? supabase
+          .from("thermal_imaging_cameras")
+          .select("id, camera_number, status, updated_at, created_at")
+          .in("id", thermalCameraIds)
+      : Promise.resolve({ data: [] }),
+    pieEquipmentIds.length > 0
+      ? supabase
+          .from("pie_equipment")
+          .select("id, equipment_number, status, updated_at, created_at")
+          .in("id", pieEquipmentIds)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const ropeIds = Array.from(
+    new Set(
+      ((assignedRopeData ?? []) as Array<Record<string, unknown>>)
+        .map((row) => String(row.id ?? ""))
+        .filter(Boolean),
+    ),
+  );
+
+  const [
+    { data: groundLadderServiceTestsData },
+    { data: ropeInspectionData },
+    { data: gasMonitorCalibrationRowsRaw },
+    { data: gasMonitorSessionCalibrationRowsRaw },
+  ] = await Promise.all([
+    groundLadderIds.length > 0
+      ? supabase
+          .from("ground_ladder_service_tests")
+          .select("ground_ladder_id, next_test_due_date, test_date, result")
+          .in("ground_ladder_id", groundLadderIds)
+          .order("test_date", { ascending: false })
+          .order("created_at", { ascending: false })
+      : Promise.resolve({ data: [] }),
+    ropeIds.length > 0
+      ? supabase
+          .from("rope_inspections")
+          .select("rope_item_id, inspection_date, result")
+          .in("rope_item_id", ropeIds)
+          .order("inspection_date", { ascending: false })
+          .order("created_at", { ascending: false })
+      : Promise.resolve({ data: [] }),
+    gasMonitorIds.length > 0
+      ? supabase
+          .from("gas_monitor_calibrations")
+          .select("gas_monitor_id, calibration_date")
+          .in("gas_monitor_id", gasMonitorIds)
+          .order("calibration_date", { ascending: false })
+      : Promise.resolve({ data: [] }),
+    gasMonitorIds.length > 0
+      ? supabase
+          .from("gas_monitor_calibration_session_results")
+          .select("gas_monitor_id, calibration_date")
+          .in("gas_monitor_id", gasMonitorIds)
+          .order("calibration_date", { ascending: false })
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const latestGroundLadderServiceTestById = new Map<string, { next_test_due_date: string | null; test_date: string | null; result: string | null }>();
+  for (const row of (groundLadderServiceTestsData ?? []) as Array<Record<string, unknown>>) {
+    const ladderId = typeof row.ground_ladder_id === "string" ? row.ground_ladder_id : "";
+    if (!ladderId) {
+      continue;
+    }
+
+    const current = latestGroundLadderServiceTestById.get(ladderId);
+    const nextDueDate = typeof row.next_test_due_date === "string" ? row.next_test_due_date : null;
+    const testDate = typeof row.test_date === "string" ? row.test_date : null;
+    const result = typeof row.result === "string" ? row.result : null;
+
+    if (!current || (testDate && (!current.test_date || testDate > current.test_date))) {
+      latestGroundLadderServiceTestById.set(ladderId, {
+        next_test_due_date: nextDueDate,
+        test_date: testDate,
+        result,
+      });
+    }
+  }
+
+  const latestRopeInspectionById = new Map<string, { inspection_date: string | null; result: string | null }>();
+  for (const row of (ropeInspectionData ?? []) as Array<Record<string, unknown>>) {
+    const ropeId = typeof row.rope_item_id === "string" ? row.rope_item_id : "";
+    if (!ropeId) {
+      continue;
+    }
+
+    const current = latestRopeInspectionById.get(ropeId);
+    const inspectionDate = typeof row.inspection_date === "string" ? row.inspection_date : null;
+    const result = typeof row.result === "string" ? row.result : null;
+
+    if (!current || (inspectionDate && (!current.inspection_date || inspectionDate > current.inspection_date))) {
+      latestRopeInspectionById.set(ropeId, { inspection_date: inspectionDate, result });
+    }
+  }
+
+  const latestCalibrationDateByGasMonitorId = new Map<string, string | null>();
+  const calibrationRows = [
+    ...((gasMonitorCalibrationRowsRaw ?? []) as Array<Record<string, unknown>>),
+    ...((gasMonitorSessionCalibrationRowsRaw ?? []) as Array<Record<string, unknown>>),
+  ];
+
+  for (const row of calibrationRows) {
+    const gasMonitorId = typeof row.gas_monitor_id === "string" ? row.gas_monitor_id : "";
+    if (!gasMonitorId) {
+      continue;
+    }
+
+    const calibrationDate = typeof row.calibration_date === "string" ? row.calibration_date : null;
+    const current = latestCalibrationDateByGasMonitorId.get(gasMonitorId);
+    if (!calibrationDate) {
+      continue;
+    }
+
+    if (!current || (calibrationDate > current)) {
+      latestCalibrationDateByGasMonitorId.set(gasMonitorId, calibrationDate);
+    }
+  }
+
+  const assignedInventoryItems = [
+    ...((assignedFireExtinguishersData ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      id: typeof row.id === "string" ? row.id : String(row.id ?? ""),
+      name: typeof row.extinguisher_number === "string" && row.extinguisher_number.trim()
+        ? row.extinguisher_number
+        : typeof row.extinguisher_type === "string"
+          ? row.extinguisher_type
+          : "Fire Extinguisher",
+      category: typeof row.extinguisher_type === "string" && row.extinguisher_type.trim()
+        ? row.extinguisher_type
+        : "Fire Extinguisher",
+      location: `${truck.name} - Apparatus`,
+      inspectionStatus: "Not Tracked",
+      statusClass: statusClassForAssignedInventory("Not Tracked"),
+      lastInspection: formatAssignedInventoryDate(typeof row.updated_at === "string" ? row.updated_at : typeof row.created_at === "string" ? row.created_at : null),
+      linkHref: null,
+    })),
+    ...((assignedMiscEquipmentData ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      id: typeof row.id === "string" ? row.id : String(row.id ?? ""),
+      name: typeof row.equipment_name === "string" && row.equipment_name.trim()
+        ? row.equipment_name
+        : typeof row.asset_number === "string" && row.asset_number.trim()
+          ? row.asset_number
+          : "Misc Fire Equipment",
+      category: "Misc Fire Equipment",
+      location: `${truck.name} - Apparatus`,
+      inspectionStatus: "Not Tracked",
+      statusClass: statusClassForAssignedInventory("Not Tracked"),
+      lastInspection: formatAssignedInventoryDate(typeof row.updated_at === "string" ? row.updated_at : typeof row.created_at === "string" ? row.created_at : null),
+      linkHref: null,
+    })),
+    ...((assignedRopeData ?? []) as Array<Record<string, unknown>>).map((row) => {
+      const id = typeof row.id === "string" ? row.id : String(row.id ?? "");
+      const ropeId = id;
+      const latestInspection = latestRopeInspectionById.get(ropeId) ?? null;
+      const inspectionStatus = getRopeInspectionStatus(latestInspection);
+
+      return {
+        id,
+        name: typeof row.rope_name === "string" && row.rope_name.trim()
+          ? row.rope_name
+          : typeof row.rope_identifier === "string" && row.rope_identifier.trim()
+            ? row.rope_identifier
+            : "Rope",
+        category: "Rope",
+        location: `${truck.name} - Apparatus`,
+        inspectionStatus,
+        statusClass: statusClassForAssignedInventory(inspectionStatus),
+        lastInspection: latestInspection?.inspection_date
+          ? formatAssignedInventoryDate(latestInspection.inspection_date)
+          : "Not recorded",
+        linkHref: null,
+      };
+    }),
+    ...((assignedGroundLadderData ?? []) as Array<Record<string, unknown>>).map((row) => {
+      const id = typeof row.id === "string" ? row.id : String(row.id ?? "");
+      const latestTest = latestGroundLadderServiceTestById.get(id) ?? null;
+      const inspectionStatus = getGroundLadderInspectionStatus(latestTest);
+
+      return {
+        id,
+        name: typeof row.ladder_number === "string" && row.ladder_number.trim() ? row.ladder_number : "Ground Ladder",
+        category: "Ground Ladder",
+        location: `${truck.name} - Apparatus`,
+        inspectionStatus,
+        statusClass: statusClassForAssignedInventory(inspectionStatus),
+        lastInspection: latestTest?.test_date ? formatAssignedInventoryDate(latestTest.test_date) : "Not recorded",
+        linkHref: null,
+      };
+    }),
+    ...((assignedPortableRadioData ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      id: typeof row.id === "string" ? row.id : String(row.id ?? ""),
+      name: typeof row.radio_number === "string" && row.radio_number.trim() ? row.radio_number : "Portable Radio",
+      category: "Portable Radio",
+      location: `${truck.name} - Apparatus`,
+      inspectionStatus: "Not Tracked",
+      statusClass: statusClassForAssignedInventory("Not Tracked"),
+      lastInspection: formatAssignedInventoryDate(typeof row.updated_at === "string" ? row.updated_at : typeof row.created_at === "string" ? row.created_at : null),
+      linkHref: null,
+    })),
+    ...((assignedGasMonitorData ?? []) as Array<Record<string, unknown>>).map((row) => {
+      const id = typeof row.id === "string" ? row.id : String(row.id ?? "");
+      const latestCalibrationDate = latestCalibrationDateByGasMonitorId.get(id) ?? null;
+      const inspectionStatus = getGasMonitorInspectionStatus(latestCalibrationDate, 6);
+
+      return {
+        id,
+        name: typeof row.monitor_number === "string" && row.monitor_number.trim() ? row.monitor_number : "Gas Monitor",
+        category: "Gas Monitor",
+        location: `${truck.name} - Apparatus`,
+        inspectionStatus,
+        statusClass: statusClassForAssignedInventory(inspectionStatus),
+        lastInspection: latestCalibrationDate ? formatAssignedInventoryDate(latestCalibrationDate) : "Not recorded",
+        linkHref: null,
+      };
+    }),
+    ...((assignedBatteryData ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      id: typeof row.id === "string" ? row.id : String(row.id ?? ""),
+      name: typeof row.battery_number === "string" && row.battery_number.trim() ? row.battery_number : "Battery",
+      category: "Battery",
+      location: `${truck.name} - Apparatus`,
+      inspectionStatus: "Not Tracked",
+      statusClass: statusClassForAssignedInventory("Not Tracked"),
+      lastInspection: formatAssignedInventoryDate(typeof row.updated_at === "string" ? row.updated_at : typeof row.created_at === "string" ? row.created_at : null),
+      linkHref: null,
+    })),
+    ...((assignedThermalCameraData ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      id: typeof row.id === "string" ? row.id : String(row.id ?? ""),
+      name: typeof row.camera_number === "string" && row.camera_number.trim() ? row.camera_number : "Thermal Imaging Camera",
+      category: "Thermal Imaging Camera",
+      location: `${truck.name} - Apparatus`,
+      inspectionStatus: "Not Tracked",
+      statusClass: statusClassForAssignedInventory("Not Tracked"),
+      lastInspection: formatAssignedInventoryDate(typeof row.updated_at === "string" ? row.updated_at : typeof row.created_at === "string" ? row.created_at : null),
+      linkHref: null,
+    })),
+    ...((assignedPieData ?? []) as Array<Record<string, unknown>>).map((row) => ({
+      id: typeof row.id === "string" ? row.id : String(row.id ?? ""),
+      name: typeof row.equipment_number === "string" && row.equipment_number.trim() ? row.equipment_number : "PIE Equipment",
+      category: "PIE Equipment",
+      location: `${truck.name} - Apparatus`,
+      inspectionStatus: "Not Tracked",
+      statusClass: statusClassForAssignedInventory("Not Tracked"),
+      lastInspection: formatAssignedInventoryDate(typeof row.updated_at === "string" ? row.updated_at : typeof row.created_at === "string" ? row.created_at : null),
+      linkHref: null,
+    })),
+    ...((assignedFireHoseData ?? []) as Array<Record<string, unknown>>).map((row) => {
+      const id = typeof row.id === "string" ? row.id : String(row.id ?? "");
+      const nextTestDate = typeof row.next_test_date === "string" ? row.next_test_date : null;
+      const inspectionStatus = getDueDateInspectionStatus(nextTestDate);
+
+      return {
+        id,
+        name: typeof row.inventory_number === "string" && row.inventory_number.trim() ? row.inventory_number : "Fire Hose",
+        category: "Fire Hose",
+        location: `${truck.name} - Apparatus`,
+        inspectionStatus,
+        statusClass: statusClassForAssignedInventory(inspectionStatus),
+        lastInspection: nextTestDate ? formatAssignedInventoryDate(nextTestDate) : "Not recorded",
+        linkHref: null,
+      };
+    }),
+  ].filter((item) => Boolean(item.id));
+
+  const readinessScore = readiness?.scorePercent ?? null;
+  const readinessScoreLabel = readinessScore === null ? "NOT SCORED" : `${Math.round(readinessScore)}%`;
+  const checksBucketScore = readiness?.bucketScores.apparatusChecks ?? null;
+  const maintenanceBucketScore = readiness?.bucketScores.maintenanceService ?? null;
+  const equipmentBucketScore = readiness?.bucketScores.requiredEquipment ?? null;
+  const conditionCounts = readiness?.metadata.activeConditionCounts ?? {
+    minor: 0,
+    significant: 0,
+    critical: 0,
+  };
+  const readinessBlockingGaps = readiness?.blockingGaps ?? [];
 
   return (
-    <PageLayout>
+    <PageLayout
+      environmentBackgroundUrl="/branding/images/apparatuspageimage.png"
+      environmentBackgroundPosition="left center"
+    >
       <div className="space-y-8">
-        {/* Header */}
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.3em] text-red-500">
-            Apparatus
-          </p>
+        <div className="rounded-2xl border border-neutral-800 bg-[#1b1b1b] p-4 md:p-5">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center">
+            <div className="relative h-36 w-52 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-[#111111] shadow-inner">
+              {apparatusImageUrl ? (
+                <img
+                  src={apparatusImageUrl}
+                  alt={`${truck.name} photo`}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center text-[11px] font-semibold uppercase tracking-[0.12em] text-neutral-300">
+                  Apparatus Photo
+                </div>
+              )}
+            </div>
 
-          <h1 className="mt-2 text-5xl font-black tracking-tight text-white">
-            {truck.name}
-          </h1>
-        </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">
+                Apparatus
+              </p>
 
-        <div className="grid gap-6 lg:grid-cols-3 lg:items-stretch">
-          {/* Apparatus Readiness */}
-          <div className="rounded-2xl border border-red-900 bg-[#242424] p-5 lg:col-span-2">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div className="min-w-0 flex-1">
-                <h2 className="text-2xl font-bold text-white">Apparatus Readiness</h2>
+              <h1
+                className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white"
+                style={{ fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif' }}
+              >
+                {truck.name}
+              </h1>
 
-                <ul className="mt-4 space-y-2 text-sm text-neutral-200">
-                  <li>
-                    {hasCurrentInspection
-                      ? "\u2713 Apparatus Check Current"
-                      : "\u26A0 Apparatus Check Overdue"}
-                  </li>
-                  <li>
-                    {hasNoCriticalDeficiencies
-                      ? "\u2713 No Critical Deficiencies"
-                      : `\u26A0 ${openCriticalDeficiencyCount} Critical ${openCriticalDeficiencyCount === 1 ? "Deficiency" : "Deficiencies"} Open`}
-                  </li>
-                  <li>
-                    {hasCurrentMaintenance
-                      ? "\u2713 Maintenance Current"
-                      : "\u26A0 Maintenance Review Due"}
-                  </li>
-                  <li>{`\u26A0 Pump Test Due in ${pumpTestDueInDays} Days`}</li>
-                  <li>{`\u26A0 ${inventoryItemsExpiringCount} Inventory Items Expiring`}</li>
-                </ul>
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-neutral-400">
+                <span className="font-medium text-neutral-300">{truck.type ?? "Apparatus"}</span>
+                <span className="h-1 w-1 rounded-full bg-neutral-600" />
+                <span>{truck.department_name ?? "Department"}</span>
+              </div>
+            </div>
 
-                <div className="mt-4 flex flex-wrap gap-2">
+            <div className="min-w-0 flex-1 border-l border-white/10 pl-0 lg:pl-6">
+              <div className="flex flex-col gap-4">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">
+                    Apparatus Readiness
+                  </p>
+
+                  <ul className="mt-3 space-y-2 text-sm text-neutral-200">
+                    <li>
+                      {checksBucketScore === 20
+                        ? "✓ Apparatus Check Current"
+                        : checksBucketScore === null
+                          ? "⚠ Apparatus Check configuration required"
+                          : "⚠ Apparatus Check overdue"}
+                    </li>
+                    <li>
+                      {conditionCounts.critical > 0
+                        ? `⚠ ${conditionCounts.critical} Critical ${conditionCounts.critical === 1 ? "Condition" : "Conditions"} Active`
+                        : conditionCounts.significant > 0 || conditionCounts.minor > 0
+                          ? `⚠ ${conditionCounts.significant} Significant, ${conditionCounts.minor} Minor Active`
+                          : "✓ No active condition deductions"}
+                    </li>
+                    <li>
+                      {maintenanceBucketScore === null
+                        ? "⚠ Maintenance requirement configuration required"
+                        : maintenanceBucketScore === 20
+                          ? "✓ Maintenance Current"
+                          : "⚠ Maintenance requires attention"}
+                    </li>
+                    <li>
+                      {equipmentBucketScore === null
+                        ? "⚠ Required equipment configuration required"
+                        : equipmentBucketScore === 20
+                          ? "✓ Required equipment operational"
+                          : "⚠ Required equipment has unavailable items"}
+                    </li>
+                    {readiness?.isOutOfService ? (
+                      <li>{"⚠ Apparatus is Out of Service"}</li>
+                    ) : null}
+                  </ul>
+                </div>
+
+                {readinessBlockingGaps.length > 0 ? (
+                  <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-200">
+                    {readinessBlockingGaps.map((gap) => (
+                      <p key={gap}>{`⚠ ${gap}`}</p>
+                    ))}
+                  </div>
+                ) : null}
+
+                <div className="flex flex-wrap gap-2">
                   <Link
                     href={`/apparatus/${truck.id}/daily-check`}
                     className="rounded-lg border border-red-500/30 bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700"
@@ -485,122 +1040,37 @@ export default async function ApparatusDetailPage({
                   </Link>
                 </div>
               </div>
+            </div>
 
+            <div className="w-full max-w-[220px] shrink-0 rounded-xl border border-white/10 bg-[#111111] px-4 py-3 lg:ml-auto">
+              <p className="text-[11px] uppercase tracking-[0.15em] text-neutral-500">Readiness Score</p>
+              <p className="mt-1 text-3xl font-black text-white">{readinessScoreLabel}</p>
 
-              <div className="w-full max-w-[240px] rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.15em] text-neutral-500">Readiness Score</p>
-                <p className="mt-1 text-4xl font-black text-white">{readinessScore}%</p>
-
-                <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-neutral-800">
-                  <div
-                    className="h-full rounded-full bg-red-500 transition-all"
-                    style={{ width: `${readinessScore}%` }}
-                  />
-                </div>
+              <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-neutral-800">
+                <div
+                  className="h-full rounded-full bg-red-500 transition-all"
+                  style={{ width: `${readinessScore ?? 0}%` }}
+                />
               </div>
             </div>
-          </div>
-
-          <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#1a1a1a] via-[#151515] to-[#101010] p-4">
-            {apparatusImageUrl ? (
-              <div className="flex h-full w-full items-center justify-center">
-                <img
-  src={apparatusImageUrl}
-  alt={truck.name}
-  className="h-auto max-h-[320px] w-full object-contain object-center"
-  style={{
-    position: "relative",
-    zIndex: 9999,
-    background: "lime",
-  }}
-/>
-              </div>
-            ) : (
-              <div className="flex h-full items-center justify-center text-[11px] font-semibold uppercase tracking-[.12em] text-neutral-300">
-                Apparatus Photo
-              </div>
-            )}
-            {/* <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_25%,rgba(180,0,0,.14),transparent_60%)]" /> */}
           </div>
         </div>
 
-        <ApparatusHistoryCards
-          apparatusName={truck.name}
-          inspectionHistory={inspectionHistory}
-          inspectionMemberNameById={inspectionMemberNameById}
-          deficiencyHistory={deficiencyHistory}
-          deficiencyPriorityNameById={deficiencyPriorityNameById}
-          deficiencyStatusNameById={deficiencyStatusNameById}
-          maintenanceHistory={maintenanceHistory}
-          maintenanceMemberNameById={maintenanceMemberNameById}
-          maintenanceDeficiencyNumberById={maintenanceDeficiencyNumberById}
-        />
-
-        {/* Dashboard */}
-        <div className="grid gap-6 lg:grid-cols-3">
-          <TaskList
-            title="Today's Tasks"
-            tasks={apparatusTasks}
+        <div className="space-y-8">
+          <ApparatusHistoryCards
+            apparatusName={truck.name}
+            inspectionHistory={inspectionHistory}
+            inspectionMemberNameById={inspectionMemberNameById}
+            inspectionHelperMemberIdsByInspectionId={inspectionHelperMemberIdsByInspectionId}
+            deficiencyHistory={deficiencyHistory}
+            deficiencyPriorityNameById={deficiencyPriorityNameById}
+            deficiencyStatusNameById={deficiencyStatusNameById}
+            maintenanceHistory={maintenanceHistory}
+            maintenanceMemberNameById={maintenanceMemberNameById}
+            maintenanceDeficiencyNumberById={maintenanceDeficiencyNumberById}
           />
 
-          <SectionCard title="Assigned Inventory">
-            <div className="mt-1 overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b border-white/10 text-[11px] uppercase tracking-[0.12em] text-neutral-500">
-                    <th className="px-3 py-2 font-semibold">Inventory Name</th>
-                    <th className="px-3 py-2 font-semibold">Category</th>
-                    <th className="px-3 py-2 font-semibold">Assigned Location</th>
-                    <th className="px-3 py-2 font-semibold">Inspection Status</th>
-                    <th className="px-3 py-2 font-semibold">Last Inspection</th>
-                  </tr>
-                </thead>
-
-                <tbody className="text-neutral-300">
-                  {assignedAssets.map((asset, index) => (
-                    <tr
-                      key={asset.id}
-                      className={`${index < assignedAssets.length - 1 ? "border-b border-white/5" : ""} transition-colors hover:bg-white/[0.02]`}
-                    >
-                      <td className="px-0 py-0">
-                        <Link href={`/assets/${asset.id}`} className="block px-3 py-3 text-neutral-300 hover:text-white">
-                          {asset.name}
-                        </Link>
-                      </td>
-                      <td className="px-0 py-0">
-                        <Link href={`/assets/${asset.id}`} className="block px-3 py-3 text-neutral-300 hover:text-white">
-                          {asset.category}
-                        </Link>
-                      </td>
-                      <td className="px-0 py-0">
-                        <Link href={`/assets/${asset.id}`} className="block px-3 py-3 text-neutral-300 hover:text-white">
-                          {asset.location}
-                        </Link>
-                      </td>
-                      <td className="px-0 py-0">
-                        <Link href={`/assets/${asset.id}`} className={`block px-3 py-3 hover:brightness-110 ${asset.statusClass}`}>
-                          {asset.inspectionStatus}
-                        </Link>
-                      </td>
-                      <td className="px-0 py-0">
-                        <Link href={`/assets/${asset.id}`} className="block px-3 py-3 text-neutral-300 hover:text-white">
-                          {asset.lastInspection}
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </SectionCard>
-
-          <SectionCard title="Recent Activity">
-            <ul className="space-y-3 text-sm text-neutral-400">
-              <li>✓ Monthly check completed</li>
-              <li>✓ Pump inspection passed</li>
-              <li>✓ Equipment inventory updated</li>
-            </ul>
-          </SectionCard>
+          <AssignedInventoryPanel items={assignedInventoryItems} apparatusId={truck.id} />
         </div>
       </div>
     </PageLayout>

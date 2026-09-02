@@ -1,4 +1,12 @@
 import { getCurrentMember, type CurrentMember } from "@/lib/current-member";
+import {
+  applyAuthoritativeCertificationToTrackProfile,
+  buildCertificationTypeMetaById,
+  findCurrentTrackProfile,
+  resolveAuthoritativeEmsCertificationsForMember,
+  resolveCertificationStatusFromTrack,
+  type EmsTrackProfileAuthorityRow,
+} from "@/lib/ems/authoritative-certifications";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import {
   buildMemberReadinessScore,
@@ -13,6 +21,7 @@ import {
   type ReadinessScoreState,
   type RequirementInput,
 } from "@/lib/readiness/member-readiness";
+import { buildScoredCertificationStatuses } from "@/lib/readiness/scored-certifications";
 import {
   getRoleRequirementComparison,
   type CatalogRow,
@@ -28,6 +37,8 @@ import {
   calculateMaintenanceServiceBucketScore,
   type ApparatusMaintenanceRequirementEvaluation,
 } from "@/lib/readiness/apparatus-readiness";
+import { calculateComplianceBucketHours } from "@/lib/training/compliance-buckets";
+import { department } from "@/lib/department";
 
 const PERSONNEL_WEIGHT = 0.65;
 const APPARATUS_WEIGHT = 0.35;
@@ -36,6 +47,7 @@ const APPARATUS_CONDITION_BUCKET_MAX = 40;
 const APPARATUS_MAINTENANCE_BUCKET_MAX = 20;
 const APPARATUS_EQUIPMENT_BUCKET_MAX = 20;
 const MEMBER_DEFICIENCIES_BUCKET_MAX = 10;
+const CERTIFICATION_WARNING_DAYS = department.settings.certificationWarningDays;
 
 type MemberRow = {
   id: string;
@@ -44,11 +56,15 @@ type MemberRow = {
   role: string | null;
   department_role_id: string | null;
   active: boolean | null;
+  hire_start_date: string | null;
+  created_at: string | null;
 };
 
 type MemberCertificationRow = {
   member_id: string;
   certification_id: string;
+  certificate_number: string | null;
+  issued_at: string;
   expires_at: string | null;
 };
 
@@ -74,6 +90,19 @@ type OutsideSubmissionRow = {
   hours: number | string | null;
 };
 
+type AssignmentMemberApprovedRow = {
+  member_id: string;
+  training_assignment_id: string;
+  hours_earned: number | string | null;
+};
+
+type AssignmentRow = {
+  id: string;
+  category_id: string | null;
+  hours_credit: number | string | null;
+  status: string;
+};
+
 type TrainingCategoryRow = {
   id: string;
   name: string;
@@ -82,6 +111,8 @@ type TrainingCategoryRow = {
 type CertificationTypeRow = {
   id: string;
   name: string;
+  ems_authority: "iowa" | "nremt" | null;
+  ems_certification_level: "emr" | "emt" | "aemt" | "paramedic" | null;
 };
 
 type DepartmentRoleRow = {
@@ -438,6 +469,10 @@ export function simulateMemberScoreForResolvedCoachFactor(input: {
       return readinessState.scorePercent;
     }
 
+    if (readinessState.qualificationsScore === null) {
+      return readinessState.scorePercent;
+    }
+
     const currentQualificationsPercent = clamp(
       (readinessState.qualificationsScore / readinessState.qualificationsMaxScore) * 100,
       0,
@@ -629,7 +664,7 @@ function buildApparatusIssueActions(row: ApparatusReadinessListRow): ApparatusIs
   if (readiness.status === "not_scored") {
     drafts.push({
       idSuffix: "configuration",
-      title: "Complete readiness configuration",
+      title: "CONFIGURATION REQUIRED",
       description: "This apparatus is included but cannot be scored until readiness configuration is completed.",
       scoreDelta: null,
     });
@@ -793,7 +828,7 @@ export async function getDepartmentReadinessData(
 
   const { data: memberRowsData, error: memberRowsError } = await supabase
     .from("members")
-    .select("id, first_name, last_name, role, department_role_id, active")
+    .select("id, first_name, last_name, role, department_role_id, active, hire_start_date, created_at")
     .eq("department_id", departmentId)
     .eq("active", true)
     .order("last_name", { ascending: true })
@@ -823,7 +858,7 @@ export async function getDepartmentReadinessData(
       .order("sort_order", { ascending: true }),
     supabase
       .from("certifications")
-      .select("id, name")
+      .select("id, name, ems_authority, ems_certification_level")
       .eq("department_id", departmentId),
     supabase
       .from("qualifications")
@@ -898,12 +933,14 @@ export async function getDepartmentReadinessData(
     memberQualificationRows,
     attendanceRows,
     outsideRows,
+    assignmentMemberApprovedRows,
+    emsTrackRows,
     assignedDeficiencyRows,
   ] = memberIds.length
     ? await Promise.all([
         supabase
           .from("member_certifications")
-          .select("member_id, certification_id, expires_at")
+          .select("member_id, certification_id, certificate_number, issued_at, expires_at")
           .eq("department_id", departmentId)
           .in("member_id", memberIds),
         supabase
@@ -924,6 +961,18 @@ export async function getDepartmentReadinessData(
           .in("member_id", memberIds)
           .eq("status", "approved"),
         supabase
+          .from("training_assignment_members")
+          .select("member_id, training_assignment_id, hours_earned")
+          .eq("department_id", departmentId)
+          .in("member_id", memberIds)
+          .eq("completion_status", "approved"),
+        supabase
+          .from("ems_member_track_profiles")
+          .select("member_id, track, certification_level, track_status, maintain_track, certification_number, expiration_date, effective_start_date, effective_end_date")
+          .eq("department_id", departmentId)
+          .in("member_id", memberIds)
+          .order("effective_start_date", { ascending: false }),
+        supabase
           .from("deficiencies")
           .select(
             "id, deficiency_number, description, assigned_to, created_at, reported_at, status_info:deficiency_statuses!fk_deficiencies_status(name, active), priority_info:deficiency_priorities!fk_deficiencies_priority(name)",
@@ -936,6 +985,8 @@ export async function getDepartmentReadinessData(
         { data: [], error: null },
         { data: [], error: null },
         { data: [], error: null },
+        { data: [], error: null },
+        { data: [], error: null },
       ];
 
   if (
@@ -943,6 +994,8 @@ export async function getDepartmentReadinessData(
     memberQualificationRows.error ||
     attendanceRows.error ||
     outsideRows.error ||
+    assignmentMemberApprovedRows.error ||
+    emsTrackRows.error ||
     assignedDeficiencyRows.error
   ) {
     throw new Error(
@@ -950,10 +1003,20 @@ export async function getDepartmentReadinessData(
         memberQualificationRows.error?.message ||
         attendanceRows.error?.message ||
         outsideRows.error?.message ||
+        assignmentMemberApprovedRows.error?.message ||
+        emsTrackRows.error?.message ||
         assignedDeficiencyRows.error?.message ||
         "Unable to load member readiness data.",
     );
   }
+
+  const certificationTypeById = buildCertificationTypeMetaById(
+    certificationTypes.map((row) => ({
+      id: row.id,
+      ems_authority: row.ems_authority,
+      ems_certification_level: row.ems_certification_level,
+    })),
+  );
 
   const certificationsByMember = new Map<string, MemberCertificationRow[]>();
   for (const row of (memberCertificationRows.data ?? []) as MemberCertificationRow[]) {
@@ -967,6 +1030,42 @@ export async function getDepartmentReadinessData(
     const list = qualificationsByMember.get(row.member_id) ?? [];
     list.push(row);
     qualificationsByMember.set(row.member_id, list);
+  }
+
+  const emsProfilesByMember = new Map<string, EmsTrackProfileAuthorityRow[]>();
+  for (const row of (emsTrackRows.data ?? []) as Array<Record<string, unknown>>) {
+    const memberId = typeof row.member_id === "string" ? row.member_id : "";
+    if (!memberId) {
+      continue;
+    }
+
+    const profile: EmsTrackProfileAuthorityRow = {
+      track: row.track === "nremt" ? "nremt" : "iowa",
+      certification_level:
+        row.certification_level === "emr" ||
+        row.certification_level === "emt" ||
+        row.certification_level === "aemt" ||
+        row.certification_level === "paramedic"
+          ? row.certification_level
+          : "emt",
+      track_status:
+        row.track_status === "active" ||
+        row.track_status === "inactive" ||
+        row.track_status === "expired" ||
+        row.track_status === "not_maintained" ||
+        row.track_status === "needs_review"
+          ? row.track_status
+          : "needs_review",
+      maintain_track: row.maintain_track === true,
+      certification_number: typeof row.certification_number === "string" ? row.certification_number : null,
+      expiration_date: typeof row.expiration_date === "string" ? row.expiration_date : null,
+      effective_start_date: typeof row.effective_start_date === "string" ? row.effective_start_date : "",
+      effective_end_date: typeof row.effective_end_date === "string" ? row.effective_end_date : null,
+    };
+
+    const list = emsProfilesByMember.get(memberId) ?? [];
+    list.push(profile);
+    emsProfilesByMember.set(memberId, list);
   }
 
   const attendanceByMember = new Map<string, TrainingAttendanceRow[]>();
@@ -986,6 +1085,33 @@ export async function getDepartmentReadinessData(
     list.push(row);
     outsideByMember.set(row.member_id, list);
   }
+
+  const approvedAssignmentMembersByMember = new Map<string, AssignmentMemberApprovedRow[]>();
+  const approvedAssignmentIds = new Set<string>();
+  for (const row of (assignmentMemberApprovedRows.data ?? []) as AssignmentMemberApprovedRow[]) {
+    const list = approvedAssignmentMembersByMember.get(row.member_id) ?? [];
+    list.push(row);
+    approvedAssignmentMembersByMember.set(row.member_id, list);
+    if (typeof row.training_assignment_id === "string" && row.training_assignment_id.length > 0) {
+      approvedAssignmentIds.add(row.training_assignment_id);
+    }
+  }
+
+  const assignmentsResult = approvedAssignmentIds.size
+    ? await supabase
+        .from("training_assignments")
+        .select("id, category_id, hours_credit, status")
+        .eq("department_id", departmentId)
+        .in("id", Array.from(approvedAssignmentIds))
+    : { data: [] as unknown[], error: null };
+
+  if (assignmentsResult.error) {
+    throw new Error(assignmentsResult.error.message || "Unable to load assignment details.");
+  }
+
+  const assignmentById = new Map(
+    ((assignmentsResult.data ?? []) as AssignmentRow[]).map((row) => [row.id, row]),
+  );
 
   const assignedDeficiencies = (assignedDeficiencyRows.data ?? []) as DeficiencyAssignedRow[];
   const deficienciesByMember = new Map<string, DeficiencyAssignedRow[]>();
@@ -1058,6 +1184,12 @@ export async function getDepartmentReadinessData(
     }
   }
 
+  for (const row of assignmentById.values()) {
+    if (typeof row.category_id === "string" && row.category_id.length > 0) {
+      categoryIds.add(row.category_id);
+    }
+  }
+
   const categoryRowsResult = categoryIds.size
     ? await supabase
         .from("training_categories")
@@ -1082,14 +1214,48 @@ export async function getDepartmentReadinessData(
     const memberCertifications = certificationsByMember.get(memberId) ?? [];
     const memberQualifications = qualificationsByMember.get(memberId) ?? [];
 
-    const certificationStatuses = memberCertifications.map((record) => ({
-      certificationId: record.certification_id,
-      certificationName: certificationNameById.get(record.certification_id) ?? "Certification",
-      status: getCertificationStatus(record.expires_at, 30),
-    }));
+    const authoritativeEmsCertifications = resolveAuthoritativeEmsCertificationsForMember({
+      memberCertifications,
+      certificationTypeById,
+    });
+
+    const memberProfiles = emsProfilesByMember.get(memberId) ?? [];
+    const effectiveIowaProfile = applyAuthoritativeCertificationToTrackProfile({
+      track: "iowa",
+      profile: findCurrentTrackProfile(memberProfiles, "iowa"),
+      authoritativeCertification: authoritativeEmsCertifications.iowa,
+    });
+    const effectiveNremtProfile = applyAuthoritativeCertificationToTrackProfile({
+      track: "nremt",
+      profile: findCurrentTrackProfile(memberProfiles, "nremt"),
+      authoritativeCertification: authoritativeEmsCertifications.nremt,
+    });
+
+    const certificationStatuses = memberCertifications.map((record) => {
+      const certMeta = certificationTypeById.get(record.certification_id);
+      const genericStatus = getCertificationStatus(record.expires_at, CERTIFICATION_WARNING_DAYS);
+      const sourceTrack = certMeta?.authority === "iowa"
+        ? effectiveIowaProfile
+        : certMeta?.authority === "nremt"
+          ? effectiveNremtProfile
+          : null;
+
+      const status = resolveCertificationStatusFromTrack({
+        track: sourceTrack,
+        warningDays: CERTIFICATION_WARNING_DAYS,
+        genericStatus,
+      });
+
+      return {
+        certificationId: record.certification_id,
+        certificationName: certificationNameById.get(record.certification_id) ?? "Certification",
+        status,
+      };
+    });
 
     const memberDepartmentRoleId =
       typeof member.department_role_id === "string" ? member.department_role_id : null;
+    const memberRequirementStartDate = member.hire_start_date ?? member.created_at ?? null;
 
     const selectedDepartmentRole = memberDepartmentRoleId
       ? departmentRoleById.get(memberDepartmentRoleId) ?? null
@@ -1121,12 +1287,26 @@ export async function getDepartmentReadinessData(
         .filter((item) => !item.isCurrent)
         .map((item) => item.name),
     };
+    const scoredCertificationStatuses = buildScoredCertificationStatuses({
+      memberDepartmentRoleId,
+      certificationStatuses: certificationStatuses.map((row) => ({
+        certificationId: row.certificationId,
+        certificationName: row.certificationName,
+        status: row.status,
+        authority: certificationTypeById.get(row.certificationId)?.authority ?? null,
+      })),
+      roleRequiredCertifications,
+      includeIowaAuthority: effectiveIowaProfile !== null,
+      includeNremtAuthority: effectiveNremtProfile?.maintain_track === true,
+      certificationNameById,
+    });
 
     const memberAttendance = attendanceByMember.get(memberId) ?? [];
     const memberOutside = outsideByMember.get(memberId) ?? [];
+    const approvedMemberAssignments = approvedAssignmentMembersByMember.get(memberId) ?? [];
 
     const categoryHoursMap = new Map<string, { categoryId: string | null; categoryName: string; hours: number }>();
-    let departmentHours = 0;
+    const complianceRows: Array<{ categoryId: string | null; hours: number | string | null }> = [];
 
     for (const attendance of memberAttendance) {
       const event = eventsById.get(attendance.training_event_id);
@@ -1135,7 +1315,10 @@ export async function getDepartmentReadinessData(
       }
 
       const hours = parseHours(event.hours_credit);
-      departmentHours += hours;
+      complianceRows.push({
+        categoryId: event.category_id,
+        hours,
+      });
       const categoryKey = event.category_id || "uncategorized";
       const categoryName = event.category_id
         ? categoryNameById.get(event.category_id) ?? "Uncategorized"
@@ -1151,7 +1334,10 @@ export async function getDepartmentReadinessData(
 
     for (const outside of memberOutside) {
       const hours = parseHours(outside.hours);
-      departmentHours += hours;
+      complianceRows.push({
+        categoryId: outside.category_id,
+        hours,
+      });
       const categoryKey = outside.category_id || "uncategorized";
       const categoryName = outside.category_id
         ? categoryNameById.get(outside.category_id) ?? "Uncategorized"
@@ -1164,6 +1350,35 @@ export async function getDepartmentReadinessData(
       current.hours += hours;
       categoryHoursMap.set(categoryKey, current);
     }
+
+    for (const approvedAssignmentMember of approvedMemberAssignments) {
+      const assignment = assignmentById.get(approvedAssignmentMember.training_assignment_id);
+      if (!assignment || assignment.status === "archived") {
+        continue;
+      }
+
+      const assignmentHours = parseHours(assignment.hours_credit);
+      const rowHours = parseHours(approvedAssignmentMember.hours_earned);
+      const creditedHours = rowHours > 0 ? rowHours : assignmentHours;
+
+      complianceRows.push({
+        categoryId: assignment.category_id,
+        hours: creditedHours,
+      });
+      const categoryKey = assignment.category_id || "uncategorized";
+      const categoryName = assignment.category_id
+        ? categoryNameById.get(assignment.category_id) ?? "Uncategorized"
+        : "Uncategorized";
+      const current = categoryHoursMap.get(categoryKey) ?? {
+        categoryId: assignment.category_id,
+        categoryName,
+        hours: 0,
+      };
+      current.hours += creditedHours;
+      categoryHoursMap.set(categoryKey, current);
+    }
+
+    const departmentHours = calculateComplianceBucketHours(complianceRows, categoryNameById).fireAnnualHours;
 
     const deficiencyRows = deficienciesByMember.get(memberId) ?? [];
     const assignedAtByDeficiency = personalAssignedAtByMember.get(memberId) ?? new Map<string, string>();
@@ -1192,9 +1407,11 @@ export async function getDepartmentReadinessData(
       categoryHours: Array.from(categoryHoursMap.values()),
       categoryNameById,
       certificationStatuses,
+      scoredCertificationStatuses,
       qualificationReadiness,
       deficiencyItems,
       currentMemberId: memberId,
+      memberStartDate: memberRequirementStartDate,
     });
 
     const highestDeficiencyPenaltyPercent = getHighestDeficiencyPenaltyForMember(deficiencyItems, memberId);
@@ -1221,7 +1438,9 @@ export async function getDepartmentReadinessData(
 
   const readinessRows = await getApparatusReadinessList();
   const includedApparatusRows = readinessRows.filter(
-    (row) => row.apparatus.include_in_department_readiness !== false,
+    (row) =>
+      row.apparatus.lifecycle_status !== "archived" &&
+      row.apparatus.include_in_department_readiness !== false,
   );
   const participatingScores = getParticipatingApparatusScores(
     includedApparatusRows.map((row) => ({
@@ -1252,6 +1471,10 @@ export async function getDepartmentReadinessData(
   const coachActions: DepartmentReadinessCoachAction[] = [];
 
   for (const member of memberResults) {
+    if (typeof member.scorePercent !== "number") {
+      continue;
+    }
+
     for (const coachItem of member.readinessState.coachItems) {
       const factor = member.readinessState.factors.find((item) => item.id === coachItem.factorId);
       const qualificationTargets =

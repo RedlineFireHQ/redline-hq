@@ -16,7 +16,6 @@ type ReportFormState = {
   priorityId: string;
   apparatusId: string;
   description: string;
-  location: string;
   photo: File | null;
 };
 
@@ -25,7 +24,6 @@ const initialFormState: ReportFormState = {
   priorityId: "",
   apparatusId: "",
   description: "",
-  location: "",
   photo: null,
 };
 
@@ -38,6 +36,18 @@ const FIRE_HOSE_CATEGORY_TOKEN = "fire hose";
 const SCBA_CATEGORY_TOKEN = "scba";
 const HOSE_CATEGORY_TOKEN = "hose";
 const INVENTORY_CATEGORY_TOKEN = "inventory";
+const PIE_CATEGORY_TOKEN = "pie";
+const PIE_INDUSTRIAL_CATEGORY_TOKEN = "power & industrial equipment";
+const GAS_MONITOR_CATEGORY_TOKEN = "gas monitor";
+const BATTERY_CATEGORY_TOKEN = "battery";
+const THERMAL_IMAGING_CAMERA_CATEGORY_TOKEN = "thermal imaging camera";
+const EMS_EQUIPMENT_CATEGORY_TOKEN = "ems equipment";
+const PPE_CATEGORY_TOKEN = "personal protective equipment";
+const ROPE_CATEGORY_TOKEN = "rope";
+const FIRE_EXTINGUISHER_CATEGORY_TOKEN = "fire extinguisher";
+const MISC_FIRE_EQUIPMENT_CATEGORY_TOKEN = "miscellaneous fire equipment";
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function getInventoryEquipmentTypeLabel(normalizedInventoryCategory: string) {
   if (normalizedInventoryCategory === "fire-hose") {
@@ -50,6 +60,46 @@ function getInventoryEquipmentTypeLabel(normalizedInventoryCategory: string) {
 
   if (normalizedInventoryCategory === "scba-packs") {
     return "SCBA Pack";
+  }
+
+  if (normalizedInventoryCategory === "pie") {
+    return "PIE Equipment";
+  }
+
+  if (normalizedInventoryCategory === "gas-monitors") {
+    return "Gas Monitor";
+  }
+
+  if (normalizedInventoryCategory === "battery") {
+    return "Battery";
+  }
+
+  if (normalizedInventoryCategory === "thermal-cameras") {
+    return "Thermal Imaging Camera (TIC)";
+  }
+
+  if (normalizedInventoryCategory === "ground-ladders") {
+    return "Ground Ladder";
+  }
+
+  if (normalizedInventoryCategory === "ems-equipment") {
+    return "EMS Equipment";
+  }
+
+  if (normalizedInventoryCategory === "ppe") {
+    return "Personal Protective Equipment (PPE)";
+  }
+
+  if (normalizedInventoryCategory === "rope") {
+    return "Rope";
+  }
+
+  if (normalizedInventoryCategory === "fire-extinguishers" || normalizedInventoryCategory === "fire-extinguisher") {
+    return "Fire Extinguisher";
+  }
+
+  if (normalizedInventoryCategory === "misc-fire-equipment") {
+    return "Miscellaneous Fire Equipment";
   }
 
   return "";
@@ -82,6 +132,97 @@ function resolveInventoryCategoryOption(
     );
   }
 
+  if (normalizedInventoryCategory === "pie") {
+    return (
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes(PIE_CATEGORY_TOKEN))?.option ??
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes(PIE_INDUSTRIAL_CATEGORY_TOKEN))?.option ??
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes("industrial equipment"))?.option ??
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes(INVENTORY_CATEGORY_TOKEN))?.option ??
+      null
+    );
+  }
+
+  if (normalizedInventoryCategory === "gas-monitors") {
+    return (
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes(GAS_MONITOR_CATEGORY_TOKEN))?.option ??
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes("gas monitor"))?.option ??
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes(INVENTORY_CATEGORY_TOKEN))?.option ??
+      null
+    );
+  }
+
+  if (normalizedInventoryCategory === "battery") {
+    return (
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes(BATTERY_CATEGORY_TOKEN))?.option ??
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes(INVENTORY_CATEGORY_TOKEN))?.option ??
+      null
+    );
+  }
+
+  if (normalizedInventoryCategory === "thermal-cameras") {
+    return (
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes(THERMAL_IMAGING_CAMERA_CATEGORY_TOKEN))?.option ??
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes("thermal imaging camera"))?.option ??
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes("tic"))?.option ??
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes(INVENTORY_CATEGORY_TOKEN))?.option ??
+      null
+    );
+  }
+
+  if (normalizedInventoryCategory === "ground-ladders") {
+    return (
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes("ground ladder"))?.option ??
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes("ladder"))?.option ??
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes(INVENTORY_CATEGORY_TOKEN))?.option ??
+      null
+    );
+  }
+
+  if (normalizedInventoryCategory === "ems-equipment") {
+    return (
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes(EMS_EQUIPMENT_CATEGORY_TOKEN))?.option ??
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes("ems inventory"))?.option ??
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes(INVENTORY_CATEGORY_TOKEN))?.option ??
+      null
+    );
+  }
+
+  if (normalizedInventoryCategory === "ppe") {
+    return (
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes(PPE_CATEGORY_TOKEN))?.option ??
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes("ppe"))?.option ??
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes(INVENTORY_CATEGORY_TOKEN))?.option ??
+      null
+    );
+  }
+
+  if (normalizedInventoryCategory === "rope") {
+    return (
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes(ROPE_CATEGORY_TOKEN))?.option ??
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes(INVENTORY_CATEGORY_TOKEN))?.option ??
+      null
+    );
+  }
+
+  if (normalizedInventoryCategory === "fire-extinguishers" || normalizedInventoryCategory === "fire-extinguisher") {
+    return (
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes(FIRE_EXTINGUISHER_CATEGORY_TOKEN))?.option ??
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes("extinguisher"))?.option ??
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes(INVENTORY_CATEGORY_TOKEN))?.option ??
+      null
+    );
+  }
+
+  if (normalizedInventoryCategory === "misc-fire-equipment") {
+    return (
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes(MISC_FIRE_EQUIPMENT_CATEGORY_TOKEN))?.option ??
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes("misc fire"))?.option ??
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes("fire equipment"))?.option ??
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes(INVENTORY_CATEGORY_TOKEN))?.option ??
+      null
+    );
+  }
+
   return null;
 }
 
@@ -103,6 +244,140 @@ function normalizeOption(record: Record<string, unknown>): SelectOption {
     getRecordString(record, ["name", "label", "title", "value", "category_name", "priority_name"]) || id;
 
   return { id, label };
+}
+
+async function resolveCurrentInventoryApparatusDefault(
+  inventoryCategory: string,
+  inventoryItemId: string,
+): Promise<string | null> {
+  if (
+    !inventoryItemId ||
+    (inventoryCategory !== "pie" && inventoryCategory !== "gas-monitors" && inventoryCategory !== "battery" && inventoryCategory !== "thermal-cameras" && inventoryCategory !== "ground-ladders" && inventoryCategory !== "fire-extinguishers" && inventoryCategory !== "misc-fire-equipment")
+  ) {
+    return null;
+  }
+
+  const isPie = inventoryCategory === "pie";
+  const isGasMonitor = inventoryCategory === "gas-monitors";
+  const isBattery = inventoryCategory === "battery";
+  const isGroundLadder = inventoryCategory === "ground-ladders";
+  const isFireExtinguisher = inventoryCategory === "fire-extinguishers";
+  const isMiscFireEquipment = inventoryCategory === "misc-fire-equipment";
+  const tableName = isPie
+    ? "pie_equipment_assignments"
+    : isGasMonitor
+      ? "gas_monitor_assignments"
+      : isBattery
+        ? "battery_assignments"
+        : isGroundLadder
+          ? "ground_ladder_assignments"
+          : isFireExtinguisher
+            ? "fire_extinguishers"
+            : isMiscFireEquipment
+              ? "misc_fire_equipment"
+              : "thermal_imaging_camera_assignments";
+  const foreignKeyName = isPie
+    ? "pie_equipment_id"
+    : isGasMonitor
+      ? "gas_monitor_id"
+      : isBattery
+        ? "battery_id"
+        : isGroundLadder
+          ? "ground_ladder_id"
+          : isFireExtinguisher
+            ? "id"
+            : isMiscFireEquipment
+              ? "id"
+              : "thermal_imaging_camera_id";
+
+  if (isFireExtinguisher) {
+    const { data, error } = await supabase
+      .from("fire_extinguishers")
+      .select("location_type, apparatus_id")
+      .eq("id", inventoryItemId)
+      .maybeSingle();
+
+    if (error) {
+      console.error("[deficiency-report] failed to resolve current fire extinguisher location", error);
+      return null;
+    }
+
+    if (!data || typeof data !== "object") {
+      return null;
+    }
+
+    const row = data as Record<string, unknown>;
+    const locationType = typeof row.location_type === "string" ? row.location_type : "";
+    const apparatusIdValue = typeof row.apparatus_id === "string" ? row.apparatus_id : "";
+
+    if (locationType === "Apparatus") {
+      return apparatusIdValue || null;
+    }
+
+    return STATION_SUPPLY_OPTION.id;
+  }
+
+  if (isMiscFireEquipment) {
+    const { data, error } = await supabase
+      .from("misc_fire_equipment")
+      .select("location_type, apparatus_id")
+      .eq("id", inventoryItemId)
+      .maybeSingle();
+
+    if (error) {
+      console.error("[deficiency-report] failed to resolve current misc fire equipment location", error);
+      return null;
+    }
+
+    if (!data || typeof data !== "object") {
+      return null;
+    }
+
+    const row = data as Record<string, unknown>;
+    const locationType = typeof row.location_type === "string" ? row.location_type : "";
+    const apparatusIdValue = typeof row.apparatus_id === "string" ? row.apparatus_id : "";
+
+    if (locationType === "Apparatus") {
+      return apparatusIdValue || null;
+    }
+
+    return STATION_SUPPLY_OPTION.id;
+  }
+
+  const { data, error } = await supabase
+    .from(tableName)
+    .select("assignment_type, apparatus_id")
+    .eq(foreignKeyName, inventoryItemId)
+    .is("ended_at", null)
+    .order("assigned_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error(
+    `[deficiency-report] failed to resolve current ${isPie ? "PIE" : isGasMonitor ? "gas monitor" : isBattery ? "battery" : isGroundLadder ? "ground ladder" : "thermal imaging camera"} assignment`,
+    error,
+  );
+    return null;
+  }
+
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+
+  const row = data as Record<string, unknown>;
+  const assignmentType = typeof row.assignment_type === "string" ? row.assignment_type : "";
+  const apparatusIdValue = typeof row.apparatus_id === "string" ? row.apparatus_id : "";
+
+  if (assignmentType === "Apparatus") {
+    return apparatusIdValue || null;
+  }
+
+  if (assignmentType === "Station" || assignmentType === "Member") {
+    return STATION_SUPPLY_OPTION.id;
+  }
+
+  return "";
 }
 
 async function resolveCurrentReporter() {
@@ -137,6 +412,7 @@ export default function ReportDeficiencyPage() {
 
   const returnToParam = searchParams.get("returnTo");
   const apparatusIdParam = searchParams.get("apparatusId");
+  const checkSessionIdParam = searchParams.get("checkSessionId");
   const inventoryCategoryParam = searchParams.get("inventoryCategory");
   const inventoryItemIdParam = searchParams.get("inventoryItemId");
   const inventoryItemLabelParam = searchParams.get("inventoryItemLabel");
@@ -144,16 +420,31 @@ export default function ReportDeficiencyPage() {
   const failedIndexParam = searchParams.get("failedIndex");
   const safeReturnTo =
     typeof returnToParam === "string" && returnToParam.startsWith("/") ? returnToParam : null;
+  const activeCheckSessionId =
+    typeof checkSessionIdParam === "string" && UUID_REGEX.test(checkSessionIdParam)
+      ? checkSessionIdParam
+      : "";
+  const isSessionScopedDeficiency = activeCheckSessionId.length > 0;
 
   const inventoryCategory = typeof inventoryCategoryParam === "string" ? inventoryCategoryParam : "";
   const inventoryItemId = typeof inventoryItemIdParam === "string" ? inventoryItemIdParam : "";
   const inventoryItemLabel = typeof inventoryItemLabelParam === "string" ? inventoryItemLabelParam : "";
-  const normalizedInventoryCategory = inventoryCategory.trim().toLowerCase();
+  const normalizedInventoryCategory = inventoryCategory.trim().toLowerCase() as string;
   const inventoryEquipmentTypeLabel = getInventoryEquipmentTypeLabel(normalizedInventoryCategory);
   const isInventoryDeficiencyLaunch =
     normalizedInventoryCategory === "fire-hose" ||
     normalizedInventoryCategory === "scba-cylinders" ||
-    normalizedInventoryCategory === "scba-packs";
+    normalizedInventoryCategory === "scba-packs" ||
+    normalizedInventoryCategory === "pie" ||
+    normalizedInventoryCategory === "gas-monitors" ||
+    normalizedInventoryCategory === "battery" ||
+    normalizedInventoryCategory === "thermal-cameras" ||
+    normalizedInventoryCategory === "ground-ladders" ||
+    normalizedInventoryCategory === "ems-equipment" ||
+    normalizedInventoryCategory === "ppe" ||
+    normalizedInventoryCategory === "rope" ||
+    normalizedInventoryCategory === "fire-extinguishers" ||
+    normalizedInventoryCategory === "misc-fire-equipment";
   const failedHoseIds =
     typeof failedHoseIdsParam === "string" && failedHoseIdsParam.trim().length > 0
       ? failedHoseIdsParam.split(",").map((value) => value.trim()).filter(Boolean)
@@ -184,7 +475,16 @@ export default function ReportDeficiencyPage() {
     if (
       normalizedInventoryCategory !== "fire-hose" &&
       normalizedInventoryCategory !== "scba-cylinders" &&
-      normalizedInventoryCategory !== "scba-packs"
+      normalizedInventoryCategory !== "scba-packs" &&
+      normalizedInventoryCategory !== "pie" &&
+      normalizedInventoryCategory !== "gas-monitors" &&
+      normalizedInventoryCategory !== "battery" &&
+      normalizedInventoryCategory !== "thermal-cameras" &&
+      normalizedInventoryCategory !== "ground-ladders" &&
+      normalizedInventoryCategory !== "ems-equipment" &&
+      normalizedInventoryCategory !== "ppe" &&
+      normalizedInventoryCategory !== "rope" &&
+      normalizedInventoryCategory !== "misc-fire-equipment"
     ) {
       return;
     }
@@ -209,6 +509,51 @@ export default function ReportDeficiencyPage() {
         selectColumn = "pack_number";
       }
 
+      if (normalizedInventoryCategory === "pie") {
+        inventoryTable = "pie_equipment";
+        selectColumn = "equipment_number";
+      }
+
+      if (normalizedInventoryCategory === "gas-monitors") {
+        inventoryTable = "gas_monitors";
+        selectColumn = "monitor_number";
+      }
+
+      if (normalizedInventoryCategory === "battery") {
+        inventoryTable = "batteries";
+        selectColumn = "battery_number";
+      }
+
+      if (normalizedInventoryCategory === "thermal-cameras") {
+        inventoryTable = "thermal_imaging_cameras";
+        selectColumn = "camera_number";
+      }
+
+      if (normalizedInventoryCategory === "ground-ladders") {
+        inventoryTable = "ground_ladders";
+        selectColumn = "ladder_number";
+      }
+
+      if (normalizedInventoryCategory === "ems-equipment") {
+        inventoryTable = "ems_equipment";
+        selectColumn = "equipment_name";
+      }
+
+      if (normalizedInventoryCategory === "ppe") {
+        inventoryTable = "ppe_items";
+        selectColumn = "item_name";
+      }
+
+      if (normalizedInventoryCategory === "rope") {
+        inventoryTable = "rope_items";
+        selectColumn = "rope_name, rope_identifier";
+      }
+
+      if (normalizedInventoryCategory === "misc-fire-equipment") {
+        inventoryTable = "misc_fire_equipment";
+        selectColumn = "equipment_name, asset_number";
+      }
+
       const { data, error } = await supabase
         .from(inventoryTable)
         .select(selectColumn)
@@ -226,6 +571,24 @@ export default function ReportDeficiencyPage() {
         nextLabel = typeof record.cylinder_number === "string" ? record.cylinder_number : "";
       } else if (normalizedInventoryCategory === "scba-packs") {
         nextLabel = typeof record.pack_number === "string" ? record.pack_number : "";
+      } else if (normalizedInventoryCategory === "pie") {
+        nextLabel = typeof record.equipment_number === "string" ? record.equipment_number : "";
+      } else if (normalizedInventoryCategory === "gas-monitors") {
+        nextLabel = typeof record.monitor_number === "string" ? record.monitor_number : "";
+      } else if (normalizedInventoryCategory === "battery") {
+        nextLabel = typeof record.battery_number === "string" ? record.battery_number : "";
+      } else if (normalizedInventoryCategory === "thermal-cameras") {
+        nextLabel = typeof record.camera_number === "string" ? record.camera_number : "";
+      } else if (normalizedInventoryCategory === "ground-ladders") {
+        nextLabel = typeof record.ladder_number === "string" ? record.ladder_number : "";
+      } else if (normalizedInventoryCategory === "ems-equipment") {
+        nextLabel = typeof record.equipment_name === "string" ? record.equipment_name : "";
+      } else if (normalizedInventoryCategory === "ppe") {
+        nextLabel = typeof record.item_name === "string" ? record.item_name : "";
+      } else if (normalizedInventoryCategory === "rope") {
+        nextLabel = typeof record.rope_name === "string" ? record.rope_name : typeof record.rope_identifier === "string" ? record.rope_identifier : "";
+      } else if (normalizedInventoryCategory === "misc-fire-equipment") {
+        nextLabel = typeof record.equipment_name === "string" ? record.equipment_name : "";
       } else {
         nextLabel = typeof record.inventory_number === "string" ? record.inventory_number : "";
       }
@@ -245,24 +608,46 @@ export default function ReportDeficiencyPage() {
       return;
     }
 
+    if (
+      normalizedInventoryCategory === "pie" ||
+      normalizedInventoryCategory === "gas-monitors" ||
+      normalizedInventoryCategory === "battery"
+    ) {
+      return;
+    }
+
     setFormState((current) => ({
       ...current,
       description: "",
-      location: "",
       photo: null,
       apparatusId: current.apparatusId || STATION_SUPPLY_OPTION.id,
     }));
-  }, [isInventoryDeficiencyLaunch, inventoryItemId]);
+  }, [isInventoryDeficiencyLaunch, normalizedInventoryCategory, inventoryItemId]);
 
   const canSubmit = useMemo(() => {
+    const effectiveApparatusId = isSessionScopedDeficiency
+      ? (apparatusIdParam ?? "")
+      : (formState.apparatusId || (isInventoryDeficiencyLaunch ? STATION_SUPPLY_OPTION.id : ""));
+
     return (
       Boolean(formState.categoryId) &&
       Boolean(formState.priorityId) &&
-      Boolean(formState.apparatusId) &&
+      Boolean(effectiveApparatusId) &&
       Boolean(formState.description.trim()) &&
       Boolean(openStatusId)
     );
-  }, [formState, openStatusId]);
+  }, [apparatusIdParam, formState, isInventoryDeficiencyLaunch, isSessionScopedDeficiency, openStatusId]);
+
+  useEffect(() => {
+    if (!isSessionScopedDeficiency || typeof apparatusIdParam !== "string" || !apparatusIdParam.trim()) {
+      return;
+    }
+
+    setFormState((current) => ({
+      ...current,
+      apparatusId: apparatusIdParam,
+    }));
+  }, [apparatusIdParam, isSessionScopedDeficiency]);
 
   useEffect(() => {
     let isMounted = true;
@@ -312,10 +697,21 @@ export default function ReportDeficiencyPage() {
           normalizedInventoryCategory,
         );
 
+        const defaultApparatusId =
+          normalizedInventoryCategory === "pie" ||
+          normalizedInventoryCategory === "gas-monitors" ||
+          normalizedInventoryCategory === "battery" ||
+          normalizedInventoryCategory === "thermal-cameras" ||
+          normalizedInventoryCategory === "ground-ladders" ||
+          normalizedInventoryCategory === "fire-extinguishers" ||
+          normalizedInventoryCategory === "misc-fire-equipment"
+            ? ((await resolveCurrentInventoryApparatusDefault(normalizedInventoryCategory, inventoryItemId)) ?? "")
+            : STATION_SUPPLY_OPTION.id;
+
         setFormState((current) => ({
           ...current,
           categoryId: current.categoryId || resolvedInventoryCategory?.id || "",
-          apparatusId: current.apparatusId || STATION_SUPPLY_OPTION.id,
+          apparatusId: current.apparatusId || defaultApparatusId,
         }));
       }
 
@@ -356,6 +752,15 @@ export default function ReportDeficiencyPage() {
     const isFireHoseDeficiency = normalizedInventoryCategory === "fire-hose";
     const isScbaCylinderDeficiency = normalizedInventoryCategory === "scba-cylinders";
     const isScbaPackDeficiency = normalizedInventoryCategory === "scba-packs";
+    const isPieDeficiency = normalizedInventoryCategory === "pie";
+    const isGasMonitorDeficiency = normalizedInventoryCategory === "gas-monitors";
+    const isBatteryDeficiency = normalizedInventoryCategory === "battery";
+    const isThermalImagingCameraDeficiency = normalizedInventoryCategory === "thermal-cameras";
+    const isGroundLadderDeficiency = normalizedInventoryCategory === "ground-ladders";
+    const isEmsEquipmentDeficiency = normalizedInventoryCategory === "ems-equipment";
+    const isPpeDeficiency = normalizedInventoryCategory === "ppe";
+    const isRopeDeficiency = normalizedInventoryCategory === "rope";
+    const isMiscFireEquipmentDeficiency = normalizedInventoryCategory === "misc-fire-equipment";
 
     const routeToNextStep = (insertedDeficiencyId?: string) => {
       if (isFireHoseDeficiency && failedHoseIds.length > 0 && failedIndex < failedHoseIds.length - 1) {
@@ -371,6 +776,10 @@ export default function ReportDeficiencyPage() {
           params.set("apparatusId", apparatusIdParam);
         }
 
+        if (activeCheckSessionId) {
+          params.set("checkSessionId", activeCheckSessionId);
+        }
+
         params.set("inventoryCategory", "fire-hose");
         params.set("inventoryItemId", nextHoseId);
         params.set("failedHoseIds", failedHoseIds.join(","));
@@ -381,7 +790,14 @@ export default function ReportDeficiencyPage() {
       }
 
       if (safeReturnTo) {
-        router.push(safeReturnTo);
+        const needsRefreshReturn =
+          normalizedInventoryCategory === "fire-extinguishers" ||
+          normalizedInventoryCategory === "misc-fire-equipment";
+        const nextReturnTo = needsRefreshReturn
+          ? `${safeReturnTo}${safeReturnTo.includes("?") ? "&" : "?"}refresh=${Date.now()}`
+          : safeReturnTo;
+
+        router.push(nextReturnTo);
         return;
       }
 
@@ -395,6 +811,22 @@ export default function ReportDeficiencyPage() {
 
     const deficiencyId = crypto.randomUUID();
     let uploadedPhotoPath: string | null = null;
+
+    if (isSessionScopedDeficiency && (!apparatusIdParam || !apparatusIdParam.trim())) {
+      setErrorMessage("This apparatus check session is missing an apparatus context.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    const effectiveApparatusId = isSessionScopedDeficiency
+      ? apparatusIdParam ?? ""
+      : (formState.apparatusId || (isInventoryDeficiencyLaunch ? STATION_SUPPLY_OPTION.id : ""));
+
+    if (isSessionScopedDeficiency && effectiveApparatusId === STATION_SUPPLY_OPTION.id) {
+      setErrorMessage("Session-linked deficiencies must be reported against the active apparatus.");
+      setIsSubmitting(false);
+      return;
+    }
 
     if (formState.photo) {
       const sanitizedName = formState.photo.name.replace(/[^a-zA-Z0-9.-]/g, "_") || "photo.jpg";
@@ -418,17 +850,28 @@ export default function ReportDeficiencyPage() {
       id: deficiencyId,
       category_id: formState.categoryId,
       priority: formState.priorityId,
-      apparatus_id: formState.apparatusId === STATION_SUPPLY_OPTION.id ? null : formState.apparatusId,
+      apparatus_id: effectiveApparatusId === STATION_SUPPLY_OPTION.id ? null : effectiveApparatusId,
       description: formState.description.trim(),
-      location: formState.location.trim() || null,
+      location: null,
       reported_at: now,
       created_at: now,
       status: openStatusId,
       photo_path: uploadedPhotoPath,
       reported_by: reporter.memberId,
+      check_session_id: activeCheckSessionId || null,
       fire_hose_id: isFireHoseDeficiency && inventoryItemId ? inventoryItemId : null,
       scba_cylinder_id: isScbaCylinderDeficiency && inventoryItemId ? inventoryItemId : null,
       scba_pack_id: isScbaPackDeficiency && inventoryItemId ? inventoryItemId : null,
+      pie_equipment_id: isPieDeficiency && inventoryItemId ? inventoryItemId : null,
+      gas_monitor_id: isGasMonitorDeficiency && inventoryItemId ? inventoryItemId : null,
+      battery_id: isBatteryDeficiency && inventoryItemId ? inventoryItemId : null,
+      thermal_imaging_camera_id: isThermalImagingCameraDeficiency && inventoryItemId ? inventoryItemId : null,
+      ground_ladder_id: isGroundLadderDeficiency && inventoryItemId ? inventoryItemId : null,
+      fire_extinguisher_id: normalizedInventoryCategory === "fire-extinguishers" && inventoryItemId ? inventoryItemId : null,
+      ems_equipment_id: isEmsEquipmentDeficiency && inventoryItemId ? inventoryItemId : null,
+      ppe_item_id: isPpeDeficiency && inventoryItemId ? inventoryItemId : null,
+      rope_item_id: isRopeDeficiency && inventoryItemId ? inventoryItemId : null,
+      misc_fire_equipment_id: isMiscFireEquipmentDeficiency && inventoryItemId ? inventoryItemId : null,
     };
 
     console.log("[fire-hose][deficiency-create] payload", JSON.stringify(payload, null, 2));
@@ -458,7 +901,7 @@ export default function ReportDeficiencyPage() {
       member_id: reporter.memberId,
     });
 
-    if ((isFireHoseDeficiency || isScbaCylinderDeficiency || isScbaPackDeficiency) && inventoryItemId) {
+    if ((isFireHoseDeficiency || isScbaCylinderDeficiency || isScbaPackDeficiency || isPieDeficiency || isGasMonitorDeficiency || isBatteryDeficiency || isThermalImagingCameraDeficiency || isGroundLadderDeficiency) && inventoryItemId) {
       let inventoryTable = "fire_hose";
 
       if (isScbaCylinderDeficiency) {
@@ -467,6 +910,26 @@ export default function ReportDeficiencyPage() {
 
       if (isScbaPackDeficiency) {
         inventoryTable = "scba_packs";
+      }
+
+      if (isPieDeficiency) {
+        inventoryTable = "pie_equipment";
+      }
+
+      if (isGasMonitorDeficiency) {
+        inventoryTable = "gas_monitors";
+      }
+
+      if (isBatteryDeficiency) {
+        inventoryTable = "batteries";
+      }
+
+      if (isThermalImagingCameraDeficiency) {
+        inventoryTable = "thermal_imaging_cameras";
+      }
+
+      if (isGroundLadderDeficiency) {
+        inventoryTable = "ground_ladders";
       }
 
       const { data: updatedRow, error: rowUpdateError } = await supabase
@@ -522,7 +985,16 @@ export default function ReportDeficiencyPage() {
             <div className="grid gap-5 md:grid-cols-2">
               {(normalizedInventoryCategory === "fire-hose" ||
                 normalizedInventoryCategory === "scba-cylinders" ||
-                normalizedInventoryCategory === "scba-packs") &&
+                normalizedInventoryCategory === "scba-packs" ||
+                normalizedInventoryCategory === "pie" ||
+                normalizedInventoryCategory === "gas-monitors" ||
+                normalizedInventoryCategory === "battery" ||
+                normalizedInventoryCategory === "thermal-cameras" ||
+                normalizedInventoryCategory === "ground-ladders" ||
+                normalizedInventoryCategory === "ems-equipment" ||
+                normalizedInventoryCategory === "ppe" ||
+                normalizedInventoryCategory === "rope" ||
+                normalizedInventoryCategory === "misc-fire-equipment") &&
               resolvedInventoryItemLabel ? (
                 <label className="block md:col-span-2">
                   <span className="mb-2 block text-sm font-semibold text-zinc-200">Inventory Item</span>
@@ -546,6 +1018,7 @@ export default function ReportDeficiencyPage() {
                 <select
                   value={formState.apparatusId}
                   onChange={(event) => setFormState((current) => ({ ...current, apparatusId: event.target.value }))}
+                  disabled={isSessionScopedDeficiency}
                   className="w-full rounded-xl border border-white/10 bg-[#151515] px-4 py-3 text-sm text-white"
                 >
                   <option value="">Select apparatus</option>
@@ -560,7 +1033,6 @@ export default function ReportDeficiencyPage() {
                 <select
                   value={formState.categoryId}
                   onChange={(event) => setFormState((current) => ({ ...current, categoryId: event.target.value }))}
-                  disabled={isInventoryDeficiencyLaunch}
                   className="w-full rounded-xl border border-white/10 bg-[#151515] px-4 py-3 text-sm text-white"
                 >
                   <option value="">Select category</option>
@@ -590,16 +1062,6 @@ export default function ReportDeficiencyPage() {
                   rows={4}
                   value={formState.description}
                   onChange={(event) => setFormState((current) => ({ ...current, description: event.target.value }))}
-                  className="w-full rounded-xl border border-white/10 bg-[#151515] px-4 py-3 text-sm text-white"
-                />
-              </label>
-
-              <label className="block md:col-span-2">
-                <span className="mb-2 block text-sm font-semibold text-zinc-200">Location</span>
-                <input
-                  type="text"
-                  value={formState.location}
-                  onChange={(event) => setFormState((current) => ({ ...current, location: event.target.value }))}
                   className="w-full rounded-xl border border-white/10 bg-[#151515] px-4 py-3 text-sm text-white"
                 />
               </label>

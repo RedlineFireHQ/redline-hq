@@ -2,24 +2,24 @@ import PageLayout from "@/components/layout/PageLayout";
 import Link from "next/link";
 
 const inventoryCategories = [
-	{ name: "EMS Supplies", detail: "284 items", href: "/inventory/ems-supplies" },
+	{ name: "EMS Inventory", detail: "Supplies and equipment", href: "/inventory/ems-supplies" },
 	{ name: "Fire Hose", detail: "148 sections", href: "/inventory/fire-hose" },
 	{ name: "SCBA Packs", detail: "24 tracked units", href: "/inventory/scba-packs" },
 	{ name: "SCBA Cylinders", detail: "62 tracked cylinders", href: "/inventory/scba-cylinders" },
-	{ name: "Portable Radios", detail: "39 assigned radios", href: "/inventory/radios" },
+	{ name: "Portable Radios", detail: "39 assigned radios", href: "/inventory/portable-radios" },
+	{ name: "Fire Extinguishers", detail: "Tracked extinguisher inventory", href: "/inventory/fire-extinguishers" },
 	{
 		name: "Thermal Imaging Cameras",
 		detail: "7 assigned cameras",
 		href: "/inventory/thermal-cameras",
 	},
 	{ name: "Gas Monitors", detail: "12 calibrated monitors", href: "/inventory/gas-monitors" },
-	{ name: "AEDs", detail: "6 frontline units", href: "/inventory/aeds" },
 	{ name: "PPE", detail: "92 stocked items", href: "/inventory/ppe" },
+	{ name: "Rope", detail: "Inspection-ready rope inventory", href: "/inventory/rope" },
+	{ name: "Miscellaneous Fire Equipment", detail: "General fire equipment and tools", href: "/inventory/misc-fire-equipment" },
 	{ name: "Batteries", detail: "61 on hand", href: "/inventory/batteries" },
+	{ name: "Power & Industrial Equipment", detail: "14 tracked units", href: "/inventory/pie" },
 	{ name: "Ground Ladders", detail: "18 inspection records", href: "/inventory/ground-ladders" },
-	{ name: "Station Supplies", detail: "73 consumables", href: "/inventory/station-supplies" },
-	{ name: "Cleaning Supplies", detail: "56 in stock", href: "/inventory/cleaning-supplies" },
-	{ name: "Office Supplies", detail: "48 in stock", href: "/inventory/office-supplies" },
 ];
 
 const lowStockItemsCount = 27;

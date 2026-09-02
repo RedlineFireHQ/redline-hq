@@ -5,16 +5,17 @@ import { usePathname } from "next/navigation";
 
 import {
   Home,
+  Gauge,
   Truck,
   Package,
   Users,
   GraduationCap,
-  Award,
   Wrench,
   AlertTriangle,
   BarChart3,
   CalendarDays,
   FolderOpen,
+  Building2,
   Settings,
   ChevronDown,
 } from "lucide-react";
@@ -23,11 +24,12 @@ import { useAuth } from "@/components/auth/AuthProvider";
 
 const navigationItems = [
   { label: "Command Center", icon: Home, href: "/" },
+  { label: "My Readiness", icon: Gauge, href: "/my-readiness" },
   { label: "Apparatus", icon: Truck, href: "/apparatus" },
+  { label: "Pre-Plans", icon: Building2, href: "/pre-plans" },
   { label: "Inventory", icon: Package, href: "/assets" },
   { label: "Personnel", icon: Users, href: "/personnel" },
   { label: "Training", icon: GraduationCap, href: "/training" },
-  { label: "Certifications", icon: Award, href: "/certifications" },
   { label: "Maintenance", icon: Wrench, href: "/maintenance" },
   { label: "Deficiencies", icon: AlertTriangle, href: "/deficiencies" },
   { label: "Reports", icon: BarChart3, href: "/reports" },
@@ -36,9 +38,16 @@ const navigationItems = [
   { label: "Settings", icon: Settings, href: "/settings" },
 ];
 
-export default function Sidebar() {
+interface SidebarProps {
+  translucent?: boolean;
+}
+
+export default function Sidebar({ translucent = false }: SidebarProps) {
   const pathname = usePathname();
   const { member, user } = useAuth();
+  const normalizedRole = typeof member?.role === "string" ? member.role.trim().toLowerCase() : "";
+  const isAdministrator = normalizedRole === "administrator";
+  const canManagePersonnel = member?.can_manage_personnel === true;
 
   const memberFirstName =
     typeof member?.first_name === "string" ? member.first_name.trim() : "";
@@ -51,6 +60,14 @@ export default function Sidebar() {
       ? member.role.trim()
       : "Firefighter";
 
+  const visibleNavigationItems = navigationItems.filter((item) => {
+    if (item.href === "/personnel") {
+      return isAdministrator || canManagePersonnel;
+    }
+
+    return true;
+  });
+
   const isActivePath = (href: string) => {
     if (href === "/") {
       return pathname === "/";
@@ -60,14 +77,20 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="sticky top-0 flex h-screen w-[270px] flex-shrink-0 flex-col border-r border-white/10 bg-[#090909]">
+    <aside
+      className={`sticky top-0 flex h-screen w-[270px] flex-shrink-0 flex-col border-r ${
+        translucent
+          ? "border-white/15 bg-[#070708]/58 backdrop-blur-[2px]"
+          : "border-white/10 bg-[#090909]"
+      }`}
+    >
 
       {/* ================= Logo ================= */}
 
       <div className="flex flex-col items-center border-b border-white/10 px-5 pt-8 pb-6">
 
         <img
-          src="/branding/images/redline-hq-logo.png"
+          src="/branding/images/redlinesidebarlogo.png"
           alt="Redline HQ"
           className="h-auto w-[220px]"
         />
@@ -88,7 +111,7 @@ export default function Sidebar() {
 
         <div className="space-y-1">
 
-          {navigationItems.map(({ label, icon: Icon, href }) => (
+          {visibleNavigationItems.map(({ label, icon: Icon, href }) => (
 
             <Link
               key={label}

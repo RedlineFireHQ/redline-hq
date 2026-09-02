@@ -8,6 +8,7 @@ export default function Sidebar() {
 
   const items = [
     { label: "Command Center", href: "/" },
+    { label: "My Readiness", href: "/my-readiness" },
     { label: "Apparatus", href: "/apparatus" },
     { label: "Personnel", href: "/personnel" },
     { label: "Training", href: "/training" },

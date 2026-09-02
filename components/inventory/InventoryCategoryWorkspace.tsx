@@ -133,7 +133,6 @@ export default function InventoryCategoryWorkspace({
 	const [isTestingModalOpen, setIsTestingModalOpen] = useState(false);
 	const [editRowKey, setEditRowKey] = useState<string | null>(null);
 	const [testerName, setTesterName] = useState("");
-	const [testerMemberId, setTesterMemberId] = useState("");
 	const [resumeTestingValues, setResumeTestingValues] = useState<HoseTestingSessionValues | null>(
 		null,
 	);
@@ -210,7 +209,7 @@ export default function InventoryCategoryWorkspace({
 
 			const { data } = await supabase
 				.from("members")
-				.select("id, first_name, last_name")
+				.select("first_name, last_name")
 				.eq("email", email)
 				.maybeSingle();
 
@@ -222,7 +221,6 @@ export default function InventoryCategoryWorkspace({
 				typeof data?.first_name === "string" ? data.first_name.trim() : "";
 			const lastName = typeof data?.last_name === "string" ? data.last_name.trim() : "";
 			const fullName = `${firstName} ${lastName}`.trim();
-			setTesterMemberId(typeof data?.id === "string" ? data.id : "");
 			setTesterName(fullName || email);
 		};
 
@@ -232,29 +230,6 @@ export default function InventoryCategoryWorkspace({
 			isMounted = false;
 		};
 	}, []);
-
-	const testerOptions = useMemo(() => {
-		if (testerMemberId && testerName) {
-			return [{ id: testerMemberId, label: testerName }];
-		}
-
-		return [] as Array<{ id: string; label: string }>;
-	}, [testerMemberId, testerName]);
-
-	const resolveTesterLabel = (values: HoseTestingSessionValues) => {
-		if (values.testerMode === "external") {
-			const externalLabel =
-				values.externalTesterName.trim() || values.externalTesterCompany.trim();
-			return externalLabel || testerName || "Unknown Tester";
-		}
-
-		if (values.memberId && values.memberId === testerMemberId) {
-			return testerName || "Unknown Tester";
-		}
-
-		const matchedOption = testerOptions.find((option) => option.id === values.memberId);
-		return matchedOption?.label?.trim() || testerName || "Unknown Tester";
-	};
 
 	useEffect(() => {
 		if (!resumeTestingSummary || isTestingModalOpen) {
@@ -282,7 +257,7 @@ export default function InventoryCategoryWorkspace({
 				const parsed = JSON.parse(raw) as HoseTestingSessionValues;
 				if (
 					typeof parsed.testingDate === "string" &&
-					typeof parsed.testerMode === "string" &&
+					typeof parsed.tester === "string" &&
 					parsed.hoseStatuses &&
 					typeof parsed.hoseStatuses === "object"
 				) {
@@ -964,7 +939,7 @@ export default function InventoryCategoryWorkspace({
 
 						return applyHoseTestResult({
 							testingDate: values.testingDate,
-								tester: resolveTesterLabel(values),
+							tester: values.tester,
 							hoseId: row.id,
 							status: hoseStatus,
 						});
@@ -1039,7 +1014,7 @@ export default function InventoryCategoryWorkspace({
 					}
 				}
 
-				const testerLabel = resolveTesterLabel(values);
+				const testerLabel = values.tester.trim() || testerName || "Unknown Tester";
 				const { data: sessionInsertData, error: sessionInsertError } = await supabase
 					.from("fire_hose_testing_sessions")
 					.insert({
@@ -1727,8 +1702,7 @@ export default function InventoryCategoryWorkspace({
 
 			<HoseTestingSessionModal
 				isOpen={isTestingModalOpen}
-				testerOptions={testerOptions}
-				defaultTesterOptionId={testerMemberId || undefined}
+				defaultTester={testerName}
 				departmentName={departmentName ?? "Department"}
 				resumeValues={resumeTestingValues}
 				hoses={activeRows
@@ -1738,7 +1712,6 @@ export default function InventoryCategoryWorkspace({
 						inventoryNumber: row.inventoryNumber ?? "-",
 						hoseSize: row.hoseSize ?? "-",
 						length: row.length ?? "-",
-						currentStatus: row.status ?? "Ready",
 						hasActiveDeficiency: rowHasActiveDeficiency(row),
 					}))}
 				onClose={() => {

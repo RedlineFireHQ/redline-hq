@@ -8,6 +8,8 @@ export default async function ReadinessPanel() {
   const readiness = readinessData?.result.departmentScore;
   const readinessDisplay = typeof readiness === "number" ? Math.round(readiness) : null;
   const readinessLabel = readinessData?.result.notYetRated ? "NOT YET RATED" : "READY";
+  const statusMessage = readinessData?.result.statusMessage ?? "NOT YET RATED";
+  const [, statusDetail] = statusMessage.split("\n\n");
   const headingLabel = readinessData?.result.notYetRated
     ? "READINESS PENDING"
     : readinessData?.result.status === "redline_ready"
@@ -25,7 +27,7 @@ export default async function ReadinessPanel() {
       : circumference - (readinessDisplay / 100) * circumference;
 
   return (
-    <section className="relative h-full overflow-hidden rounded-[20px] border border-white/10 bg-[#090909] shadow-lg">
+    <section className="relative overflow-hidden rounded-[20px] border border-white/10 bg-[#090909] shadow-lg">
       {/* Background */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_78%_50%,rgba(239,43,45,.22),transparent_42%)]" />
       <div className="absolute inset-0 bg-[linear-gradient(90deg,#090909_0%,#090909_58%,rgba(9,9,9,.65)_76%,rgba(9,9,9,.15)_100%)]" />
@@ -99,14 +101,14 @@ export default async function ReadinessPanel() {
           </div>
 
           {/* Text */}
-          <div className="z-20 -ml-1 flex flex-col">
-            <p className="text-[16px] text-[#C8C8CE]">
-              Our department is
-            </p>
-
-            <h2 className="mt-2 text-[52px] font-extrabold leading-none text-[#EF2B2D]">
+          <div className="z-20 -ml-1 flex max-w-[420px] flex-col">
+            <h2 className="max-w-[360px] text-[36px] font-extrabold leading-[1.02] text-[#EF2B2D]">
               {headingLabel}
             </h2>
+
+            <p className="mt-3 max-w-[360px] text-[15px] leading-6 text-[#C8C8CE]">
+              {statusDetail ?? "See the REDLINE READINESS COACH™ below."}
+            </p>
 
             <Link
               href="/department-readiness"

@@ -147,7 +147,7 @@ export function calculateApparatusChecksBucketScore(input: ApparatusCheckInput, 
 
   if (!input.lastCompletedAt) {
     return {
-      score: 0,
+      score: 20,
       blockingGap: null as string | null,
     };
   }
@@ -389,9 +389,9 @@ function evaluateMaintenanceMethod(method: ApparatusMaintenanceMethodEvaluation)
 export function calculateMaintenanceServiceBucketScore(requirements: ApparatusMaintenanceRequirementEvaluation[]) {
   if (requirements.length === 0) {
     return {
-      score: null as number | null,
-      state: null as MaintenanceReadinessState | null,
-      blockingGap: "Missing apparatus maintenance requirement configuration.",
+      score: 20,
+      state: "current" as MaintenanceReadinessState,
+      blockingGap: null as string | null,
     };
   }
 
@@ -440,9 +440,9 @@ export function calculateRequiredEquipmentBucketScore(requirements: ApparatusEqu
 
   if (required.length === 0) {
     return {
-      score: null as number | null,
+      score: 20,
       hasCriticalEquipmentGate: false,
-      blockingGap: "Missing required equipment configuration.",
+      blockingGap: null as string | null,
       nonCriticalOperationalCount: 0,
       nonCriticalRequiredCount: 0,
     };

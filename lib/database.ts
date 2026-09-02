@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 
 async function getOpenDeficiencyStatusId() {
@@ -19,10 +20,38 @@ async function getOpenDeficiencyStatusId() {
   return typeof openStatus?.id === "string" ? openStatus.id : null;
 }
 
-export async function getApparatus() {
-  const { data, error } = await supabase
+export async function getApparatus(client?: SupabaseClient) {
+  const targetClient = client ?? supabase;
+  const { data, error } = await targetClient
     .from("apparatus")
     .select("*")
+    .eq("lifecycle_status", "active")
+    .order("name");
+
+  if (error) {
+    console.error("[getApparatus] apparatus query failed", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      usingServerClient: Boolean(client),
+    });
+    return [];
+  }
+
+  return data ?? [];
+}
+
+export async function getArchivedApparatus(departmentId: string | null) {
+  if (!departmentId) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from("apparatus")
+    .select("id, name, type, department_id, lifecycle_status")
+    .eq("department_id", departmentId)
+    .eq("lifecycle_status", "archived")
     .order("name");
 
   if (error) {
@@ -30,7 +59,7 @@ export async function getApparatus() {
     return [];
   }
 
-  return data;
+  return data ?? [];
 }
 
 export async function getOpenDeficiencyCountsByApparatusIds(apparatusIds: string[]) {
@@ -68,19 +97,28 @@ export async function getOpenDeficiencyCountsByApparatusIds(apparatusIds: string
   }, {});
 }
 
-export async function getApparatusById(id: string) {
-  const { data, error } = await supabase
+export async function getApparatusById(id: string, client?: SupabaseClient) {
+  const targetClient = client ?? supabase;
+
+  const { data, error } = await targetClient
     .from("apparatus")
     .select("*")
     .eq("id", id)
-    .single();
+    .maybeSingle();
 
   if (error) {
-    console.error(error);
+    console.error("[getApparatusById] apparatus lookup failed", {
+      apparatusId: id,
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      usingServerClient: Boolean(client),
+    });
     return null;
   }
 
-  return data;
+  return data ?? null;
 }
 
 export async function getAssetById(id: string) {

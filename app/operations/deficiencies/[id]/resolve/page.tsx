@@ -27,6 +27,20 @@ type ScbaPackRecord = {
   next_flow_test_due_date: string | null;
 };
 
+type DeficiencyLinkRow = {
+  fire_hose_id: string | null;
+  scba_cylinder_id: string | null;
+  scba_pack_id: string | null;
+  pie_equipment_id: string | null;
+  ems_equipment_id: string | null;
+  ppe_item_id: string | null;
+  rope_item_id: string | null;
+  gas_monitor_id: string | null;
+  battery_id: string | null;
+  thermal_imaging_camera_id: string | null;
+  ground_ladder_id: string | null;
+};
+
 function isOnOrBeforeToday(value: string | null | undefined) {
   if (!value) {
     return false;
@@ -69,6 +83,74 @@ function getScbaPackRestoredStatus(pack: ScbaPackRecord) {
   }
 
   return "Ready";
+}
+
+function getPieEquipmentRestoredStatus(
+  equipment: { status?: string | null },
+  activeAssignmentType?: string | null,
+) {
+  const statusValue = (equipment.status ?? "").trim();
+
+  if (statusValue === "Retired" || statusValue === "Lost" || statusValue === "Stolen") {
+    return statusValue;
+  }
+
+  if (activeAssignmentType && activeAssignmentType !== "Unassigned") {
+    return "In Service";
+  }
+
+  return "Unassigned";
+}
+
+function getGasMonitorRestoredStatus(
+  monitor: { status?: string | null },
+  activeAssignmentType?: string | null,
+) {
+  const statusValue = (monitor.status ?? "").trim();
+
+  if (statusValue === "Retired" || statusValue === "Lost" || statusValue === "Stolen") {
+    return statusValue;
+  }
+
+  if (activeAssignmentType && activeAssignmentType !== "Unassigned") {
+    return "In Service";
+  }
+
+  return "Unassigned";
+}
+
+function getThermalImagingCameraRestoredStatus(
+  camera: { status?: string | null },
+  activeAssignmentType?: string | null,
+) {
+  const statusValue = (camera.status ?? "").trim();
+
+  if (statusValue === "Retired" || statusValue === "Lost" || statusValue === "Stolen") {
+    return statusValue;
+  }
+
+  if (activeAssignmentType && activeAssignmentType !== "Unassigned") {
+    return "In Service";
+  }
+
+  return "Unassigned";
+}
+
+function getBatteryRestoredStatus(
+  battery: { status?: string | null },
+  activeAssignmentType?: string | null,
+) {
+  const statusValue = (battery.status ?? "").trim();
+
+  if (statusValue === "Retired" || statusValue === "Lost" || statusValue === "Stolen") {
+    return statusValue;
+  }
+
+  if (activeAssignmentType && activeAssignmentType !== "Unassigned") {
+    return "In Service";
+  }
+
+  return "Unassigned";
 }
 
 export default function ResolveDeficiencyPage() {
@@ -192,11 +274,13 @@ export default function ResolveDeficiencyPage() {
       event_description: `Resolved. ${repairNotes}`,
     });
 
-    const { data: deficiencyLinkRow, error: deficiencyLinkError } = await supabase
+    const { data: deficiencyLinkData, error: deficiencyLinkError } = await supabase
       .from("deficiencies")
-      .select("fire_hose_id, scba_cylinder_id, scba_pack_id")
+      .select("fire_hose_id, scba_cylinder_id, scba_pack_id, pie_equipment_id, ems_equipment_id, ppe_item_id, rope_item_id, gas_monitor_id, battery_id, thermal_imaging_camera_id, ground_ladder_id")
       .eq("id", deficiencyId)
       .maybeSingle();
+
+    const deficiencyLinkRow = deficiencyLinkData as DeficiencyLinkRow | null;
 
     if (deficiencyLinkError) {
       console.error("[fire-hose][deficiency-resolve] failed to read deficiency fire_hose_id link", {
@@ -213,7 +297,7 @@ export default function ResolveDeficiencyPage() {
 
       const { data: linkedDeficiencies, error: linkedDeficienciesError } = await supabase
         .from("deficiencies")
-        .select("id, status_info:deficiency_statuses!fk_deficiencies_status(name)")
+        .select("id, status_info:deficiency_statuses!fk_deficiencies_status(active, name)")
         .eq("fire_hose_id", linkedHoseId);
 
       if (linkedDeficienciesError) {
@@ -229,10 +313,27 @@ export default function ResolveDeficiencyPage() {
 
       if ((linkedDeficiencies ?? []).length > 0) {
         const unresolvedCount = (linkedDeficiencies ?? []).reduce((count, row) => {
+          if (row.id === deficiencyId) {
+            return count;
+          }
+
           const statusInfo = Array.isArray(row.status_info) ? row.status_info[0] : row.status_info;
           const statusName = typeof statusInfo?.name === "string" ? statusInfo.name.trim().toLowerCase() : "";
-          const isUnresolved = statusName !== "resolved" && statusName !== "closed";
-          return isUnresolved ? count + 1 : count;
+
+          if (statusName === "resolved" || statusName === "closed") {
+            return count;
+          }
+
+          if (statusInfo?.active === true) {
+            return count + 1;
+          }
+
+          if (statusInfo?.active === false) {
+            return count;
+          }
+
+          const isUnresolvedByName = statusName !== "resolved" && statusName !== "closed";
+          return isUnresolvedByName ? count + 1 : count;
         }, 0);
 
         if (unresolvedCount === 0) {
@@ -418,6 +519,580 @@ export default function ResolveDeficiencyPage() {
           return;
         }
       }
+    }
+
+    if (deficiencyLinkRow?.pie_equipment_id) {
+      const linkedPieId = deficiencyLinkRow.pie_equipment_id;
+
+      const { data: linkedDeficiencies, error: linkedDeficienciesError } = await supabase
+        .from("deficiencies")
+        .select("id, status_info:deficiency_statuses!fk_deficiencies_status(name)")
+        .eq("pie_equipment_id", linkedPieId);
+
+      if (linkedDeficienciesError) {
+        console.error("[pie][deficiency-resolve] failed to read linked deficiencies", {
+          deficiencyId,
+          linkedPieId,
+          error: linkedDeficienciesError,
+        });
+        setErrorMessage(linkedDeficienciesError.message || "Unable to verify linked PIE deficiencies.");
+        setIsResolving(false);
+        return;
+      }
+
+      const unresolvedCount = (linkedDeficiencies ?? []).reduce((count, row) => {
+        if (row.id === deficiencyId) {
+          return count;
+        }
+
+        const statusInfo = Array.isArray(row.status_info) ? row.status_info[0] : row.status_info;
+        const statusName = typeof statusInfo?.name === "string" ? statusInfo.name.trim().toLowerCase() : "";
+        const isUnresolved = statusName !== "resolved" && statusName !== "closed";
+        return isUnresolved ? count + 1 : count;
+      }, 0);
+
+      if (unresolvedCount === 0) {
+        const { data: activeAssignmentRow, error: assignmentQueryError } = await supabase
+          .from("pie_equipment_assignments")
+          .select("id, assignment_type")
+          .eq("pie_equipment_id", linkedPieId)
+          .is("ended_at", null)
+          .maybeSingle();
+
+        if (assignmentQueryError) {
+          console.error("[pie][deficiency-resolve] failed to read active assignment", {
+            deficiencyId,
+            linkedPieId,
+            error: assignmentQueryError,
+          });
+          setErrorMessage(assignmentQueryError.message || "Unable to verify PIE assignment state.");
+          setIsResolving(false);
+          return;
+        }
+
+        const activeAssignmentType =
+          activeAssignmentRow && typeof activeAssignmentRow.assignment_type === "string"
+            ? activeAssignmentRow.assignment_type
+            : "Unassigned";
+
+        const { data: equipmentRow, error: equipmentError } = await supabase
+          .from("pie_equipment")
+          .select("id, status, in_service_date")
+          .eq("id", linkedPieId)
+          .maybeSingle();
+
+        if (equipmentError || !equipmentRow) {
+          console.error("[pie][deficiency-resolve] failed to read linked PIE equipment", {
+            deficiencyId,
+            linkedPieId,
+            error: equipmentError,
+          });
+          setErrorMessage(equipmentError?.message || "Unable to verify linked PIE equipment.");
+          setIsResolving(false);
+          return;
+        }
+
+        const restoredStatus = getPieEquipmentRestoredStatus(
+          equipmentRow as { status?: string | null },
+          activeAssignmentType,
+        );
+
+        const { data: updatedPieRow, error: pieUpdateError } = await supabase
+          .from("pie_equipment")
+          .update({ status: restoredStatus })
+          .eq("id", linkedPieId)
+          .select("id, status, in_service_date")
+          .single();
+
+        if (
+          pieUpdateError ||
+          !updatedPieRow ||
+          updatedPieRow.id !== linkedPieId ||
+          updatedPieRow.status !== restoredStatus
+        ) {
+          console.error("[pie][deficiency-resolve] status update mismatch", {
+            expectedPieId: linkedPieId,
+            expectedStatus: restoredStatus,
+            actualRow: updatedPieRow ?? null,
+            error: pieUpdateError ?? null,
+          });
+          setErrorMessage(pieUpdateError?.message || "Unable to update linked PIE status.");
+          setIsResolving(false);
+          return;
+        }
+      }
+    }
+
+    if (deficiencyLinkRow?.gas_monitor_id) {
+      const linkedMonitorId = deficiencyLinkRow.gas_monitor_id;
+
+      const { data: linkedDeficiencies, error: linkedDeficienciesError } = await supabase
+        .from("deficiencies")
+        .select("id, status_info:deficiency_statuses!fk_deficiencies_status(active, name)")
+        .eq("gas_monitor_id", linkedMonitorId);
+
+      if (linkedDeficienciesError) {
+        console.error("[gas-monitor][deficiency-resolve] failed to read linked deficiencies", {
+          deficiencyId,
+          linkedMonitorId,
+          error: linkedDeficienciesError,
+        });
+        setErrorMessage(linkedDeficienciesError.message || "Unable to verify linked Gas Monitor deficiencies.");
+        setIsResolving(false);
+        return;
+      }
+
+      const unresolvedCount = (linkedDeficiencies ?? []).reduce((count, row) => {
+        if (row.id === deficiencyId) {
+          return count;
+        }
+
+        const statusInfo = Array.isArray(row.status_info) ? row.status_info[0] : row.status_info;
+        const statusName = typeof statusInfo?.name === "string" ? statusInfo.name.trim().toLowerCase() : "";
+
+        if (statusName === "resolved" || statusName === "closed") {
+          return count;
+        }
+
+        if (statusInfo?.active === true) {
+          return count + 1;
+        }
+
+        if (statusInfo?.active === false) {
+          return count;
+        }
+
+        const isUnresolvedByName = statusName !== "resolved" && statusName !== "closed";
+        return isUnresolvedByName ? count + 1 : count;
+      }, 0);
+
+      if (unresolvedCount === 0) {
+        const { data: activeAssignmentRow, error: assignmentQueryError } = await supabase
+          .from("gas_monitor_assignments")
+          .select("id, assignment_type")
+          .eq("gas_monitor_id", linkedMonitorId)
+          .is("ended_at", null)
+          .maybeSingle();
+
+        if (assignmentQueryError) {
+          console.error("[gas-monitor][deficiency-resolve] failed to read active assignment", {
+            deficiencyId,
+            linkedMonitorId,
+            error: assignmentQueryError,
+          });
+          setErrorMessage(assignmentQueryError.message || "Unable to verify Gas Monitor assignment state.");
+          setIsResolving(false);
+          return;
+        }
+
+        const activeAssignmentType =
+          activeAssignmentRow && typeof activeAssignmentRow.assignment_type === "string"
+            ? activeAssignmentRow.assignment_type
+            : "Unassigned";
+
+        const { data: monitorRow, error: monitorError } = await supabase
+          .from("gas_monitors")
+          .select("id, status")
+          .eq("id", linkedMonitorId)
+          .maybeSingle();
+
+        if (monitorError || !monitorRow) {
+          console.error("[gas-monitor][deficiency-resolve] failed to read linked monitor", {
+            deficiencyId,
+            linkedMonitorId,
+            error: monitorError,
+          });
+          setErrorMessage(monitorError?.message || "Unable to verify linked Gas Monitor.");
+          setIsResolving(false);
+          return;
+        }
+
+        const restoredStatus = getGasMonitorRestoredStatus(
+          monitorRow as { status?: string | null },
+          activeAssignmentType,
+        );
+
+        const { data: updatedMonitorRow, error: monitorUpdateError } = await supabase
+          .from("gas_monitors")
+          .update({ status: restoredStatus })
+          .eq("id", linkedMonitorId)
+          .select("id, status")
+          .single();
+
+        if (
+          monitorUpdateError ||
+          !updatedMonitorRow ||
+          updatedMonitorRow.id !== linkedMonitorId ||
+          updatedMonitorRow.status !== restoredStatus
+        ) {
+          console.error("[gas-monitor][deficiency-resolve] status update mismatch", {
+            expectedMonitorId: linkedMonitorId,
+            expectedStatus: restoredStatus,
+            actualRow: updatedMonitorRow ?? null,
+            error: monitorUpdateError ?? null,
+          });
+          setErrorMessage(monitorUpdateError?.message || "Unable to update linked Gas Monitor status.");
+          setIsResolving(false);
+          return;
+        }
+      }
+    }
+
+    if (deficiencyLinkRow?.battery_id) {
+      const linkedBatteryId = deficiencyLinkRow.battery_id;
+
+      const { data: linkedDeficiencies, error: linkedDeficienciesError } = await supabase
+        .from("deficiencies")
+        .select("id, status_info:deficiency_statuses!fk_deficiencies_status(active, name)")
+        .eq("battery_id", linkedBatteryId);
+
+      if (linkedDeficienciesError) {
+        console.error("[battery][deficiency-resolve] failed to read linked deficiencies", {
+          deficiencyId,
+          linkedBatteryId,
+          error: linkedDeficienciesError,
+        });
+        setErrorMessage(linkedDeficienciesError.message || "Unable to verify linked Battery deficiencies.");
+        setIsResolving(false);
+        return;
+      }
+
+      const unresolvedCount = (linkedDeficiencies ?? []).reduce((count, row) => {
+        if (row.id === deficiencyId) {
+          return count;
+        }
+
+        const statusInfo = Array.isArray(row.status_info) ? row.status_info[0] : row.status_info;
+        const statusName = typeof statusInfo?.name === "string" ? statusInfo.name.trim().toLowerCase() : "";
+
+        if (statusName === "resolved" || statusName === "closed") {
+          return count;
+        }
+
+        if (statusInfo?.active === true) {
+          return count + 1;
+        }
+
+        if (statusInfo?.active === false) {
+          return count;
+        }
+
+        const isUnresolvedByName = statusName !== "resolved" && statusName !== "closed";
+        return isUnresolvedByName ? count + 1 : count;
+      }, 0);
+
+      if (unresolvedCount === 0) {
+        const { data: activeAssignmentRow, error: assignmentQueryError } = await supabase
+          .from("battery_assignments")
+          .select("id, assignment_type")
+          .eq("battery_id", linkedBatteryId)
+          .is("ended_at", null)
+          .maybeSingle();
+
+        if (assignmentQueryError) {
+          console.error("[battery][deficiency-resolve] failed to read active assignment", {
+            deficiencyId,
+            linkedBatteryId,
+            error: assignmentQueryError,
+          });
+          setErrorMessage(assignmentQueryError.message || "Unable to verify Battery assignment state.");
+          setIsResolving(false);
+          return;
+        }
+
+        const activeAssignmentType =
+          activeAssignmentRow && typeof activeAssignmentRow.assignment_type === "string"
+            ? activeAssignmentRow.assignment_type
+            : "Unassigned";
+
+        const { data: batteryRow, error: batteryError } = await supabase
+          .from("batteries")
+          .select("id, status")
+          .eq("id", linkedBatteryId)
+          .maybeSingle();
+
+        if (batteryError || !batteryRow) {
+          console.error("[battery][deficiency-resolve] failed to read linked battery", {
+            deficiencyId,
+            linkedBatteryId,
+            error: batteryError,
+          });
+          setErrorMessage(batteryError?.message || "Unable to verify linked Battery.");
+          setIsResolving(false);
+          return;
+        }
+
+        const restoredStatus = getBatteryRestoredStatus(
+          batteryRow as { status?: string | null },
+          activeAssignmentType,
+        );
+
+        const { data: updatedBatteryRow, error: batteryUpdateError } = await supabase
+          .from("batteries")
+          .update({ status: restoredStatus })
+          .eq("id", linkedBatteryId)
+          .select("id, status")
+          .single();
+
+        if (
+          batteryUpdateError ||
+          !updatedBatteryRow ||
+          updatedBatteryRow.id !== linkedBatteryId ||
+          updatedBatteryRow.status !== restoredStatus
+        ) {
+          console.error("[battery][deficiency-resolve] status update mismatch", {
+            expectedBatteryId: linkedBatteryId,
+            expectedStatus: restoredStatus,
+            actualRow: updatedBatteryRow ?? null,
+            error: batteryUpdateError ?? null,
+          });
+          setErrorMessage(batteryUpdateError?.message || "Unable to update linked Battery status.");
+          setIsResolving(false);
+          return;
+        }
+      }
+    }
+
+    if (deficiencyLinkRow?.thermal_imaging_camera_id) {
+      const linkedCameraId = deficiencyLinkRow.thermal_imaging_camera_id;
+
+      const { data: linkedDeficiencies, error: linkedDeficienciesError } = await supabase
+        .from("deficiencies")
+        .select("id, status_info:deficiency_statuses!fk_deficiencies_status(active, name)")
+        .eq("thermal_imaging_camera_id", linkedCameraId);
+
+      if (linkedDeficienciesError) {
+        console.error("[thermal-imaging-camera][deficiency-resolve] failed to read linked deficiencies", {
+          deficiencyId,
+          linkedCameraId,
+          error: linkedDeficienciesError,
+        });
+        setErrorMessage(linkedDeficienciesError.message || "Unable to verify linked TIC deficiencies.");
+        setIsResolving(false);
+        return;
+      }
+
+      const unresolvedCount = (linkedDeficiencies ?? []).reduce((count, row) => {
+        if (row.id === deficiencyId) {
+          return count;
+        }
+
+        const statusInfo = Array.isArray(row.status_info) ? row.status_info[0] : row.status_info;
+        const statusName = typeof statusInfo?.name === "string" ? statusInfo.name.trim().toLowerCase() : "";
+
+        if (statusName === "resolved" || statusName === "closed") {
+          return count;
+        }
+
+        if (statusInfo?.active === true) {
+          return count + 1;
+        }
+
+        if (statusInfo?.active === false) {
+          return count;
+        }
+
+        const isUnresolvedByName = statusName !== "resolved" && statusName !== "closed";
+        return isUnresolvedByName ? count + 1 : count;
+      }, 0);
+
+      if (unresolvedCount === 0) {
+        const { data: activeAssignmentRow, error: assignmentQueryError } = await supabase
+          .from("thermal_imaging_camera_assignments")
+          .select("id, assignment_type")
+          .eq("thermal_imaging_camera_id", linkedCameraId)
+          .is("ended_at", null)
+          .maybeSingle();
+
+        if (assignmentQueryError) {
+          console.error("[thermal-imaging-camera][deficiency-resolve] failed to read active assignment", {
+            deficiencyId,
+            linkedCameraId,
+            error: assignmentQueryError,
+          });
+          setErrorMessage(assignmentQueryError.message || "Unable to verify TIC assignment state.");
+          setIsResolving(false);
+          return;
+        }
+
+        const activeAssignmentType =
+          activeAssignmentRow && typeof activeAssignmentRow.assignment_type === "string"
+            ? activeAssignmentRow.assignment_type
+            : "Unassigned";
+
+        const { data: cameraRow, error: cameraError } = await supabase
+          .from("thermal_imaging_cameras")
+          .select("id, status")
+          .eq("id", linkedCameraId)
+          .maybeSingle();
+
+        if (cameraError || !cameraRow) {
+          console.error("[thermal-imaging-camera][deficiency-resolve] failed to read linked camera", {
+            deficiencyId,
+            linkedCameraId,
+            error: cameraError,
+          });
+          setErrorMessage(cameraError?.message || "Unable to verify linked TIC.");
+          setIsResolving(false);
+          return;
+        }
+
+        const restoredStatus = getThermalImagingCameraRestoredStatus(
+          cameraRow as { status?: string | null },
+          activeAssignmentType,
+        );
+
+        const { data: updatedCameraRow, error: cameraUpdateError } = await supabase
+          .from("thermal_imaging_cameras")
+          .update({ status: restoredStatus })
+          .eq("id", linkedCameraId)
+          .select("id, status")
+          .single();
+
+        if (
+          cameraUpdateError ||
+          !updatedCameraRow ||
+          updatedCameraRow.id !== linkedCameraId ||
+          updatedCameraRow.status !== restoredStatus
+        ) {
+          console.error("[thermal-imaging-camera][deficiency-resolve] status update mismatch", {
+            expectedCameraId: linkedCameraId,
+            expectedStatus: restoredStatus,
+            actualRow: updatedCameraRow ?? null,
+            error: cameraUpdateError ?? null,
+          });
+          setErrorMessage(cameraUpdateError?.message || "Unable to update linked TIC status.");
+          setIsResolving(false);
+          return;
+        }
+      }
+    }
+
+    if (deficiencyLinkRow?.ground_ladder_id) {
+      const linkedLadderId = deficiencyLinkRow.ground_ladder_id;
+
+      const { data: linkedDeficiencies, error: linkedDeficienciesError } = await supabase
+        .from("deficiencies")
+        .select("id, status_info:deficiency_statuses!fk_deficiencies_status(active, name)")
+        .eq("ground_ladder_id", linkedLadderId);
+
+      if (linkedDeficienciesError) {
+        console.error("[ground-ladders][deficiency-resolve] failed to read linked deficiencies", {
+          deficiencyId,
+          linkedLadderId,
+          error: linkedDeficienciesError,
+        });
+        setErrorMessage(linkedDeficienciesError.message || "Unable to verify linked Ground Ladder deficiencies.");
+        setIsResolving(false);
+        return;
+      }
+
+      const unresolvedCount = (linkedDeficiencies ?? []).reduce((count, row) => {
+        if (row.id === deficiencyId) {
+          return count;
+        }
+
+        const statusInfo = Array.isArray(row.status_info) ? row.status_info[0] : row.status_info;
+        const statusName = typeof statusInfo?.name === "string" ? statusInfo.name.trim().toLowerCase() : "";
+
+        if (statusName === "resolved" || statusName === "closed") {
+          return count;
+        }
+
+        if (statusInfo?.active === true) {
+          return count + 1;
+        }
+
+        if (statusInfo?.active === false) {
+          return count;
+        }
+
+        const isUnresolvedByName = statusName !== "resolved" && statusName !== "closed";
+        return isUnresolvedByName ? count + 1 : count;
+      }, 0);
+
+      if (unresolvedCount === 0) {
+        const { data: activeAssignmentRow, error: assignmentQueryError } = await supabase
+          .from("ground_ladder_assignments")
+          .select("id, assignment_type")
+          .eq("ground_ladder_id", linkedLadderId)
+          .is("ended_at", null)
+          .maybeSingle();
+
+        if (assignmentQueryError) {
+          console.error("[ground-ladders][deficiency-resolve] failed to read active assignment", {
+            deficiencyId,
+            linkedLadderId,
+            error: assignmentQueryError,
+          });
+          setErrorMessage(assignmentQueryError.message || "Unable to verify Ground Ladder assignment state.");
+          setIsResolving(false);
+          return;
+        }
+
+        const activeAssignmentType =
+          activeAssignmentRow && typeof activeAssignmentRow.assignment_type === "string"
+            ? activeAssignmentRow.assignment_type
+            : "Unassigned";
+
+        const { data: ladderRow, error: ladderError } = await supabase
+          .from("ground_ladders")
+          .select("id, status")
+          .eq("id", linkedLadderId)
+          .maybeSingle();
+
+        if (ladderError || !ladderRow) {
+          console.error("[ground-ladders][deficiency-resolve] failed to read linked ladder", {
+            deficiencyId,
+            linkedLadderId,
+            error: ladderError,
+          });
+          setErrorMessage(ladderError?.message || "Unable to verify linked Ground Ladder.");
+          setIsResolving(false);
+          return;
+        }
+
+        const restoredStatus = activeAssignmentType && activeAssignmentType !== "Unassigned" ? "In Service" : "Unassigned";
+
+        const { data: updatedLadderRow, error: ladderUpdateError } = await supabase
+          .from("ground_ladders")
+          .update({ status: restoredStatus })
+          .eq("id", linkedLadderId)
+          .select("id, status")
+          .single();
+
+        if (
+          ladderUpdateError ||
+          !updatedLadderRow ||
+          updatedLadderRow.id !== linkedLadderId ||
+          updatedLadderRow.status !== restoredStatus
+        ) {
+          console.error("[ground-ladders][deficiency-resolve] status update mismatch", {
+            expectedLadderId: linkedLadderId,
+            expectedStatus: restoredStatus,
+            actualRow: updatedLadderRow ?? null,
+            error: ladderUpdateError ?? null,
+          });
+          setErrorMessage(ladderUpdateError?.message || "Unable to update linked Ground Ladder status.");
+          setIsResolving(false);
+          return;
+        }
+      }
+    }
+
+    const { error: apparatusReconciliationError } = await supabase.rpc(
+      "reconcile_apparatus_oos_after_deficiency_resolution",
+      {
+        p_deficiency_id: deficiencyId,
+      },
+    );
+
+    if (apparatusReconciliationError) {
+      setErrorMessage(
+        apparatusReconciliationError.message || "Unable to reconcile apparatus out-of-service status.",
+      );
+      setIsResolving(false);
+      return;
     }
 
     setIsResolving(false);

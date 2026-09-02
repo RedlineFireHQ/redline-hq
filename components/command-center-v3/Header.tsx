@@ -56,7 +56,11 @@ function formatAlertTime(value: string | null) {
   });
 }
 
-export default function Header() {
+interface HeaderProps {
+  translucent?: boolean;
+}
+
+export default function Header({ translucent = false }: HeaderProps) {
   const router = useRouter();
   const { user, member, signOut } = useAuth();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -223,7 +227,11 @@ export default function Header() {
   });
 
   return (
-    <header className="h-[88px] border-b border-[rgba(255,255,255,0.08)] bg-[#090909] px-6">
+    <header
+      className={`h-[88px] border-b border-[rgba(255,255,255,0.08)] px-6 ${
+        translucent ? "bg-[#070708]/56 backdrop-blur-[2px]" : "bg-[#090909]"
+      }`}
+    >
       <div className="flex h-full items-center justify-between">
         {/* LEFT SIDE */}
         <div className="flex flex-col justify-center">

@@ -30,6 +30,25 @@ test("DR2. No participating apparatus falls back to personnel score", () => {
   assert.equal(score, 91.25);
 });
 
+test("DR2A. Included but unscoreable apparatus still falls back to personnel score", () => {
+  const includedRows = [
+    { includeInDepartmentReadiness: true, readinessState: "evaluated" as const, scorePercent: null },
+    { includeInDepartmentReadiness: true, readinessState: "evaluation_error" as const, scorePercent: null },
+  ];
+
+  const participatingScores = getParticipatingApparatusScores(includedRows);
+  assert.deepEqual(participatingScores, []);
+
+  const score = calculateDepartmentComposite({
+    personnelScore: 91.25,
+    apparatusScore: null,
+    scoredMemberCount: 8,
+    participatingApparatusCount: participatingScores.length,
+  });
+
+  assert.equal(score, 91.25);
+});
+
 test("DR3. Zero scored members returns NOT YET RATED state", () => {
   const score = calculateDepartmentComposite({
     personnelScore: null,
@@ -227,6 +246,13 @@ test("DR10. Single apparatus condition issue does not clear unrelated condition 
 test("DR11. 65/35 composite remains exact", () => {
   const department = computeDepartmentScore(88, 76);
   assert.equal(department, 83.8);
+});
+
+test("DR11A. 65/35 lock remains unchanged", () => {
+  const personnel = 92;
+  const apparatus = 80;
+  const expected = Math.round((0.65 * personnel + 0.35 * apparatus) * 100) / 100;
+  assert.equal(computeDepartmentScore(personnel, apparatus), expected);
 });
 
 test("DR12. Excluded apparatus contributes nothing", () => {

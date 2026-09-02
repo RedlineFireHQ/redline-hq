@@ -42,12 +42,12 @@ export default async function DepartmentReadinessPage() {
             </div>
 
             <div className="rounded-xl border border-white/10 bg-[#121212] p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-neutral-400">Personnel (65%)</p>
+              <p className="text-xs uppercase tracking-[0.2em] text-neutral-400">Personnel Readiness</p>
               <p className="mt-2 text-3xl font-black text-white">{formatPercent(result.personnelScore)}</p>
             </div>
 
             <div className="rounded-xl border border-white/10 bg-[#121212] p-4">
-              <p className="text-xs uppercase tracking-[0.2em] text-neutral-400">Apparatus (35%)</p>
+              <p className="text-xs uppercase tracking-[0.2em] text-neutral-400">Apparatus Readiness</p>
               <p className="mt-2 text-3xl font-black text-white">{formatPercent(result.apparatusScore)}</p>
             </div>
 

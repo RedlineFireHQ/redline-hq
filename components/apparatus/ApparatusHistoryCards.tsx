@@ -35,6 +35,7 @@ interface ApparatusHistoryCardsProps {
   apparatusName: string;
   inspectionHistory: InspectionHistoryRow[];
   inspectionMemberNameById: Record<string, string>;
+  inspectionHelperMemberIdsByInspectionId: Record<string, string[]>;
   deficiencyHistory: DeficiencyHistoryRow[];
   deficiencyPriorityNameById: Record<string, string>;
   deficiencyStatusNameById: Record<string, string>;
@@ -161,6 +162,7 @@ export default function ApparatusHistoryCards({
   apparatusName,
   inspectionHistory,
   inspectionMemberNameById,
+  inspectionHelperMemberIdsByInspectionId,
   deficiencyHistory,
   deficiencyPriorityNameById,
   deficiencyStatusNameById,
@@ -193,6 +195,9 @@ export default function ApparatusHistoryCards({
       const inspectorName = inspection.member_id
         ? inspectionMemberNameById[inspection.member_id] ?? "Unknown"
         : "Unknown";
+      const helperNames = (inspectionHelperMemberIdsByInspectionId[inspection.id] ?? []).map(
+        (memberId) => inspectionMemberNameById[memberId] ?? "Unknown",
+      );
       const inspectionDateTime = formatInspectionDateTime(inspection.created_at);
       const renderedNotes = inspection.notes?.trim() ? inspection.notes : "—";
       const statusLabel =
@@ -210,12 +215,19 @@ export default function ApparatusHistoryCards({
         inspectionDateTime.time,
         statusLabel,
         inspectorName,
+        helperNames.join(" "),
         renderedNotes,
       ]);
 
       return searchableText.includes(query);
     });
-  }, [inspectionHistory, inspectionMemberNameById, inspectionSearch, normalizedApparatusName]);
+  }, [
+    inspectionHelperMemberIdsByInspectionId,
+    inspectionHistory,
+    inspectionMemberNameById,
+    inspectionSearch,
+    normalizedApparatusName,
+  ]);
 
   const filteredDeficiencyHistory = useMemo(() => {
     const query = deficiencySearch.trim().toLowerCase();
@@ -318,7 +330,7 @@ export default function ApparatusHistoryCards({
           />
         </div>
 
-        <div className="mt-6 h-[28rem] overflow-x-auto overflow-y-auto rounded-xl border border-white/10 bg-[#1b1b1b]">
+        <div className="mt-6 max-h-[18rem] overflow-x-auto overflow-y-auto rounded-xl border border-white/10 bg-[#1b1b1b]">
           {filteredInspectionHistory.length === 0 ? (
             <div className="flex min-h-full items-center justify-center px-6 py-8 text-center text-neutral-400">
               No inspection history available.
@@ -339,6 +351,10 @@ export default function ApparatusHistoryCards({
                   const inspectorName = inspection.member_id
                     ? inspectionMemberNameById[inspection.member_id] ?? "Unknown"
                     : "Unknown";
+                  const helperNames = (inspectionHelperMemberIdsByInspectionId[inspection.id] ?? []).map(
+                    (memberId) => inspectionMemberNameById[memberId] ?? "Unknown",
+                  );
+                  const assistedByLabel = helperNames.join(", ");
                   const inspectionDateTime = formatInspectionDateTime(inspection.created_at);
                   const statusLabel =
                     inspection.status === "ready"
@@ -374,7 +390,12 @@ export default function ApparatusHistoryCards({
                           {statusLabel}
                         </span>
                       </td>
-                      <td className="px-4 py-4 align-top text-white">{inspectorName}</td>
+                      <td className="px-4 py-4 align-top text-white">
+                        <p>{inspectorName}</p>
+                        {assistedByLabel ? (
+                          <p className="mt-1 text-xs text-neutral-400">Assisted By: {assistedByLabel}</p>
+                        ) : null}
+                      </td>
                       <td className="px-4 py-4 align-top text-neutral-300">
                         {inspection.notes?.trim() ? inspection.notes : "—"}
                       </td>
@@ -406,7 +427,7 @@ export default function ApparatusHistoryCards({
           />
         </div>
 
-        <div className="mt-6 h-[28rem] overflow-x-auto overflow-y-auto rounded-xl border border-white/10 bg-[#1b1b1b]">
+        <div className="mt-6 max-h-[18rem] overflow-x-auto overflow-y-auto rounded-xl border border-white/10 bg-[#1b1b1b]">
           {filteredDeficiencyHistory.length === 0 ? (
             <div className="flex min-h-full items-center justify-center px-6 py-8 text-center text-neutral-400">
               No deficiencies have been reported for this apparatus.
@@ -507,7 +528,7 @@ export default function ApparatusHistoryCards({
           />
         </div>
 
-        <div className="mt-6 h-[28rem] overflow-x-auto overflow-y-auto rounded-xl border border-white/10 bg-[#1b1b1b]">
+        <div className="mt-6 max-h-[18rem] overflow-x-auto overflow-y-auto rounded-xl border border-white/10 bg-[#1b1b1b]">
           {filteredMaintenanceHistory.length === 0 ? (
             <div className="flex min-h-full items-center justify-center px-6 py-8 text-center text-neutral-400">
               No maintenance records have been reported for this apparatus.

@@ -1,10 +1,15 @@
 import { getApparatus, getOpenDeficiencyCountsByApparatusIds } from "@/lib/database";
 import { getApparatusImagePath } from "@/lib/apparatus-images";
+import { getApparatusReadinessList, getStatusLabelForReadiness } from "@/lib/readiness/apparatus-readiness-data";
 import ApparatusViewSwitcher from "../../components/apparatus/ApparatusViewSwitcher";
+import AddApparatusButton from "@/components/apparatus/AddApparatusButton";
 import PageLayout from "@/components/layout/PageLayout";
 import MetricCard from "@/components/ui/MetricCard";
+import { getCurrentMember } from "@/lib/current-member";
+import { canManageApparatus } from "@/lib/member-permissions";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
 
-type ApparatusStatus = "Ready" | "Checks Due" | "Out of Service";
+type ApparatusStatus = "Ready" | "Checks Due" | "Out of Service" | "Configuration Required";
 
 type ApparatusUnit = {
   id: string;
@@ -39,22 +44,51 @@ function normalizeStatusValue(value: unknown): "ready" | "needs_attention" | "ou
   return null;
 }
 
+function statusLabelFromLegacyStatus(value: unknown): ApparatusStatus {
+  const normalizedStatus = normalizeStatusValue(value) ?? "ready";
+  return normalizedStatus === "out_of_service"
+    ? "Out of Service"
+    : normalizedStatus === "needs_attention"
+      ? "Checks Due"
+      : "Ready";
+}
+
 export default async function ApparatusPage() {
-  const apparatusData = await getApparatus();
+  const supabase = await createSupabaseServerClient();
+  const currentMember = await getCurrentMember(supabase);
+  const canAddApparatus = currentMember?.departmentId
+    ? await canManageApparatus(supabase, currentMember.departmentId, currentMember.role)
+    : false;
+  const departmentCheckDefault = currentMember?.departmentId
+    ? await supabase
+        .from("apparatus_check_department_defaults")
+        .select("interval_days")
+        .eq("department_id", currentMember.departmentId)
+        .eq("is_active", true)
+        .order("effective_start_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    : { data: null };
+
+  const apparatusData = await getApparatus(supabase);
   const apparatusIds = apparatusData.map((unit) => String(unit.id));
   const openDeficiencyCountByApparatusId = await getOpenDeficiencyCountsByApparatusIds(apparatusIds);
+  const readinessRows = await getApparatusReadinessList();
+  const readinessByApparatusId = readinessRows.reduce<Record<string, (typeof readinessRows)[number]["readiness"]>>(
+    (accumulator, row) => {
+      accumulator[row.apparatus.id] = row.readiness;
+      return accumulator;
+    },
+    {}
+  );
 
   const apparatusUnits: ApparatusUnit[] = apparatusData.map((unit) => {
-    const normalizedStatus =
-      normalizeStatusValue(unit.last_inspection_result) ??
-      normalizeStatusValue(unit.status) ??
-      "ready";
-    const status =
-      normalizedStatus === "out_of_service"
-        ? "Out of Service"
-        : normalizedStatus === "needs_attention"
-          ? "Checks Due"
-          : "Ready";
+    const readiness = readinessByApparatusId[String(unit.id)];
+    const status = readiness
+      ? getStatusLabelForReadiness(readiness)
+      : statusLabelFromLegacyStatus(
+          normalizeStatusValue(unit.last_inspection_result) ?? normalizeStatusValue(unit.status)
+        );
 
     const lastInspection = unit.last_inspection_at
       ? new Date(unit.last_inspection_at).toLocaleDateString("en-US", {
@@ -73,7 +107,9 @@ export default async function ApparatusPage() {
       status,
       lastInspection,
       openDeficiencies,
-      readiness: status,
+      readiness: readiness?.scorePercent === null || readiness?.scorePercent === undefined
+        ? "NOT SCORED"
+        : `${Math.round(readiness.scorePercent)}%`,
       imageUrl: getApparatusImagePath(unit.name),
     };
   });
@@ -92,16 +128,22 @@ export default async function ApparatusPage() {
   );
 
   return (
-    <PageLayout>
+    <PageLayout
+      environmentBackgroundUrl="/branding/images/apparatuspageimage.png"
+      environmentBackgroundPosition="left center"
+    >
       <div className="space-y-8">
         {/* Header */}
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.3em] text-red-500">
-              Command Center
+            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">
+              Fleet Readiness
             </p>
 
-            <h1 className="mt-2 text-5xl font-black tracking-tight text-white">
+            <h1
+              className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white"
+              style={{ fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif' }}
+            >
               Apparatus
             </h1>
 
@@ -110,35 +152,55 @@ export default async function ApparatusPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-            <MetricCard
-              title="Total Apparatus"
-              value={totalApparatus}
+          <div className="flex flex-col items-end gap-3">
+            <AddApparatusButton
+              canAdd={canAddApparatus}
+              departmentCheckDefaultIntervalDays={
+                typeof departmentCheckDefault.data?.interval_days === "number"
+                  ? departmentCheckDefault.data.interval_days
+                  : null
+              }
             />
+            <div className="grid w-full max-w-[860px] grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
+              <div className="[transform-origin:center] [transform:scale(0.92)]">
+                <MetricCard
+                  title="Total Apparatus"
+                  value={totalApparatus}
+                />
+              </div>
 
-            <MetricCard
-              title="Ready"
-              value={readyCount}
-              color="text-green-400"
-            />
+            <div className="[transform-origin:center] [transform:scale(0.92)]">
+              <MetricCard
+                title="Ready"
+                value={readyCount}
+                color="text-green-400"
+              />
+            </div>
 
-            <MetricCard
-              title="Checks Due"
-              value={checksDueCount}
-              color="text-amber-400"
-            />
+            <div className="[transform-origin:center] [transform:scale(0.92)]">
+              <MetricCard
+                title="Checks Due"
+                value={checksDueCount}
+                color="text-amber-400"
+              />
+            </div>
 
-            <MetricCard
-              title="Open Deficiencies"
-              value={openDeficienciesCount}
-              color="text-orange-400"
-            />
+            <div className="[transform-origin:center] [transform:scale(0.92)]">
+              <MetricCard
+                title="Open Deficiencies"
+                value={openDeficienciesCount}
+                color="text-orange-400"
+              />
+            </div>
 
-            <MetricCard
-              title="Out of Service"
-              value={outOfServiceCount}
-              color="text-red-500"
-            />
+              <div className="[transform-origin:center] [transform:scale(0.92)]">
+                <MetricCard
+                  title="Out of Service"
+                  value={outOfServiceCount}
+                  color="text-red-500"
+                />
+              </div>
+            </div>
           </div>
         </div>
 
