@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
+import { PdfTextHighlightViewer } from "@/components/documents/PdfTextHighlightViewer";
 import { getCurrentMember } from "@/lib/current-member";
 import {
   DEPARTMENT_DOCUMENTS_CATEGORY,
@@ -50,11 +51,14 @@ export default async function DocumentViewerPage({
   searchParams,
 }: {
   params: Promise<{ category: string; documentId: string }>;
-  searchParams?: Promise<{ q?: string }>;
+  searchParams?: Promise<{ q?: string; m?: string }>;
 }) {
   const { category, documentId } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const insideDocumentQuery = (resolvedSearchParams.q ?? "").trim();
+  const selectedMatchIndex = Number.isFinite(Number.parseInt(String(resolvedSearchParams.m ?? "0"), 10))
+    ? Math.max(0, Number.parseInt(String(resolvedSearchParams.m ?? "0"), 10))
+    : 0;
 
   const supabase = await createSupabaseServerClient();
   const currentMember = await getCurrentMember(supabase);
@@ -127,6 +131,7 @@ export default async function DocumentViewerPage({
     "-";
 
   const signedUrl = await resolveSignedUrl(supabase, currentRevision?.file_path ?? null);
+  const isPdfPreview = currentRevision?.mime_type?.toLowerCase() === "application/pdf";
 
   const normalizedQuery = insideDocumentQuery.toLowerCase();
   const hasSearchableContent = typeof currentRevision?.content_text === "string" && currentRevision.content_text.trim().length > 0;
@@ -136,11 +141,6 @@ export default async function DocumentViewerPage({
           .toLowerCase()
           .includes(normalizedQuery)
       : false;
-
-  const documentPreviewText =
-    hasSearchableContent && currentRevision?.content_text
-      ? currentRevision.content_text
-      : "Searchable document content is not yet available for this file.";
 
   const isLibraryOwnedDepartmentDocument =
     document.category === DEPARTMENT_DOCUMENTS_CATEGORY && document.source_kind === "library";
@@ -264,6 +264,77 @@ export default async function DocumentViewerPage({
           </Link>
         </div>
 
+        <section className="rounded-2xl border border-neutral-800 bg-[#1b1b1b] p-5">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Search this document</p>
+              <h2 className="mt-2 text-xl font-black text-white">Document content search</h2>
+            </div>
+          </div>
+
+          <form action={`/documents/${category}/${documentId}`} method="get" className="mt-4 flex gap-3">
+            <input
+              type="text"
+              name="q"
+              defaultValue={insideDocumentQuery}
+              placeholder="Search this document..."
+              className="w-full rounded-xl border border-white/10 bg-[#111111] px-4 py-3 text-sm text-white placeholder:text-neutral-500 focus:border-red-500/60 focus:outline-none"
+            />
+            <button
+              type="submit"
+              className="inline-flex items-center justify-center rounded-xl border border-red-500/50 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-100"
+            >
+              Search
+            </button>
+          </form>
+
+          {insideDocumentQuery ? (
+            hasSearchableContent ? (
+              insideDocumentMatches ? (
+                <div className="mt-4 space-y-3">
+                  <div className="rounded-xl border border-emerald-900 bg-emerald-950/20 p-4 text-sm text-emerald-200">
+                    Matching content was found in the document’s stored searchable text.
+                  </div>
+                  {matchSnippets.length > 0 ? (
+                    <div className="space-y-3 rounded-xl border border-white/10 bg-[#111111] p-4">
+                      <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">
+                        {matchSnippets.length} match{matchSnippets.length === 1 ? "" : "es"} found
+                      </p>
+                      {matchSnippets.map((snippet, index) => (
+                        <Link
+                          key={`${snippet}-${index}`}
+                          href={`/documents/${category}/${documentId}?q=${encodeURIComponent(insideDocumentQuery)}&m=${index}`}
+                          className={`block rounded-xl border p-3 text-left text-sm leading-6 transition ${
+                            selectedMatchIndex === index
+                              ? "border-red-500/70 bg-red-500/10 text-red-100"
+                              : "border-white/10 bg-[#0d0d0d] text-neutral-300 hover:border-red-500/40"
+                          }`}
+                        >
+                          “{snippet}”
+                        </Link>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="mt-4 rounded-xl border border-yellow-900 bg-yellow-950/20 p-4 text-sm text-yellow-200">
+                  No matching content found in the document’s available searchable text.
+                </div>
+              )
+            ) : (
+              <div className="mt-4 rounded-xl border border-amber-900 bg-amber-950/20 p-4 text-sm text-amber-200">
+                Searchable document content is not yet available for this file.
+              </div>
+            )
+          ) : (
+            <div className="mt-4 rounded-xl border border-white/10 bg-[#111111] p-4 text-sm text-neutral-400">
+              {hasSearchableContent
+                ? "Use the search field above to look for matching content within the stored document text."
+                : "This document does not currently have searchable content available for inside-document search."}
+            </div>
+          )}
+        </section>
+
         <div className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
           <div className="rounded-2xl border border-white/10 bg-[#111111] p-5">
             <div className="mb-4 flex items-center justify-between gap-3">
@@ -280,9 +351,15 @@ export default async function DocumentViewerPage({
               ) : null}
             </div>
 
-            {signedUrl && currentRevision?.mime_type?.toLowerCase() === "application/pdf" ? (
+            {signedUrl && isPdfPreview ? (
               <div className="overflow-hidden rounded-xl border border-white/10 bg-black">
-                <iframe src={signedUrl} title={document.title} className="h-[760px] w-full" />
+                <PdfTextHighlightViewer
+                  key={`${signedUrl}:${insideDocumentQuery}:${selectedMatchIndex}`}
+                  fileUrl={signedUrl}
+                  title={document.title}
+                  query={insideDocumentQuery}
+                  selectedMatchIndex={selectedMatchIndex}
+                />
               </div>
             ) : signedUrl ? (
               <div className="rounded-xl border border-white/10 bg-[#0c0c0c] p-8 text-center">
@@ -382,68 +459,6 @@ export default async function DocumentViewerPage({
           </aside>
         </div>
 
-        <section className="rounded-2xl border border-neutral-800 bg-[#1b1b1b] p-5">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Search this document</p>
-              <h2 className="mt-2 text-xl font-black text-white">Document content search</h2>
-            </div>
-          </div>
-
-          <form action={`/documents/${category}/${documentId}`} method="get" className="mt-4 flex gap-3">
-            <input
-              type="text"
-              name="q"
-              defaultValue={insideDocumentQuery}
-              placeholder="Search this document..."
-              className="w-full rounded-xl border border-white/10 bg-[#111111] px-4 py-3 text-sm text-white placeholder:text-neutral-500 focus:border-red-500/60 focus:outline-none"
-            />
-            <button
-              type="submit"
-              className="inline-flex items-center justify-center rounded-xl border border-red-500/50 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-100"
-            >
-              Search
-            </button>
-          </form>
-
-          {insideDocumentQuery ? (
-            hasSearchableContent ? (
-              insideDocumentMatches ? (
-                <div className="mt-4 space-y-3">
-                  <div className="rounded-xl border border-emerald-900 bg-emerald-950/20 p-4 text-sm text-emerald-200">
-                    Matching content was found in the document’s stored searchable text.
-                  </div>
-                  {matchSnippets.length > 0 ? (
-                    <div className="space-y-3 rounded-xl border border-white/10 bg-[#111111] p-4">
-                      <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">
-                        {matchSnippets.length} match{matchSnippets.length === 1 ? "" : "es"} found
-                      </p>
-                      {matchSnippets.map((snippet, index) => (
-                        <div key={`${snippet}-${index}`} className="rounded-xl border border-white/10 bg-[#0d0d0d] p-3 text-sm leading-6 text-neutral-300">
-                          “{snippet}”
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <div className="mt-4 rounded-xl border border-yellow-900 bg-yellow-950/20 p-4 text-sm text-yellow-200">
-                  No matching content found in the document’s available searchable text.
-                </div>
-              )
-            ) : (
-              <div className="mt-4 rounded-xl border border-amber-900 bg-amber-950/20 p-4 text-sm text-amber-200">
-                Searchable document content is not yet available for this file.
-              </div>
-            )
-          ) : (
-            <div className="mt-4 rounded-xl border border-white/10 bg-[#111111] p-4 text-sm text-neutral-400">
-              {hasSearchableContent
-                ? "Use the search field above to look for matching content within the stored document text."
-                : "This document does not currently have searchable content available for inside-document search."}
-            </div>
-          )}
-        </section>
       </div>
   );
 }
