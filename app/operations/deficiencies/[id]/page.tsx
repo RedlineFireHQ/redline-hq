@@ -438,6 +438,12 @@ export default async function DeficiencyDetailPage({
 					? "PIE Equipment"
 					: deficiency.category?.name ?? "Uncategorized";
 	const isResolved = statusName.trim().toLowerCase() === "resolved";
+	const [{ data: canEditDeficiencyData }, { data: canResolveDeficiencyData }] = await Promise.all([
+		supabase.rpc("can_edit_deficiency", { p_deficiency_id: deficiency.id }),
+		supabase.rpc("can_resolve_deficiency", { p_deficiency_id: deficiency.id }),
+	]);
+	const canEditDeficiency = Boolean(canEditDeficiencyData);
+	const canResolveDeficiency = Boolean(canResolveDeficiencyData);
 	const reportedByMemberIds = Array.from(
 		new Set(
 			[deficiency.reported_by, deficiency.reported_by_member_id].filter(
@@ -690,30 +696,39 @@ export default async function DeficiencyDetailPage({
 					) : null}
 
 					<div className="mt-8 flex flex-wrap gap-3 border-t border-white/10 pt-6">
-						<Link
-							href={`/operations/deficiencies/${deficiency.id}/assign-repair`}
-							className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-zinc-200 transition hover:bg-white/[0.08]"
-						>
-							Assign Repair
-						</Link>
-						<Link
-							href={`/operations/deficiencies/${deficiency.id}/edit`}
-							className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-zinc-200 transition hover:bg-white/[0.08]"
-						>
-							Edit
-						</Link>
+						{canEditDeficiency ? (
+							<>
+								<Link
+									href={`/operations/deficiencies/${deficiency.id}/assign-repair`}
+									className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-zinc-200 transition hover:bg-white/[0.08]"
+								>
+									Assign Repair
+								</Link>
+								<Link
+									href={`/operations/deficiencies/${deficiency.id}/edit`}
+									className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-zinc-200 transition hover:bg-white/[0.08]"
+								>
+									Edit
+								</Link>
+							</>
+						) : null}
 						{isResolved ? (
 							<span className="rounded-xl border border-emerald-500/30 bg-emerald-600/80 px-4 py-2 text-sm font-semibold text-white opacity-60">
 								Resolved
 							</span>
-						) : (
+						) : canResolveDeficiency ? (
 							<Link
 								href={`/operations/deficiencies/${deficiency.id}/resolve`}
 								className="rounded-xl border border-emerald-500/30 bg-emerald-600/80 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500"
 							>
 								Resolve
 							</Link>
-						)}
+						) : null}
+						{!canEditDeficiency && !canResolveDeficiency ? (
+							<span className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm font-semibold text-amber-200">
+								View Only
+							</span>
+						) : null}
 					</div>
 				</div>
 

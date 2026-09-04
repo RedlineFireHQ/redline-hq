@@ -126,13 +126,14 @@ export default function EditMemberButton({
 
       {isOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-2xl rounded-xl border border-neutral-700 bg-neutral-900 p-6">
+          <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-neutral-700 bg-neutral-900 p-6">
             <div className="mb-4">
               <h2 className="text-2xl font-bold text-white">Edit Member</h2>
               <p className="mt-1 text-sm text-neutral-400">Update contact details, rank, active status, and special permissions.</p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="flex min-h-0 flex-col">
+              <div className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
                 <label className="text-sm text-neutral-300">
                   First name
@@ -248,7 +249,8 @@ export default function EditMemberButton({
               {formState.specialPermissionsEnabled ? (
                 <div className="rounded-lg border border-neutral-700 bg-neutral-950 p-3">
                   <p className="mb-2 text-xs uppercase tracking-[0.16em] text-neutral-400">Permission Access</p>
-                  <div className="grid gap-2 md:grid-cols-2">
+                  <div className="max-h-56 overflow-y-auto pr-1">
+                    <div className="grid gap-2 md:grid-cols-2">
                     {sortedPermissionOptions.map((permission) => (
                       <label key={permission.key} className="flex items-start gap-2 rounded border border-neutral-800 p-2 text-sm text-neutral-200">
                         <input
@@ -262,6 +264,7 @@ export default function EditMemberButton({
                         </span>
                       </label>
                     ))}
+                    </div>
                   </div>
                 </div>
               ) : null}
@@ -271,8 +274,9 @@ export default function EditMemberButton({
                   {errorMessage}
                 </div>
               ) : null}
+              </div>
 
-              <div className="flex justify-end gap-3 pt-2">
+              <div className="mt-4 flex shrink-0 justify-end gap-3 border-t border-neutral-800 pt-3">
                 <button
                   type="button"
                   onClick={closeModal}

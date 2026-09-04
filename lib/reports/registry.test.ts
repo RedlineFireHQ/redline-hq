@@ -33,6 +33,7 @@ test("EMS report is available and exposes real report fields", () => {
   const equipmentStatusOptions = source.filters.find((filter) => filter.key === "equipment_status")?.options ?? [];
   assert.ok(equipmentStatusOptions.some((option) => option.value === "active"), "EMS equipment status filter should include Active");
   assert.ok(equipmentStatusOptions.some((option) => option.value === "inactive"), "EMS equipment status filter should include Inactive");
+  assert.ok(equipmentStatusOptions.some((option) => option.value === "out of service"), "EMS equipment status filter should include Out of Service");
 
   const supplyStockLevelOptions = source.filters.find((filter) => filter.key === "supply_stock_level")?.options ?? [];
   assert.ok(supplyStockLevelOptions.some((option) => option.value === "low_or_worse"), "EMS supplies should include low stock filtering");

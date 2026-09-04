@@ -43,6 +43,7 @@ const GAS_MONITOR_CATEGORY_TOKEN = "gas monitor";
 const BATTERY_CATEGORY_TOKEN = "battery";
 const THERMAL_IMAGING_CAMERA_CATEGORY_TOKEN = "thermal imaging camera";
 const EMS_EQUIPMENT_CATEGORY_TOKEN = "ems equipment";
+const PORTABLE_RADIO_CATEGORY_TOKEN = "portable radio";
 const PPE_CATEGORY_TOKEN = "personal protective equipment";
 const ROPE_CATEGORY_TOKEN = "rope";
 const FIRE_EXTINGUISHER_CATEGORY_TOKEN = "fire extinguisher";
@@ -85,6 +86,10 @@ function getInventoryEquipmentTypeLabel(normalizedInventoryCategory: string) {
 
   if (normalizedInventoryCategory === "ems-equipment") {
     return "EMS Equipment";
+  }
+
+  if (normalizedInventoryCategory === "portable-radios") {
+    return "Portable Radio";
   }
 
   if (normalizedInventoryCategory === "ppe") {
@@ -188,6 +193,14 @@ function resolveInventoryCategoryOption(
     );
   }
 
+  if (normalizedInventoryCategory === "portable-radios") {
+    return (
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes(PORTABLE_RADIO_CATEGORY_TOKEN))?.option ??
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes(INVENTORY_CATEGORY_TOKEN))?.option ??
+      null
+    );
+  }
+
   if (normalizedInventoryCategory === "ppe") {
     return (
       normalizedOptions.find((entry) => entry.normalizedLabel.includes(PPE_CATEGORY_TOKEN))?.option ??
@@ -253,7 +266,7 @@ async function resolveCurrentInventoryApparatusDefault(
 ): Promise<string | null> {
   if (
     !inventoryItemId ||
-    (inventoryCategory !== "pie" && inventoryCategory !== "gas-monitors" && inventoryCategory !== "battery" && inventoryCategory !== "thermal-cameras" && inventoryCategory !== "ground-ladders" && inventoryCategory !== "fire-extinguishers" && inventoryCategory !== "misc-fire-equipment")
+    (inventoryCategory !== "pie" && inventoryCategory !== "gas-monitors" && inventoryCategory !== "battery" && inventoryCategory !== "thermal-cameras" && inventoryCategory !== "ground-ladders" && inventoryCategory !== "fire-extinguishers" && inventoryCategory !== "misc-fire-equipment" && inventoryCategory !== "ems-equipment" && inventoryCategory !== "portable-radios")
   ) {
     return null;
   }
@@ -264,6 +277,7 @@ async function resolveCurrentInventoryApparatusDefault(
   const isGroundLadder = inventoryCategory === "ground-ladders";
   const isFireExtinguisher = inventoryCategory === "fire-extinguishers";
   const isMiscFireEquipment = inventoryCategory === "misc-fire-equipment";
+  const isPortableRadio = inventoryCategory === "portable-radios";
   const tableName = isPie
     ? "pie_equipment_assignments"
     : isGasMonitor
@@ -276,7 +290,9 @@ async function resolveCurrentInventoryApparatusDefault(
             ? "fire_extinguishers"
             : isMiscFireEquipment
               ? "misc_fire_equipment"
-              : "thermal_imaging_camera_assignments";
+              : isPortableRadio
+                ? "portable_radio_assignments"
+                : "thermal_imaging_camera_assignments";
   const foreignKeyName = isPie
     ? "pie_equipment_id"
     : isGasMonitor
@@ -289,7 +305,9 @@ async function resolveCurrentInventoryApparatusDefault(
             ? "id"
             : isMiscFireEquipment
               ? "id"
-              : "thermal_imaging_camera_id";
+              : isPortableRadio
+                ? "portable_radio_id"
+                : "thermal_imaging_camera_id";
 
   if (isFireExtinguisher) {
     const { data, error } = await supabase
@@ -345,6 +363,61 @@ async function resolveCurrentInventoryApparatusDefault(
     return STATION_SUPPLY_OPTION.id;
   }
 
+  if (inventoryCategory === "ems-equipment") {
+    const { data, error } = await supabase
+      .from("ems_equipment")
+      .select("location")
+      .eq("id", inventoryItemId)
+      .maybeSingle();
+
+    if (error) {
+      console.error("[deficiency-report] failed to resolve current EMS equipment location", error);
+      return null;
+    }
+
+    if (!data || typeof data !== "object") {
+      return null;
+    }
+
+    const row = data as Record<string, unknown>;
+    const locationValue = typeof row.location === "string" ? row.location.trim() : "";
+    if (!locationValue) {
+      return STATION_SUPPLY_OPTION.id;
+    }
+
+    if (locationValue === "EMS Supply Locker") {
+      return STATION_SUPPLY_OPTION.id;
+    }
+
+    const apparatusPrefix = "Apparatus:";
+    if (locationValue.startsWith(apparatusPrefix)) {
+      const apparatusName = locationValue.slice(apparatusPrefix.length).trim();
+      if (!apparatusName) {
+        return "";
+      }
+
+      const { data: apparatusRow, error: apparatusError } = await supabase
+        .from("apparatus")
+        .select("id, name")
+        .ilike("name", apparatusName)
+        .limit(1)
+        .maybeSingle();
+
+      if (apparatusError) {
+        console.error("[deficiency-report] failed to resolve EMS apparatus by name", apparatusError);
+        return "";
+      }
+
+      return typeof apparatusRow?.id === "string" ? apparatusRow.id : "";
+    }
+
+    if (locationValue.startsWith("Station/Facility:") || locationValue.startsWith("Station:") || locationValue.startsWith("Facility:")) {
+      return STATION_SUPPLY_OPTION.id;
+    }
+
+    return "";
+  }
+
   const { data, error } = await supabase
     .from(tableName)
     .select("assignment_type, apparatus_id")
@@ -356,7 +429,7 @@ async function resolveCurrentInventoryApparatusDefault(
 
   if (error) {
     console.error(
-    `[deficiency-report] failed to resolve current ${isPie ? "PIE" : isGasMonitor ? "gas monitor" : isBattery ? "battery" : isGroundLadder ? "ground ladder" : "thermal imaging camera"} assignment`,
+    `[deficiency-report] failed to resolve current ${isPie ? "PIE" : isGasMonitor ? "gas monitor" : isBattery ? "battery" : isGroundLadder ? "ground ladder" : isPortableRadio ? "portable radio" : "thermal imaging camera"} assignment`,
     error,
   );
     return null;
@@ -442,6 +515,7 @@ export default function ReportDeficiencyPage() {
     normalizedInventoryCategory === "thermal-cameras" ||
     normalizedInventoryCategory === "ground-ladders" ||
     normalizedInventoryCategory === "ems-equipment" ||
+    normalizedInventoryCategory === "portable-radios" ||
     normalizedInventoryCategory === "ppe" ||
     normalizedInventoryCategory === "rope" ||
     normalizedInventoryCategory === "fire-extinguishers" ||
@@ -483,6 +557,7 @@ export default function ReportDeficiencyPage() {
       normalizedInventoryCategory !== "thermal-cameras" &&
       normalizedInventoryCategory !== "ground-ladders" &&
       normalizedInventoryCategory !== "ems-equipment" &&
+      normalizedInventoryCategory !== "portable-radios" &&
       normalizedInventoryCategory !== "ppe" &&
       normalizedInventoryCategory !== "rope" &&
       normalizedInventoryCategory !== "misc-fire-equipment"
@@ -540,6 +615,11 @@ export default function ReportDeficiencyPage() {
         selectColumn = "equipment_name";
       }
 
+      if (normalizedInventoryCategory === "portable-radios") {
+        inventoryTable = "portable_radios";
+        selectColumn = "radio_number";
+      }
+
       if (normalizedInventoryCategory === "ppe") {
         inventoryTable = "ppe_items";
         selectColumn = "item_name";
@@ -584,6 +664,8 @@ export default function ReportDeficiencyPage() {
         nextLabel = typeof record.ladder_number === "string" ? record.ladder_number : "";
       } else if (normalizedInventoryCategory === "ems-equipment") {
         nextLabel = typeof record.equipment_name === "string" ? record.equipment_name : "";
+      } else if (normalizedInventoryCategory === "portable-radios") {
+        nextLabel = typeof record.radio_number === "string" ? record.radio_number : "";
       } else if (normalizedInventoryCategory === "ppe") {
         nextLabel = typeof record.item_name === "string" ? record.item_name : "";
       } else if (normalizedInventoryCategory === "rope") {
@@ -612,7 +694,9 @@ export default function ReportDeficiencyPage() {
     if (
       normalizedInventoryCategory === "pie" ||
       normalizedInventoryCategory === "gas-monitors" ||
-      normalizedInventoryCategory === "battery"
+      normalizedInventoryCategory === "battery" ||
+      normalizedInventoryCategory === "ems-equipment" ||
+      normalizedInventoryCategory === "portable-radios"
     ) {
       return;
     }
@@ -741,7 +825,9 @@ export default function ReportDeficiencyPage() {
           normalizedInventoryCategory === "thermal-cameras" ||
           normalizedInventoryCategory === "ground-ladders" ||
           normalizedInventoryCategory === "fire-extinguishers" ||
-          normalizedInventoryCategory === "misc-fire-equipment"
+          normalizedInventoryCategory === "misc-fire-equipment" ||
+          normalizedInventoryCategory === "ems-equipment" ||
+          normalizedInventoryCategory === "portable-radios"
             ? ((await resolveCurrentInventoryApparatusDefault(normalizedInventoryCategory, inventoryItemId)) ?? "")
             : STATION_SUPPLY_OPTION.id;
 
@@ -798,6 +884,7 @@ export default function ReportDeficiencyPage() {
     const isThermalImagingCameraDeficiency = normalizedInventoryCategory === "thermal-cameras";
     const isGroundLadderDeficiency = normalizedInventoryCategory === "ground-ladders";
     const isEmsEquipmentDeficiency = normalizedInventoryCategory === "ems-equipment";
+    const isPortableRadioDeficiency = normalizedInventoryCategory === "portable-radios";
     const isPpeDeficiency = normalizedInventoryCategory === "ppe";
     const isRopeDeficiency = normalizedInventoryCategory === "rope";
     const isMiscFireEquipmentDeficiency = normalizedInventoryCategory === "misc-fire-equipment";
@@ -909,6 +996,7 @@ export default function ReportDeficiencyPage() {
       ground_ladder_id: isGroundLadderDeficiency && inventoryItemId ? inventoryItemId : null,
       fire_extinguisher_id: normalizedInventoryCategory === "fire-extinguishers" && inventoryItemId ? inventoryItemId : null,
       ems_equipment_id: isEmsEquipmentDeficiency && inventoryItemId ? inventoryItemId : null,
+      portable_radio_id: isPortableRadioDeficiency && inventoryItemId ? inventoryItemId : null,
       ppe_item_id: isPpeDeficiency && inventoryItemId ? inventoryItemId : null,
       rope_item_id: isRopeDeficiency && inventoryItemId ? inventoryItemId : null,
       misc_fire_equipment_id: isMiscFireEquipmentDeficiency && inventoryItemId ? inventoryItemId : null,
@@ -1032,6 +1120,7 @@ export default function ReportDeficiencyPage() {
                 normalizedInventoryCategory === "thermal-cameras" ||
                 normalizedInventoryCategory === "ground-ladders" ||
                 normalizedInventoryCategory === "ems-equipment" ||
+                normalizedInventoryCategory === "portable-radios" ||
                 normalizedInventoryCategory === "ppe" ||
                 normalizedInventoryCategory === "rope" ||
                 normalizedInventoryCategory === "misc-fire-equipment") &&

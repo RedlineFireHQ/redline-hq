@@ -1,9 +1,10 @@
 import PpeWorkspace, {
   type PpeRow,
 } from "@/components/inventory/PpeWorkspace";
-import type { PpeMemberOption } from "@/components/inventory/PpeFormModal";
+import type { PpeApparatusOption, PpeMemberOption } from "@/components/inventory/PpeFormModal";
 import { getCurrentMember } from "@/lib/current-member";
-import { calculatePpeReadiness, type PpeReadinessItem } from "@/lib/inventory/ppe-readiness";
+import { getActiveApparatusOptions } from "@/lib/database";
+import { hasDepartmentPermission } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 type MemberRow = {
@@ -78,21 +79,27 @@ export default async function PpeInventoryPage() {
   const supabase = await createSupabaseServerClient();
   const currentMember = await getCurrentMember(supabase);
   const departmentId = currentMember?.departmentId ?? null;
-  const canManagePpe =
-    currentMember?.role === "administrator" || currentMember?.role === "officer";
+  const canManagePpe = departmentId
+    ? await hasDepartmentPermission(
+        supabase,
+        departmentId,
+        currentMember?.role,
+        "inventory_management",
+      )
+    : false;
 
   let departmentName: string | null = null;
   let initialRows: PpeRow[] = [];
   let memberOptions: PpeMemberOption[] = [];
+  let apparatusOptions: PpeApparatusOption[] = [];
   let initialError: string | null = null;
-  let readinessState = calculatePpeReadiness([]);
 
   if (departmentId) {
     const [
       { data: departmentData },
       { data: ppeData, error },
       { data: memberData, error: memberError },
-      { data: deficiencyData, error: deficiencyError },
+      activeApparatusOptions,
     ] = await Promise.all([
       supabase
         .from("departments")
@@ -112,11 +119,7 @@ export default async function PpeInventoryPage() {
         .select("id, first_name, last_name")
         .eq("department_id", departmentId)
         .eq("active", true),
-      supabase
-        .from("deficiencies")
-        .select("ppe_item_id, status_info:deficiency_statuses!fk_deficiencies_status(name, active)")
-        .eq("department_id", departmentId)
-        .not("ppe_item_id", "is", null),
+      getActiveApparatusOptions({ client: supabase, departmentId }),
     ]);
 
     departmentName = typeof departmentData?.name === "string" ? departmentData.name : null;
@@ -130,56 +133,28 @@ export default async function PpeInventoryPage() {
       console.error("[ppe] member load failed", memberError);
     }
 
-    if (deficiencyError) {
-      console.error("[ppe] deficiency load failed", deficiencyError);
-    }
-
     const sortedMembers = [...((memberData ?? []) as MemberRow[])].sort(compareByFirstNameThenLastName);
     memberOptions = sortedMembers.map((member) => ({
       id: member.id,
       label: memberDisplayName(member),
     }));
+    apparatusOptions = activeApparatusOptions.map((row) => ({
+      id: row.id,
+      label: row.name?.trim() || row.id,
+    }));
 
     initialRows = [...((ppeData ?? []) as Array<PpeRow & { assigned_member?: unknown }>)]
       .map((row) => ({
         ...row,
-        assigned_member_name: memberDisplayName({
-          id: row.assigned_member_id,
-          first_name: (row.assigned_member as { first_name?: string | null } | null)?.first_name ?? null,
-          last_name: (row.assigned_member as { last_name?: string | null } | null)?.last_name ?? null,
-        }),
+        assigned_member_name: row.assigned_member_id
+          ? memberDisplayName({
+              id: row.assigned_member_id,
+              first_name: (row.assigned_member as { first_name?: string | null } | null)?.first_name ?? null,
+              last_name: (row.assigned_member as { last_name?: string | null } | null)?.last_name ?? null,
+            })
+          : null,
       }))
       .sort((left, right) => compareItemNames(left.item_name, right.item_name));
-
-    const openDeficiencyByPpeId = new Set<string>();
-
-    for (const record of (deficiencyData ?? []) as Array<{
-      ppe_item_id: string | null;
-      status_info:
-        | { name: string | null; active: boolean | null }
-        | Array<{ name: string | null; active: boolean | null }>
-        | null;
-    }>) {
-      if (!record.ppe_item_id) {
-        continue;
-      }
-
-      const statusRelation = Array.isArray(record.status_info) ? record.status_info[0] : record.status_info;
-      const statusName = typeof statusRelation?.name === "string" ? statusRelation.name.trim().toLowerCase() : "";
-      const statusActive = typeof statusRelation?.active === "boolean" ? statusRelation.active : null;
-      const isOpen = statusActive !== false && statusName !== "resolved" && statusName !== "closed";
-
-      if (isOpen) {
-        openDeficiencyByPpeId.add(record.ppe_item_id);
-      }
-    }
-
-    const readinessItems: PpeReadinessItem[] = initialRows.map((row) => ({
-      isActive: row.status === "Active",
-      hasOpenDeficiency: openDeficiencyByPpeId.has(row.id),
-    }));
-
-    readinessState = calculatePpeReadiness(readinessItems);
   }
 
   return (
@@ -188,9 +163,9 @@ export default async function PpeInventoryPage() {
         departmentName={departmentName}
         canManagePpe={canManagePpe}
         memberOptions={memberOptions}
+        apparatusOptions={apparatusOptions}
         initialRows={initialRows}
         initialError={initialError}
-        readinessState={readinessState}
       />
     
   );

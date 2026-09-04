@@ -3,11 +3,12 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import EmsEquipmentFormModal, {
+  type EmsEquipmentApparatusOption,
   type EmsEquipmentFormValues,
 } from "@/components/inventory/EmsEquipmentFormModal";
 import EmsInventorySwitch from "@/components/inventory/EmsInventorySwitch";
 
-type EquipmentStatus = "Active" | "Inactive";
+type EquipmentStatus = "Active" | "Inactive" | "Out of Service";
 
 export type EmsEquipmentRow = {
   id: string;
@@ -45,11 +46,12 @@ type EquipmentDeficienciesResponse = {
 type WorkspaceProps = {
   departmentName: string | null;
   canManageEquipment: boolean;
+  apparatusOptions: EmsEquipmentApparatusOption[];
   initialRows: EmsEquipmentRow[];
   initialError?: string | null;
 };
 
-type StatusFilter = "All" | "Active" | "Inactive";
+type StatusFilter = "All" | "Active" | "Inactive" | "Out of Service";
 
 function compareEquipmentNames(left: string | null | undefined, right: string | null | undefined): number {
   const leftValue = typeof left === "string" ? left.trim() : "";
@@ -95,25 +97,11 @@ function statusBadgeClasses(status: EquipmentStatus) {
     return "border-green-700/40 bg-green-900/20 text-green-300";
   }
 
+  if (status === "Out of Service") {
+    return "border-red-700/40 bg-red-900/20 text-red-300";
+  }
+
   return "border-neutral-600/40 bg-neutral-900 text-neutral-300";
-}
-
-function summaryCardClasses(active: boolean, tone: "all" | "active" | "inactive") {
-  const base = "rounded-xl border px-4 py-3 text-left transition";
-
-  if (active) {
-    return `${base} border-white/20 bg-white/[0.06]`;
-  }
-
-  if (tone === "active") {
-    return `${base} border-green-700/30 bg-green-950/20 hover:bg-green-950/30`;
-  }
-
-  if (tone === "inactive") {
-    return `${base} border-neutral-700/30 bg-neutral-900/40 hover:bg-neutral-900/60`;
-  }
-
-  return `${base} border-white/10 bg-[#1b1b1b] hover:bg-[#202020]`;
 }
 
 function normalizeApiError(payload: unknown, fallback: string) {
@@ -198,6 +186,7 @@ async function fileToUploadPayload(file: File) {
 export default function EmsEquipmentWorkspace({
   departmentName,
   canManageEquipment,
+  apparatusOptions,
   initialRows,
   initialError = null,
 }: WorkspaceProps) {
@@ -217,15 +206,11 @@ export default function EmsEquipmentWorkspace({
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"add" | "edit">("add");
   const [isFormSaving, setIsFormSaving] = useState(false);
+  const [formErrorMessage, setFormErrorMessage] = useState<string | null>(null);
   const [formInstanceKey, setFormInstanceKey] = useState(0);
 
-  const activeRows = useMemo(
-    () => rows.filter((row) => row.status === "Active"),
-    [rows],
-  );
-
-  const inactiveRows = useMemo(
-    () => rows.filter((row) => row.status === "Inactive"),
+  const outOfServiceCount = useMemo(
+    () => rows.filter((row) => row.status === "Out of Service").length,
     [rows],
   );
 
@@ -246,8 +231,8 @@ export default function EmsEquipmentWorkspace({
           row.equipment_name,
           row.manufacturer,
           row.model,
-          row.serial_number,
           row.equipment_number,
+          row.location,
         ]
           .map((value) => (typeof value === "string" ? value.toLowerCase() : ""))
           .join(" ");
@@ -266,18 +251,6 @@ export default function EmsEquipmentWorkspace({
         return compareEquipmentNames(left.equipment_name, right.equipment_name);
       });
   }, [rows, searchTerm, statusFilter]);
-
-  const selectedSummaryFilter = useMemo(() => {
-    if (statusFilter === "Active") {
-      return "active";
-    }
-
-    if (statusFilter === "Inactive") {
-      return "inactive";
-    }
-
-    return "all";
-  }, [statusFilter]);
 
   const formInitialValues =
     formMode === "edit" && selectedItem ? toFormValues(selectedItem) : undefined;
@@ -355,6 +328,7 @@ export default function EmsEquipmentWorkspace({
 
   const openAddForm = () => {
     setFormMode("add");
+    setFormErrorMessage(null);
     setFormInstanceKey((current) => current + 1);
     setIsFormOpen(true);
   };
@@ -365,11 +339,13 @@ export default function EmsEquipmentWorkspace({
     }
 
     setFormMode("edit");
+    setFormErrorMessage(null);
     setFormInstanceKey((current) => current + 1);
     setIsFormOpen(true);
   };
 
   const saveEquipment = async (values: EmsEquipmentFormValues) => {
+    setFormErrorMessage(null);
     setIsFormSaving(true);
 
     const payload = {
@@ -405,7 +381,7 @@ export default function EmsEquipmentWorkspace({
       };
 
       if (!response.ok || !body.item) {
-        setToastMessage(normalizeApiError(body, "Unable to save EMS equipment."));
+        setFormErrorMessage(normalizeApiError(body, "Unable to save EMS equipment."));
         return;
       }
 
@@ -419,13 +395,14 @@ export default function EmsEquipmentWorkspace({
       });
 
       setIsFormOpen(false);
+      setFormErrorMessage(null);
       setToastMessage(isAdd ? "EMS equipment added." : "EMS equipment updated.");
 
       if (!isAdd) {
         await loadDetail(nextItem.id);
       }
     } catch {
-      setToastMessage("Unable to save EMS equipment.");
+      setFormErrorMessage("Unable to save EMS equipment.");
     } finally {
       setIsFormSaving(false);
     }
@@ -463,6 +440,7 @@ export default function EmsEquipmentWorkspace({
       setSelectedPhotoUrl(null);
       setSelectedDeficiencies([]);
       setIsFormOpen(false);
+      setFormErrorMessage(null);
       setToastMessage("EMS equipment deleted.");
     } catch {
       setToastMessage("Unable to delete EMS equipment.");
@@ -499,38 +477,7 @@ export default function EmsEquipmentWorkspace({
         </p>
       </div>
 
-      <EmsInventorySwitch activeView="equipment" />
-
-      <section className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-5">
-        <div className="grid gap-3 sm:grid-cols-3">
-          <button
-            type="button"
-            onClick={() => setStatusFilter("All")}
-            className={summaryCardClasses(selectedSummaryFilter === "all", "all")}
-          >
-            <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-500">Total Equipment</p>
-            <p className="mt-2 text-2xl font-black text-white">{rows.length}</p>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setStatusFilter("Active")}
-            className={summaryCardClasses(selectedSummaryFilter === "active", "active")}
-          >
-            <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-500">Active</p>
-            <p className="mt-2 text-2xl font-black text-green-300">{activeRows.length}</p>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setStatusFilter("Inactive")}
-            className={summaryCardClasses(selectedSummaryFilter === "inactive", "inactive")}
-          >
-            <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-500">Inactive</p>
-            <p className="mt-2 text-2xl font-black text-neutral-200">{inactiveRows.length}</p>
-          </button>
-        </div>
-      </section>
+      <EmsInventorySwitch activeView="equipment" outOfServiceCount={outOfServiceCount} />
 
       <section className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-5">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -543,7 +490,7 @@ export default function EmsEquipmentWorkspace({
               type="text"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search by equipment name, manufacturer, model, serial number, or asset ID"
+              placeholder="Search by equipment name, manufacturer, model, asset ID, or location"
               className="w-full rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3 text-sm text-white placeholder:text-neutral-500 focus:border-red-500/50 focus:outline-none"
             />
           </div>
@@ -557,6 +504,7 @@ export default function EmsEquipmentWorkspace({
               <option value="All">All</option>
               <option value="Active">Active</option>
               <option value="Inactive">Inactive</option>
+              <option value="Out of Service">Out of Service</option>
             </select>
 
             {canManageEquipment ? (
@@ -587,7 +535,7 @@ export default function EmsEquipmentWorkspace({
               <thead className="sticky top-0 z-10 bg-[#242424] text-xs uppercase tracking-[0.14em] text-neutral-500">
                 <tr>
                   <th className="px-4 py-3 font-semibold">Equipment</th>
-                  <th className="px-4 py-3 font-semibold">Serial / Asset ID</th>
+                  <th className="px-4 py-3 font-semibold">Asset ID</th>
                   <th className="px-4 py-3 font-semibold">Location</th>
                   <th className="px-4 py-3 font-semibold">Status</th>
                 </tr>
@@ -605,10 +553,7 @@ export default function EmsEquipmentWorkspace({
                         {[row.manufacturer, row.model].filter(Boolean).join(" • ") || "-"}
                       </p>
                     </td>
-                    <td className="px-4 py-3 align-top text-sm text-neutral-300">
-                      <p>{row.serial_number || "-"}</p>
-                      <p className="mt-1 text-xs text-neutral-500">{row.equipment_number || "-"}</p>
-                    </td>
+                    <td className="px-4 py-3 align-top text-sm text-neutral-300">{row.equipment_number || "-"}</td>
                     <td className="px-4 py-3 align-top text-sm text-neutral-300">{row.location || "-"}</td>
                     <td className="px-4 py-3 align-top text-sm">
                       <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusBadgeClasses(row.status)}`}>
@@ -778,10 +723,15 @@ export default function EmsEquipmentWorkspace({
         isOpen={isFormOpen}
         mode={formMode}
         initialValues={formInitialValues}
+        apparatusOptions={apparatusOptions}
         isSaving={isFormSaving}
+        errorMessage={formErrorMessage}
         existingPhotoUrl={selectedPhotoUrl}
         canDelete={canManageEquipment}
-        onClose={() => setIsFormOpen(false)}
+        onClose={() => {
+          setFormErrorMessage(null);
+          setIsFormOpen(false);
+        }}
         onSave={(values) => {
           void saveEquipment(values);
         }}

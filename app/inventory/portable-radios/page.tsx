@@ -1,6 +1,7 @@
 import PortableRadioWorkspace from "@/components/inventory/PortableRadioWorkspace";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentMember } from "@/lib/current-member";
+import { hasDepartmentPermission } from "@/lib/member-permissions";
 
 type PortableRadioRecord = {
 	id: string;
@@ -42,7 +43,14 @@ export default async function PortableRadiosInventoryPage() {
 	const supabase = await createSupabaseServerClient();
 	const currentMember = await getCurrentMember(supabase);
 	const departmentId = currentMember?.departmentId ?? null;
-	const canDeleteRadio = currentMember?.role === "administrator";
+	const canManageRadios = departmentId
+		? await hasDepartmentPermission(
+			supabase,
+			departmentId,
+			currentMember?.role,
+			"inventory_management",
+		)
+		: false;
 
 	let departmentName: string | null = null;
 	let rows: PortableRadioRecord[] = [];
@@ -82,7 +90,7 @@ export default async function PortableRadiosInventoryPage() {
 				departmentName={departmentName}
 				initialRows={rows}
 				initialError={initialError}
-				canDeleteRadio={canDeleteRadio}
+				canManageRadios={canManageRadios}
 			/>
 		
 	);

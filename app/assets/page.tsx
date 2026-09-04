@@ -22,11 +22,6 @@ const inventoryCategories = [
 	{ name: "Ground Ladders", detail: "18 inspection records", href: "/inventory/ground-ladders" },
 ];
 
-const lowStockItemsCount = 27;
-const expiringItemsCount = 13;
-const inventoryAlertsCount = 41;
-const inventoryReadinessScore = 94;
-
 export default function AssetsPage() {
 	return (
 		<PageLayout
@@ -51,56 +46,6 @@ export default function AssetsPage() {
 					</p>
 				</div>
 
-				<section className="w-full rounded-2xl border border-red-900 bg-[#242424] px-5 py-4">
-					<div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-						<h2 className="text-lg font-bold text-white">Inventory Readiness</h2>
-						<p className="text-2xl font-black leading-none text-white">{inventoryReadinessScore}%</p>
-						<p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-red-400">Ready</p>
-
-						<div className="min-w-[180px] flex-1">
-							<div className="h-2 w-full overflow-hidden rounded-full bg-neutral-800">
-								<div
-									className="h-full rounded-full bg-red-500 transition-all"
-									style={{ width: `${inventoryReadinessScore}%` }}
-								/>
-							</div>
-						</div>
-					</div>
-
-					<div className="mt-3 flex flex-wrap items-center gap-2 border-t border-white/10 pt-3 text-sm text-neutral-200">
-						<Link
-							href="/inventory/current"
-							className="inline-flex rounded-md border border-emerald-700/40 bg-emerald-900/20 px-3 py-1.5 text-emerald-200 transition hover:bg-emerald-900/30"
-						>
-							✓ Inventory Current
-						</Link>
-						<Link
-							href="/inventory/low-stock"
-							className="inline-flex rounded-md border border-amber-700/40 bg-amber-900/20 px-3 py-1.5 text-amber-200 transition hover:bg-amber-900/30"
-						>
-							⚠ {lowStockItemsCount} Low Stock Items
-						</Link>
-						<Link
-							href="/inventory/expiring"
-							className="inline-flex rounded-md border border-amber-700/40 bg-amber-900/20 px-3 py-1.5 text-amber-200 transition hover:bg-amber-900/30"
-						>
-							⚠ {expiringItemsCount} Expiring Items
-						</Link>
-						<Link
-							href="/inventory/alerts"
-							className="inline-flex rounded-md border border-red-700/40 bg-red-900/20 px-3 py-1.5 text-red-200 transition hover:bg-red-900/30"
-						>
-							⚠ {inventoryAlertsCount} Inventory Alerts
-						</Link>
-						<Link
-							href="/deficiencies/report"
-							className="inline-flex rounded-lg border border-white/15 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800"
-						>
-							Report Deficiency
-						</Link>
-					</div>
-				</section>
-
 				<section className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-5">
 					<div className="flex flex-col gap-3 md:flex-row md:items-center">
 						<div className="min-w-0 flex-1">
@@ -124,7 +69,15 @@ export default function AssetsPage() {
 							<p className="text-xs uppercase tracking-[0.24em] text-neutral-500">Operations</p>
 							<h2 className="mt-2 text-3xl font-black tracking-tight text-white">Inventory Categories</h2>
 						</div>
-						<p className="text-sm font-semibold text-neutral-400">Launch Into Category Management</p>
+						<div className="flex flex-col items-start gap-2 md:items-end">
+							<Link
+								href="/deficiencies/report"
+								className="inline-flex rounded-lg border border-white/15 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800"
+							>
+								Report Deficiency
+							</Link>
+							<p className="text-sm font-semibold text-neutral-400">Launch Into Category Management</p>
+						</div>
 					</div>
 
 					<div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

@@ -30,6 +30,21 @@ export async function GET(_: Request, context: RouteContext) {
       return jsonResponse({ ok: false, error: "Unauthorized" }, 401);
     }
 
+    const { data: equipment, error: equipmentError } = await supabase
+      .from("ems_equipment")
+      .select("id")
+      .eq("id", id)
+      .eq("department_id", currentMember.departmentId)
+      .maybeSingle();
+
+    if (equipmentError) {
+      return jsonResponse({ ok: false, error: equipmentError.message || "Unable to load equipment deficiencies." }, 400);
+    }
+
+    if (!equipment) {
+      return jsonResponse({ ok: false, error: "EMS equipment not found." }, 404);
+    }
+
     const { data, error } = await supabase
       .from("deficiencies")
       .select("id, deficiency_number, description, reported_at, status_info:deficiency_statuses!fk_deficiencies_status(name)")

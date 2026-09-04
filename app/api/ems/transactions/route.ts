@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentMember } from "@/lib/current-member";
+import { hasDepartmentPermission } from "@/lib/member-permissions";
 
 type CheckoutLikeItem = {
   supplyItemId?: unknown;
@@ -54,10 +55,6 @@ function parseNumber(value: unknown): number | null {
   return null;
 }
 
-function isElevatedRole(role: unknown): boolean {
-  return role === "administrator" || role === "officer";
-}
-
 function errorStatusFromMessage(message: string): number {
   const lowered = message.toLowerCase();
 
@@ -100,8 +97,15 @@ export async function POST(request: Request) {
       return jsonResponse({ ok: false, error: "Unauthorized" }, 401);
     }
 
+    const canManageInventory = await hasDepartmentPermission(
+      supabase,
+      currentMember.departmentId,
+      currentMember.role,
+      "inventory_management",
+    );
+
     if (transactionType === "Correction") {
-      if (!isElevatedRole(currentMember.role)) {
+      if (!canManageInventory) {
         return jsonResponse({ ok: false, error: "Forbidden" }, 403);
       }
 
@@ -148,7 +152,7 @@ export async function POST(request: Request) {
       return jsonResponse({ ok: false, error: "Invalid transaction type." }, 400);
     }
 
-    if ((transactionType === "Restock" || transactionType === "Return") && !isElevatedRole(currentMember.role)) {
+    if ((transactionType === "Restock" || transactionType === "Return") && !canManageInventory) {
       return jsonResponse({ ok: false, error: "Forbidden" }, 403);
     }
 

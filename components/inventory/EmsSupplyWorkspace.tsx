@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import EmsCheckoutModal from "@/components/inventory/EmsCheckoutModal";
 import EmsSupplyFormModal, {
@@ -7,7 +8,6 @@ import EmsSupplyFormModal, {
   type EmsSupplyUnitOptionValue,
 } from "@/components/inventory/EmsSupplyFormModal";
 import EmsInventorySwitch from "@/components/inventory/EmsInventorySwitch";
-import { calculateEmsSupplyReadiness } from "@/lib/inventory/ems-supply-readiness";
 
 type StockStatus = "Out of Stock" | "Critical" | "Low" | "Normal";
 type SupplyFilter = "All" | "Normal" | "Low" | "Critical" | "Out of Stock" | "Inactive";
@@ -172,29 +172,49 @@ function statusBadgeClasses(status: StockStatus, inactive: boolean) {
   return "border-green-700/40 bg-green-900/20 text-green-300";
 }
 
-function summaryCardClasses(
+function toDisplayStockStatus(status: StockStatus): string {
+  if (status === "Low") {
+    return "Reorder";
+  }
+
+  return status;
+}
+
+function summarySectionClasses(
   active: boolean,
-  tone: "normal" | "low" | "critical" | "out",
+  tone: "low" | "critical" | "out" | "reorder",
 ) {
-  const base = "rounded-xl border px-4 py-3 text-left transition";
+  const base = "group relative min-w-0 px-4 py-3 text-left transition duration-200";
 
   if (active) {
-    return `${base} border-white/20 bg-white/[0.06]`;
+    if (tone === "out") {
+      return `${base} bg-[linear-gradient(180deg,rgba(72,26,26,0.24),rgba(72,26,26,0.08))]`;
+    }
+
+    if (tone === "critical") {
+      return `${base} bg-[linear-gradient(180deg,rgba(86,30,40,0.22),rgba(86,30,40,0.08))]`;
+    }
+
+    if (tone === "reorder") {
+      return `${base} bg-[linear-gradient(180deg,rgba(82,56,18,0.18),rgba(82,56,18,0.06))]`;
+    }
+
+    return `${base} bg-[linear-gradient(180deg,rgba(88,62,20,0.22),rgba(88,62,20,0.08))]`;
   }
 
   if (tone === "out") {
-    return `${base} border-red-700/30 bg-red-950/20 hover:bg-red-950/30`;
+    return `${base} hover:bg-[linear-gradient(180deg,rgba(60,24,24,0.18),rgba(60,24,24,0.06))]`;
   }
 
   if (tone === "critical") {
-    return `${base} border-red-700/30 bg-red-950/20 hover:bg-red-950/30`;
+    return `${base} hover:bg-[linear-gradient(180deg,rgba(72,28,38,0.16),rgba(72,28,38,0.06))]`;
   }
 
-  if (tone === "low") {
-    return `${base} border-amber-700/30 bg-amber-950/20 hover:bg-amber-950/30`;
+  if (tone === "reorder") {
+    return `${base} hover:bg-[linear-gradient(180deg,rgba(66,52,20,0.14),rgba(66,52,20,0.06))]`;
   }
 
-  return `${base} border-green-700/30 bg-green-950/20 hover:bg-green-950/30`;
+  return `${base} hover:bg-[linear-gradient(180deg,rgba(70,56,24,0.16),rgba(70,56,24,0.06))]`;
 }
 
 function parseNumber(value: string): number | null {
@@ -216,7 +236,6 @@ function toFormValues(row: EmsSupplyItemRow): EmsSupplyFormValues {
     reorderThreshold: String(row.reorder_threshold ?? 0),
     criticalThreshold:
       typeof row.critical_threshold === "number" ? String(row.critical_threshold) : "",
-    targetQuantity: typeof row.target_quantity === "number" ? String(row.target_quantity) : "",
     location: row.location ?? "",
     notes: row.notes ?? "",
     status: row.status,
@@ -251,15 +270,6 @@ function normalizeApiError(payload: unknown, fallback: string) {
 
   const error = (payload as { error?: unknown }).error;
   return typeof error === "string" && error.trim() ? error : fallback;
-}
-
-function formatReadinessPercent(value: number | null): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return "NOT RATED";
-  }
-
-  const rounded = Math.round(value * 10) / 10;
-  return Number.isInteger(rounded) ? `${rounded}%` : `${rounded.toFixed(1)}%`;
 }
 
 function TransactionActionModal({
@@ -377,6 +387,7 @@ export default function EmsSupplyWorkspace({
   initialRows,
   initialError = null,
 }: WorkspaceProps) {
+  const [hasInitialLoadError, setHasInitialLoadError] = useState(Boolean(initialError));
   const [rows, setRows] = useState<EmsSupplyItemRow[]>(initialRows);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<SupplyFilter>("All");
@@ -384,6 +395,7 @@ export default function EmsSupplyWorkspace({
   const [selectedItem, setSelectedItem] = useState<EmsSupplyItemRow | null>(null);
   const [recentActivity, setRecentActivity] = useState<RecentActivityRow[]>([]);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [formInstanceKey, setFormInstanceKey] = useState(0);
   const [formMode, setFormMode] = useState<"add" | "edit">("add");
@@ -490,34 +502,18 @@ export default function EmsSupplyWorkspace({
   );
 
   const summary = useMemo(() => {
-    const totalActive = activeRows.length;
     const low = activeRows.filter((row) => row.derivedStockStatus === "Low").length;
     const critical = activeRows.filter((row) => row.derivedStockStatus === "Critical").length;
     const out = activeRows.filter((row) => row.derivedStockStatus === "Out of Stock").length;
 
     return {
-      totalActive,
       low,
       critical,
       out,
     };
   }, [activeRows]);
 
-  const supplyReadiness = useMemo(
-    () =>
-      calculateEmsSupplyReadiness(
-        rowsWithStatus.map((row) => ({
-          isActive: row.status === "Active",
-          stockStatus: row.derivedStockStatus,
-        })),
-      ),
-    [rowsWithStatus],
-  );
-
   const selectedSummaryFilter = useMemo(() => {
-    if (statusFilter === "All") {
-      return "total";
-    }
     if (statusFilter === "Low") {
       return "low";
     }
@@ -530,7 +526,7 @@ export default function EmsSupplyWorkspace({
     return "none";
   }, [statusFilter]);
 
-  const refreshRows = async () => {
+  const refreshRows = async (): Promise<boolean> => {
     try {
       const response = await fetch("/api/ems/supplies", {
         method: "GET",
@@ -543,18 +539,31 @@ export default function EmsSupplyWorkspace({
 
       if (!response.ok) {
         setToastMessage(normalizeApiError(payload, "Unable to refresh EMS supplies."));
-        return;
+        return false;
       }
 
       setRows(Array.isArray(payload.rows) ? payload.rows : []);
+      return true;
     } catch {
       setToastMessage("Unable to refresh EMS supplies.");
+      return false;
+    }
+  };
+
+  const retryInitialLoad = async () => {
+    const didRefresh = await refreshRows();
+    if (didRefresh) {
+      setHasInitialLoadError(false);
+      setToastMessage(null);
     }
   };
 
   const loadItemDetail = async (itemId: string) => {
     setIsDetailLoading(true);
     setSelectedItemId(itemId);
+    setSelectedItem(null);
+    setRecentActivity([]);
+    setDetailError(null);
 
     try {
       const response = await fetch(`/api/ems/supplies/${itemId}`, {
@@ -566,15 +575,18 @@ export default function EmsSupplyWorkspace({
         | null;
 
       if (!response.ok || !payload || !payload.item) {
-        setToastMessage(normalizeApiError(payload, "Unable to load supply detail."));
-        setIsDetailLoading(false);
+        const message = normalizeApiError(payload, "Unable to load supply detail.");
+        setToastMessage(message);
+        setDetailError(message);
         return;
       }
 
       setSelectedItem(payload.item);
       setRecentActivity(Array.isArray(payload.recentActivity) ? payload.recentActivity : []);
+      setDetailError(null);
     } catch {
       setToastMessage("Unable to load supply detail.");
+      setDetailError("Unable to load supply detail.");
     } finally {
       setIsDetailLoading(false);
     }
@@ -913,7 +925,7 @@ export default function EmsSupplyWorkspace({
     }
   };
 
-  const emptyState = rows.length === 0;
+  const emptyState = !hasInitialLoadError && rows.length === 0;
 
   const formInitialValues =
     formMode === "edit" && selectedItem ? toFormValues(selectedItem) : undefined;
@@ -949,143 +961,155 @@ export default function EmsSupplyWorkspace({
       <EmsInventorySwitch activeView="supplies" />
 
       <section className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-5">
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <button
-              type="button"
-              onClick={() => setStatusFilter("All")}
-              className={summaryCardClasses(selectedSummaryFilter === "total", "normal")}
-            >
-              <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-500">Total Active</p>
-              <p className="mt-2 text-2xl font-black text-white">{summary.totalActive}</p>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setStatusFilter("Low")}
-              className={summaryCardClasses(selectedSummaryFilter === "low", "low")}
-            >
-              <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-500">Low Stock</p>
-              <p className="mt-2 text-2xl font-black text-amber-300">{summary.low}</p>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setStatusFilter("Critical")}
-              className={summaryCardClasses(selectedSummaryFilter === "critical", "critical")}
-            >
-              <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-500">Critical</p>
-              <p className="mt-2 text-2xl font-black text-red-300">{summary.critical}</p>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setStatusFilter("Out of Stock")}
-              className={summaryCardClasses(selectedSummaryFilter === "out", "out")}
-            >
-              <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-500">Out of Stock</p>
-              <p className="mt-2 text-2xl font-black text-red-200">{summary.out}</p>
-            </button>
+        {hasInitialLoadError ? (
+          <div className="rounded-xl border border-red-500/30 bg-red-950/20 px-4 py-4 text-sm text-red-100">
+            <p className="font-semibold">Unable to load EMS Supplies.</p>
+            <p className="mt-1 text-red-200/90">The initial inventory request failed. Supply counts are unavailable until the data is loaded.</p>
           </div>
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-white/8 bg-[linear-gradient(180deg,rgba(20,20,20,0.84),rgba(30,30,30,0.96))] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+            <div className="border-b border-white/6 px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-neutral-500">Inventory Status</p>
+            </div>
 
-          <div className="rounded-xl border border-white/10 bg-[#1b1b1b] p-4">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-500">EMS Supply Readiness</p>
-            <p className="mt-1 text-3xl font-black text-white">
-              {formatReadinessPercent(supplyReadiness.readinessPercent)}
-            </p>
-
-            {supplyReadiness.isRated ? (
-              <p className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-neutral-400">
-                Inventory Health
-              </p>
-            ) : (
-              <p className="mt-1 text-xs text-neutral-400">No active EMS supplies configured.</p>
-            )}
-
-            {supplyReadiness.isRated ? (
-              <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10" aria-hidden="true">
-                <div
-                  className="h-full rounded-full bg-red-400/90"
-                  style={{ width: `${Math.max(0, Math.min(100, supplyReadiness.readinessPercent ?? 0))}%` }}
-                />
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-5">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="min-w-0 flex-1">
-            <label htmlFor="ems-supplies-search" className="sr-only">
-              Search EMS supplies
-            </label>
-            <input
-              id="ems-supplies-search"
-              type="text"
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search by item name or location"
-              className="w-full rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3 text-sm text-white placeholder:text-neutral-500 focus:border-red-500/50 focus:outline-none"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:min-w-[420px]">
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as SupplyFilter)}
-              className="rounded-xl border border-white/10 bg-[#1b1b1b] px-3 py-3 text-sm text-neutral-200 focus:border-red-500/50 focus:outline-none"
-            >
-              <option value="All">All</option>
-              <option value="Normal">Normal</option>
-              <option value="Low">Low</option>
-              <option value="Critical">Critical</option>
-              <option value="Out of Stock">Out of Stock</option>
-              <option value="Inactive">Inactive</option>
-            </select>
-
-            {canManageSupplies ? (
+            <div className="grid grid-cols-2 xl:grid-cols-4">
               <button
                 type="button"
-                onClick={openAddForm}
-                className="rounded-xl border border-red-500/40 bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-700"
+                onClick={() => setStatusFilter("Low")}
+                className={summarySectionClasses(selectedSummaryFilter === "low", "low")}
               >
-                Add EMS Supply
+                <div className="flex items-baseline justify-between gap-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Reorder</p>
+                  <p className="text-[1.9rem] font-[800] leading-none tracking-[-0.05em] text-amber-200">{summary.low}</p>
+                </div>
               </button>
-            ) : (
+
+              <button
+                type="button"
+                onClick={() => setStatusFilter("Critical")}
+                className={`border-l border-white/6 ${summarySectionClasses(selectedSummaryFilter === "critical", "critical")}`}
+              >
+                <div className="flex items-baseline justify-between gap-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Critical</p>
+                  <p className="text-[1.9rem] font-[800] leading-none tracking-[-0.05em] text-rose-200">{summary.critical}</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStatusFilter("Out of Stock")}
+                className="border-t border-white/6 xl:border-l xl:border-t-0 xl:border-white/6"
+              >
+                <div className={summarySectionClasses(selectedSummaryFilter === "out", "out")}>
+                  <div className="flex items-baseline justify-between gap-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Out of Stock</p>
+                    <p className="text-[1.9rem] font-[800] leading-none tracking-[-0.05em] text-red-100">{summary.out}</p>
+                  </div>
+                </div>
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {!hasInitialLoadError ? (
+        <section className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-5">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="min-w-0 flex-1">
+              <label htmlFor="ems-supplies-search" className="sr-only">
+                Search EMS supplies
+              </label>
+              <input
+                id="ems-supplies-search"
+                type="text"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Search by item name, category, or location"
+                className="w-full rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3 text-sm text-white placeholder:text-neutral-500 focus:border-red-500/50 focus:outline-none"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:min-w-[420px]">
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value as SupplyFilter)}
+                className="rounded-xl border border-white/10 bg-[#1b1b1b] px-3 py-3 text-sm text-neutral-200 focus:border-red-500/50 focus:outline-none"
+              >
+                <option value="All">All</option>
+                <option value="Normal">Normal</option>
+                <option value="Low">Reorder</option>
+                <option value="Critical">Critical</option>
+                <option value="Out of Stock">Out of Stock</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+
+              {canManageSupplies ? (
+                <button
+                  type="button"
+                  onClick={openAddForm}
+                  className="rounded-xl border border-red-500/40 bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-700"
+                >
+                  Add EMS Supply
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={openCheckout}
+                  className="rounded-xl border border-red-500/40 bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-700"
+                >
+                  Start Checkout
+                </button>
+              )}
+            </div>
+          </div>
+
+          {canManageSupplies ? (
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Link
+                href="/inventory/ems-supplies/history"
+                className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+              >
+                History
+              </Link>
               <button
                 type="button"
                 onClick={openCheckout}
-                className="rounded-xl border border-red-500/40 bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-700"
+                className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
               >
                 Start Checkout
               </button>
-            )}
-          </div>
-        </div>
-
-        {canManageSupplies ? (
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={openCheckout}
-              className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
-            >
-              Start Checkout
-            </button>
-          </div>
-        ) : null}
-      </section>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-6">
-        {emptyState ? (
+        {hasInitialLoadError ? (
+          <div className="rounded-xl border border-red-500/30 bg-[#1b1b1b] px-6 py-10 text-center">
+            <p className="text-lg font-bold text-red-100">EMS Supplies Could Not Be Loaded</p>
+            <p className="mt-2 text-sm text-red-200/90">
+              We could not load your department&apos;s EMS supply inventory.
+            </p>
+            <div className="mt-5">
+              <button
+                type="button"
+                onClick={() => {
+                  void retryInitialLoad();
+                }}
+                className="rounded-lg border border-red-500/40 bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-700"
+              >
+                Retry Load
+              </button>
+            </div>
+          </div>
+        ) : emptyState ? (
           <div className="rounded-xl border border-white/10 bg-[#1b1b1b] px-6 py-10 text-center">
             <p className="text-lg font-bold text-white">No EMS Supplies Added</p>
             <p className="mt-2 text-sm text-neutral-400">
               Your department has not added any EMS inventory yet.
             </p>
             <p className="mt-1 text-sm text-neutral-500">
-              Authorized elevated users can add supplies your department wants to track.
+              Authorized inventory managers can add supplies your department wants to track.
             </p>
             {canManageSupplies ? (
               <div className="mt-5">
@@ -1154,7 +1178,7 @@ export default function EmsSupplyWorkspace({
                               inactive,
                             )}`}
                           >
-                            {inactive ? "Inactive" : derivedStatus}
+                            {inactive ? "Inactive" : toDisplayStockStatus(derivedStatus)}
                           </span>
                         </td>
                         <td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">
@@ -1200,6 +1224,7 @@ export default function EmsSupplyWorkspace({
                   setSelectedItemId(null);
                   setSelectedItem(null);
                   setRecentActivity([]);
+                  setDetailError(null);
                 }}
                 className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
               >
@@ -1207,9 +1232,18 @@ export default function EmsSupplyWorkspace({
               </button>
             </div>
 
-            {isDetailLoading || !selectedItem ? (
+            {isDetailLoading ? (
               <div className="mt-6 rounded-xl border border-white/10 bg-[#1b1b1b] p-6 text-sm text-neutral-300">
                 Loading supply detail...
+              </div>
+            ) : detailError ? (
+              <div className="mt-6 rounded-xl border border-red-500/30 bg-[#1b1b1b] p-6 text-sm text-red-100">
+                <p className="font-semibold">EMS supply detail could not be loaded.</p>
+                <p className="mt-2 text-red-200/90">{detailError}</p>
+              </div>
+            ) : !selectedItem ? (
+              <div className="mt-6 rounded-xl border border-red-500/30 bg-[#1b1b1b] p-6 text-sm text-red-100">
+                EMS supply detail could not be loaded.
               </div>
             ) : (
               <>
@@ -1225,7 +1259,7 @@ export default function EmsSupplyWorkspace({
                     <p className="mt-2 text-sm font-semibold text-white">
                       {selectedItem.status === "Inactive"
                         ? "Inactive"
-                        : deriveStockStatus(selectedItem)}
+                        : toDisplayStockStatus(deriveStockStatus(selectedItem))}
                     </p>
                   </div>
                   <div className="rounded-xl border border-white/10 bg-[#1b1b1b] p-4">
@@ -1261,8 +1295,9 @@ export default function EmsSupplyWorkspace({
                   <p className="mt-2 text-sm text-neutral-200">{selectedItem.notes || "-"}</p>
                 </div>
 
-                {canManageSupplies ? (
-                  <div className="mt-4 flex flex-wrap gap-2">
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {canManageSupplies ? (
+                    <>
                     <button
                       type="button"
                       onClick={openEditForm}
@@ -1300,15 +1335,16 @@ export default function EmsSupplyWorkspace({
                     >
                       {isDeleting ? "Deleting..." : "Delete (If No History)"}
                     </button>
-                    <button
-                      type="button"
-                      onClick={openCheckout}
-                      className="rounded-lg border border-white/10 bg-neutral-900 px-3 py-2 text-xs font-semibold text-neutral-500"
-                    >
-                      Start Checkout
-                    </button>
-                  </div>
-                ) : null}
+                    </>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={openCheckout}
+                    className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+                  >
+                    Start Checkout
+                  </button>
+                </div>
 
                 <section className="mt-6 rounded-2xl border border-neutral-800 bg-[#242424] p-5">
                   <div className="flex items-center justify-between">

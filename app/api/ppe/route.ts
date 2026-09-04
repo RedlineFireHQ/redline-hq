@@ -1,4 +1,5 @@
 import { getCurrentMember } from "@/lib/current-member";
+import { hasDepartmentPermission } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 type UploadPayload = {
@@ -9,7 +10,9 @@ type UploadPayload = {
 
 type CreatePpePayload = {
   itemName?: unknown;
+  assignmentType?: unknown;
   assignedMemberId?: unknown;
+  apparatusId?: unknown;
   manufacturer?: unknown;
   model?: unknown;
   serialNumber?: unknown;
@@ -18,15 +21,15 @@ type CreatePpePayload = {
   dateManufactured?: unknown;
   placedInServiceDate?: unknown;
   expirationDate?: unknown;
-  location?: unknown;
   status?: unknown;
   notes?: unknown;
   photoUpload?: unknown;
 };
 
-function isElevatedRole(role: unknown): boolean {
-  return role === "administrator" || role === "officer";
-}
+type PpeAssignmentType = "Station Supply" | "Department Member" | "Apparatus";
+
+const APPARATUS_LOCATION_PREFIX = "Apparatus:";
+const STATION_SUPPLY_LOCATION = "Station Supply";
 
 function jsonResponse(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
@@ -84,6 +87,24 @@ function parseUpload(value: unknown): UploadPayload | null {
     mimeType,
     base64Data,
   };
+}
+
+function normalizeAssignmentType(value: unknown): PpeAssignmentType {
+  const normalized = asTrimmedString(value);
+  if (normalized === "Station Supply" || normalized === "Apparatus") {
+    return normalized;
+  }
+
+  return "Department Member";
+}
+
+function normalizeStatus(value: unknown): "Active" | "Inactive" | "Out of Service" {
+  const normalized = asTrimmedString(value);
+  if (normalized === "Inactive" || normalized === "Out of Service") {
+    return normalized;
+  }
+
+  return "Active";
 }
 
 function normalizeMemberName(value: unknown): string | null {
@@ -144,6 +165,31 @@ async function validateAssignedMember({
     .select("id, first_name, last_name")
     .eq("id", memberId)
     .eq("department_id", departmentId)
+    .eq("active", true)
+    .maybeSingle();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return data;
+}
+
+async function validateActiveApparatus({
+  supabase,
+  departmentId,
+  apparatusId,
+}: {
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
+  departmentId: string;
+  apparatusId: string;
+}) {
+  const { data, error } = await supabase
+    .from("apparatus")
+    .select("id")
+    .eq("id", apparatusId)
+    .eq("department_id", departmentId)
+    .eq("lifecycle_status", "active")
     .maybeSingle();
 
   if (error || !data) {
@@ -197,12 +243,21 @@ export async function POST(request: Request) {
       return jsonResponse({ ok: false, error: "Unauthorized" }, 401);
     }
 
-    if (!isElevatedRole(currentMember.role)) {
+    const canManageInventory = await hasDepartmentPermission(
+      supabase,
+      currentMember.departmentId,
+      currentMember.role,
+      "inventory_management",
+    );
+
+    if (!canManageInventory) {
       return jsonResponse({ ok: false, error: "Forbidden" }, 403);
     }
 
     const itemName = asTrimmedString(payload.itemName);
-    const assignedMemberId = asTrimmedString(payload.assignedMemberId);
+    const assignmentType = normalizeAssignmentType(payload.assignmentType);
+    const assignedMemberIdInput = asTrimmedString(payload.assignedMemberId);
+    const apparatusIdInput = asTrimmedString(payload.apparatusId);
     const manufacturer = asTrimmedString(payload.manufacturer) || null;
     const model = asTrimmedString(payload.model) || null;
     const serialNumber = asTrimmedString(payload.serialNumber) || null;
@@ -211,8 +266,7 @@ export async function POST(request: Request) {
     const dateManufactured = parseOptionalDate(payload.dateManufactured);
     const placedInServiceDate = parseOptionalDate(payload.placedInServiceDate);
     const expirationDate = parseOptionalDate(payload.expirationDate);
-    const location = asTrimmedString(payload.location) || null;
-    const status = asTrimmedString(payload.status) === "Inactive" ? "Inactive" : "Active";
+    const status = normalizeStatus(payload.status);
     const notes = asTrimmedString(payload.notes) || null;
     const photoUpload = parseUpload(payload.photoUpload);
 
@@ -220,18 +274,46 @@ export async function POST(request: Request) {
       return jsonResponse({ ok: false, error: "PPE item name is required." }, 400);
     }
 
-    if (!assignedMemberId) {
-      return jsonResponse({ ok: false, error: "Assigned member is required." }, 400);
-    }
+    let assignedMemberId: string | null = null;
+    let location: string | null = null;
 
-    const assignedMember = await validateAssignedMember({
-      supabase,
-      departmentId: currentMember.departmentId,
-      memberId: assignedMemberId,
-    });
+    if (assignmentType === "Department Member") {
+      if (!assignedMemberIdInput) {
+        return jsonResponse({ ok: false, error: "Department member is required." }, 400);
+      }
 
-    if (!assignedMember) {
-      return jsonResponse({ ok: false, error: "Assigned member is invalid for this department." }, 400);
+      const assignedMember = await validateAssignedMember({
+        supabase,
+        departmentId: currentMember.departmentId,
+        memberId: assignedMemberIdInput,
+      });
+
+      if (!assignedMember) {
+        return jsonResponse({ ok: false, error: "Assigned member is invalid for this department." }, 400);
+      }
+
+      assignedMemberId = assignedMemberIdInput;
+      location = null;
+    } else if (assignmentType === "Apparatus") {
+      if (!apparatusIdInput) {
+        return jsonResponse({ ok: false, error: "Apparatus is required." }, 400);
+      }
+
+      const apparatus = await validateActiveApparatus({
+        supabase,
+        departmentId: currentMember.departmentId,
+        apparatusId: apparatusIdInput,
+      });
+
+      if (!apparatus) {
+        return jsonResponse({ ok: false, error: "Apparatus is invalid for this department." }, 400);
+      }
+
+      assignedMemberId = null;
+      location = `${APPARATUS_LOCATION_PREFIX}${apparatusIdInput}`;
+    } else {
+      assignedMemberId = null;
+      location = STATION_SUPPLY_LOCATION;
     }
 
     let photoPath: string | null = null;

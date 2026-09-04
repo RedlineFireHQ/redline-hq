@@ -1,4 +1,5 @@
 import { getCurrentMember } from "@/lib/current-member";
+import { hasDepartmentPermission } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 type UpdateSupplyPayload = {
@@ -8,7 +9,6 @@ type UpdateSupplyPayload = {
   customUnitOfMeasure?: unknown;
   reorderThreshold?: unknown;
   criticalThreshold?: unknown;
-  targetQuantity?: unknown;
   location?: unknown;
   notes?: unknown;
   status?: unknown;
@@ -42,10 +42,6 @@ const ALLOWED_UNITS = new Set<AllowedUnit>([
   "milliliter",
   "custom",
 ]);
-
-function isElevatedRole(role: unknown): boolean {
-  return role === "administrator" || role === "officer";
-}
 
 function jsonResponse(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
@@ -183,7 +179,14 @@ export async function PATCH(request: Request, context: RouteContext) {
       return jsonResponse({ ok: false, error: "Unauthorized" }, 401);
     }
 
-    if (!isElevatedRole(currentMember.role)) {
+    const canManageInventory = await hasDepartmentPermission(
+      supabase,
+      currentMember.departmentId,
+      currentMember.role,
+      "inventory_management",
+    );
+
+    if (!canManageInventory) {
       return jsonResponse({ ok: false, error: "Forbidden" }, 403);
     }
 
@@ -257,7 +260,14 @@ export async function DELETE(_: Request, context: RouteContext) {
       return jsonResponse({ ok: false, error: "Unauthorized" }, 401);
     }
 
-    if (!isElevatedRole(currentMember.role)) {
+    const canManageInventory = await hasDepartmentPermission(
+      supabase,
+      currentMember.departmentId,
+      currentMember.role,
+      "inventory_management",
+    );
+
+    if (!canManageInventory) {
       return jsonResponse({ ok: false, error: "Forbidden" }, 403);
     }
 

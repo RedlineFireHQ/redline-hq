@@ -77,6 +77,14 @@ function statusBadgeClasses(status: StockStatus) {
   return "border-green-700/40 bg-green-900/20 text-green-300";
 }
 
+function toDisplayStockStatus(status: StockStatus): string {
+  if (status === "Low") {
+    return "Reorder";
+  }
+
+  return status;
+}
+
 function parsePositiveNumber(value: string): number | null {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -518,7 +526,7 @@ export default function EmsCheckoutModal({
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <p className="text-sm font-semibold text-white">{supply.itemName}</p>
                           <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusBadgeClasses(supply.stockStatus)}`}>
-                            {supply.stockStatus}
+                            {toDisplayStockStatus(supply.stockStatus)}
                           </span>
                         </div>
                         <p className="mt-1 text-xs text-neutral-400">

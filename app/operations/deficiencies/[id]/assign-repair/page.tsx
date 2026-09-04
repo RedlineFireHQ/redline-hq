@@ -38,6 +38,18 @@ export default function AssignRepairPage() {
       setIsLoadingMembers(true);
       setMembersError(null);
 
+      const permissionResult = await supabase.rpc("can_edit_deficiency", { p_deficiency_id: deficiencyId });
+      if (!isMounted) {
+        return;
+      }
+
+      if (permissionResult.error || !permissionResult.data) {
+        setMembersError("You do not have permission to assign repairs for this deficiency.");
+        setMembers([]);
+        setIsLoadingMembers(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from("members")
         .select("id, first_name, last_name")
@@ -78,6 +90,12 @@ export default function AssignRepairPage() {
   async function handleAssign() {
     if (!selectedMemberId) {
       setAssignError("Select a member before assigning.");
+      return;
+    }
+
+    const permissionResult = await supabase.rpc("can_edit_deficiency", { p_deficiency_id: deficiencyId });
+    if (permissionResult.error || !permissionResult.data) {
+      setAssignError("You do not have permission to assign repairs for this deficiency.");
       return;
     }
 

@@ -92,8 +92,9 @@ export default function EditDeficiencyPage() {
       setIsLoading(true);
       setOptionsError(null);
 
-      const [apparatusResult, categoriesResult, prioritiesResult, statusesResult, deficiencyResult] =
+      const [permissionResult, apparatusResult, categoriesResult, prioritiesResult, statusesResult, deficiencyResult] =
         await Promise.all([
+          supabase.rpc("can_edit_deficiency", { p_deficiency_id: deficiencyId }),
           getActiveApparatusOptions(),
           supabase.from("deficiency_categories").select("*").order("display_order"),
           supabase.from("deficiency_priorities").select("*").order("display_order"),
@@ -106,6 +107,12 @@ export default function EditDeficiencyPage() {
         ]);
 
       if (!isMounted) {
+        return;
+      }
+
+      if (!permissionResult.error && !permissionResult.data) {
+        setOptionsError("You do not have permission to edit this deficiency.");
+        setIsLoading(false);
         return;
       }
 
@@ -209,6 +216,13 @@ export default function EditDeficiencyPage() {
 
     setIsSaving(true);
     setSaveError(null);
+
+    const permissionResult = await supabase.rpc("can_edit_deficiency", { p_deficiency_id: deficiencyId });
+    if (permissionResult.error || !permissionResult.data) {
+      setSaveError("You do not have permission to edit this deficiency.");
+      setIsSaving(false);
+      return;
+    }
 
     const updatePayload = {
       apparatus_id: formState.apparatusId,

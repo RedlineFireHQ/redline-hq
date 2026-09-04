@@ -472,6 +472,7 @@ export const REPORT_SOURCES: ReportSourceConfig[] = [
 					{ value: "all", label: "All Equipment Statuses" },
 					{ value: "active", label: "Active" },
 					{ value: "inactive", label: "Inactive" },
+					{ value: "out of service", label: "Out of Service" },
 				],
 			},
 			{

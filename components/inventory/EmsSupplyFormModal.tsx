@@ -23,7 +23,6 @@ export type EmsSupplyFormValues = {
   customUnitOfMeasure: string;
   reorderThreshold: string;
   criticalThreshold: string;
-  targetQuantity: string;
   location: string;
   notes: string;
   status: "Active" | "Inactive";
@@ -41,6 +40,8 @@ type EmsSupplyFormModalProps = {
   onDelete?: () => void;
   canDelete?: boolean;
 };
+
+type FormErrorState = Partial<Record<keyof EmsSupplyFormValues, string>>;
 
 const UNIT_OPTIONS: Array<{ value: EmsSupplyUnitOptionValue; label: string }> = [
   { value: "each", label: "Each" },
@@ -64,7 +65,6 @@ const EMPTY_VALUES: EmsSupplyFormValues = {
   customUnitOfMeasure: "",
   reorderThreshold: "",
   criticalThreshold: "",
-  targetQuantity: "",
   location: "EMS Supply Locker",
   notes: "",
   status: "Active",
@@ -92,6 +92,7 @@ export default function EmsSupplyFormModal({
 
     return EMPTY_VALUES;
   });
+  const [formErrors, setFormErrors] = useState<FormErrorState>({});
 
   const showCustomUnitField = formValues.unitOfMeasure === "custom";
 
@@ -100,6 +101,63 @@ export default function EmsSupplyFormModal({
       ? "border-green-700/40 bg-green-900/20 text-green-200"
       : "border-neutral-600/40 bg-neutral-900 text-neutral-300";
   }, [formValues.status]);
+
+  const clearFieldError = (field: keyof EmsSupplyFormValues) => {
+    setFormErrors((current) => {
+      if (!current[field]) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  };
+
+  const parseOptionalNumber = (value: string): number | null => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const validateForSave = (values: EmsSupplyFormValues): FormErrorState => {
+    const errors: FormErrorState = {};
+
+    if (!values.itemName.trim()) {
+      errors.itemName = "Item name is required.";
+    }
+
+    if (!UNIT_OPTIONS.some((option) => option.value === values.unitOfMeasure)) {
+      errors.unitOfMeasure = "Invalid unit of measure.";
+    }
+
+    if (values.unitOfMeasure === "custom" && !values.customUnitOfMeasure.trim()) {
+      errors.customUnitOfMeasure = "Custom unit is required.";
+    }
+
+    const reorderThreshold = parseOptionalNumber(values.reorderThreshold);
+    if (reorderThreshold === null || reorderThreshold < 0) {
+      errors.reorderThreshold = "Reorder threshold is required.";
+    }
+
+    const criticalThreshold = parseOptionalNumber(values.criticalThreshold);
+    if (criticalThreshold !== null && criticalThreshold < 0) {
+      errors.criticalThreshold = "Critical threshold cannot be negative.";
+    }
+
+    if (mode === "add") {
+      const startingQuantity = parseOptionalNumber(values.startingQuantity);
+      if (startingQuantity === null || startingQuantity < 0) {
+        errors.startingQuantity = "Starting quantity is required.";
+      }
+    }
+
+    return errors;
+  };
 
   if (!isOpen) {
     return null;
@@ -130,13 +188,17 @@ export default function EmsSupplyFormModal({
             <input
               value={formValues.itemName}
               onChange={(event) =>
-                setFormValues((current) => ({
-                  ...current,
-                  itemName: event.target.value,
-                }))
+                {
+                  setFormValues((current) => ({
+                    ...current,
+                    itemName: event.target.value,
+                  }));
+                  clearFieldError("itemName");
+                }
               }
               className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
             />
+            {formErrors.itemName ? <p className="mt-1 text-xs text-red-300">{formErrors.itemName}</p> : null}
           </label>
 
           <label className="block">
@@ -146,12 +208,16 @@ export default function EmsSupplyFormModal({
             <select
               value={formValues.unitOfMeasure}
               onChange={(event) =>
-                setFormValues((current) => ({
-                  ...current,
-                  unitOfMeasure: event.target.value as EmsSupplyUnitOptionValue,
-                  customUnitOfMeasure:
-                    event.target.value === "custom" ? current.customUnitOfMeasure : "",
-                }))
+                {
+                  setFormValues((current) => ({
+                    ...current,
+                    unitOfMeasure: event.target.value as EmsSupplyUnitOptionValue,
+                    customUnitOfMeasure:
+                      event.target.value === "custom" ? current.customUnitOfMeasure : "",
+                  }));
+                  clearFieldError("unitOfMeasure");
+                  clearFieldError("customUnitOfMeasure");
+                }
               }
               className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
             >
@@ -161,6 +227,7 @@ export default function EmsSupplyFormModal({
                 </option>
               ))}
             </select>
+            {formErrors.unitOfMeasure ? <p className="mt-1 text-xs text-red-300">{formErrors.unitOfMeasure}</p> : null}
           </label>
 
           {showCustomUnitField ? (
@@ -171,14 +238,20 @@ export default function EmsSupplyFormModal({
               <input
                 value={formValues.customUnitOfMeasure}
                 onChange={(event) =>
-                  setFormValues((current) => ({
-                    ...current,
-                    customUnitOfMeasure: event.target.value,
-                  }))
+                  {
+                    setFormValues((current) => ({
+                      ...current,
+                      customUnitOfMeasure: event.target.value,
+                    }));
+                    clearFieldError("customUnitOfMeasure");
+                  }
                 }
                 placeholder="Sleeve"
                 className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
               />
+              {formErrors.customUnitOfMeasure ? (
+                <p className="mt-1 text-xs text-red-300">{formErrors.customUnitOfMeasure}</p>
+              ) : null}
             </label>
           ) : null}
 
@@ -193,13 +266,19 @@ export default function EmsSupplyFormModal({
                 step="0.01"
                 value={formValues.startingQuantity}
                 onChange={(event) =>
-                  setFormValues((current) => ({
-                    ...current,
-                    startingQuantity: event.target.value,
-                  }))
+                  {
+                    setFormValues((current) => ({
+                      ...current,
+                      startingQuantity: event.target.value,
+                    }));
+                    clearFieldError("startingQuantity");
+                  }
                 }
                 className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
               />
+              {formErrors.startingQuantity ? (
+                <p className="mt-1 text-xs text-red-300">{formErrors.startingQuantity}</p>
+              ) : null}
             </label>
           ) : null}
 
@@ -213,18 +292,24 @@ export default function EmsSupplyFormModal({
               step="0.01"
               value={formValues.reorderThreshold}
               onChange={(event) =>
-                setFormValues((current) => ({
-                  ...current,
-                  reorderThreshold: event.target.value,
-                }))
+                {
+                  setFormValues((current) => ({
+                    ...current,
+                    reorderThreshold: event.target.value,
+                  }));
+                  clearFieldError("reorderThreshold");
+                }
               }
               className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
             />
+            {formErrors.reorderThreshold ? (
+              <p className="mt-1 text-xs text-red-300">{formErrors.reorderThreshold}</p>
+            ) : null}
           </label>
 
           <label className="block">
             <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">
-              Critical Threshold *
+              Critical Threshold
             </span>
             <input
               type="number"
@@ -232,13 +317,19 @@ export default function EmsSupplyFormModal({
               step="0.01"
               value={formValues.criticalThreshold}
               onChange={(event) =>
-                setFormValues((current) => ({
-                  ...current,
-                  criticalThreshold: event.target.value,
-                }))
+                {
+                  setFormValues((current) => ({
+                    ...current,
+                    criticalThreshold: event.target.value,
+                  }));
+                  clearFieldError("criticalThreshold");
+                }
               }
               className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
             />
+            {formErrors.criticalThreshold ? (
+              <p className="mt-1 text-xs text-red-300">{formErrors.criticalThreshold}</p>
+            ) : null}
           </label>
 
           <label className="block">
@@ -342,7 +433,16 @@ export default function EmsSupplyFormModal({
             <button
               type="button"
               disabled={isSaving}
-              onClick={() => onSave(formValues)}
+              onClick={() => {
+                const nextErrors = validateForSave(formValues);
+                setFormErrors(nextErrors);
+
+                if (Object.keys(nextErrors).length > 0) {
+                  return;
+                }
+
+                onSave(formValues);
+              }}
               className="rounded-lg border border-red-500/40 bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isSaving ? "Saving..." : mode === "add" ? "Save Supply" : "Update Supply"}

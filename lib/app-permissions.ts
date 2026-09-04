@@ -17,6 +17,8 @@ export const APP_PERMISSION_KEYS = [
   "training_review",
   "apparatus_management",
   "maintenance_management",
+  "deficiency_edit_any",
+  "deficiency_resolve",
   "deficiency_management",
   "certification_management",
   "inventory_management",

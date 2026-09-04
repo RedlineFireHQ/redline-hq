@@ -1,4 +1,5 @@
 import { getCurrentMember } from "@/lib/current-member";
+import { hasDepartmentPermission } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 type UploadPayload = {
@@ -20,9 +21,7 @@ type CreateEquipmentPayload = {
   photoUpload?: unknown;
 };
 
-function isElevatedRole(role: unknown): boolean {
-  return role === "administrator" || role === "officer";
-}
+const ALLOWED_STATUS_VALUES = new Set(["Active", "Inactive", "Out of Service"]);
 
 function jsonResponse(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
@@ -80,6 +79,26 @@ function parseUpload(value: unknown): UploadPayload | null {
     mimeType,
     base64Data,
   };
+}
+
+function mapCreateEquipmentErrorMessage(error: { code?: string; message?: string; details?: string | null } | null) {
+  if (!error) {
+    return "Unable to create EMS equipment.";
+  }
+
+  const message = typeof error.message === "string" ? error.message : "";
+  const details = typeof error.details === "string" ? error.details : "";
+  const combined = `${message} ${details}`.toLowerCase();
+
+  if (
+    error.code === "23505"
+    && (combined.includes("ems_equipment_department_equipment_number_unique_idx")
+      || combined.includes("equipment_number"))
+  ) {
+    return "Equipment Number is already in use. Please enter a different number.";
+  }
+
+  return message || "Unable to create EMS equipment.";
 }
 
 async function uploadEquipmentPhoto({
@@ -152,7 +171,14 @@ export async function POST(request: Request) {
       return jsonResponse({ ok: false, error: "Unauthorized" }, 401);
     }
 
-    if (!isElevatedRole(currentMember.role)) {
+    const canManageInventory = await hasDepartmentPermission(
+      supabase,
+      currentMember.departmentId,
+      currentMember.role,
+      "inventory_management",
+    );
+
+    if (!canManageInventory) {
       return jsonResponse({ ok: false, error: "Forbidden" }, 403);
     }
 
@@ -163,12 +189,17 @@ export async function POST(request: Request) {
     const assetId = asTrimmedString(payload.assetId) || null;
     const placedInServiceDate = parseOptionalDate(payload.placedInServiceDate);
     const location = asTrimmedString(payload.location) || null;
-    const status = asTrimmedString(payload.status) === "Inactive" ? "Inactive" : "Active";
+    const rawStatus = asTrimmedString(payload.status);
+    const status = rawStatus || "Active";
     const notes = asTrimmedString(payload.notes) || null;
     const photoUpload = parseUpload(payload.photoUpload);
 
     if (!equipmentName) {
       return jsonResponse({ ok: false, error: "Equipment name is required." }, 400);
+    }
+
+    if (!ALLOWED_STATUS_VALUES.has(status)) {
+      return jsonResponse({ ok: false, error: "Status must be Active, Inactive, or Out of Service." }, 400);
     }
 
     let photoPath: string | null = null;
@@ -205,7 +236,7 @@ export async function POST(request: Request) {
         await supabase.storage.from("department-documents").remove([photoPath]);
       }
 
-      return jsonResponse({ ok: false, error: error?.message || "Unable to create EMS equipment." }, 400);
+      return jsonResponse({ ok: false, error: mapCreateEquipmentErrorMessage(error) }, 400);
     }
 
     return jsonResponse({ ok: true, item: data });

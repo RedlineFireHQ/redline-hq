@@ -2,6 +2,11 @@
 
 import { useMemo, useState } from "react";
 
+export type EmsEquipmentApparatusOption = {
+  id: string;
+  name: string;
+};
+
 export type EmsEquipmentFormValues = {
   equipmentName: string;
   manufacturer: string;
@@ -10,7 +15,7 @@ export type EmsEquipmentFormValues = {
   assetId: string;
   placedInServiceDate: string;
   location: string;
-  status: "Active" | "Inactive";
+  status: "Active" | "Inactive" | "Out of Service";
   notes: string;
   photoFile: File | null;
   removePhoto: boolean;
@@ -20,13 +25,107 @@ type EmsEquipmentFormModalProps = {
   isOpen: boolean;
   mode: "add" | "edit";
   initialValues?: Omit<EmsEquipmentFormValues, "photoFile" | "removePhoto">;
+  apparatusOptions: EmsEquipmentApparatusOption[];
   existingPhotoUrl?: string | null;
   isSaving?: boolean;
+  errorMessage?: string | null;
   canDelete?: boolean;
   onClose: () => void;
   onSave: (values: EmsEquipmentFormValues) => void;
   onDelete?: () => void;
 };
+
+type EquipmentLocationMode = "Apparatus" | "EMS Supply Locker" | "Station/Facility" | "Custom";
+
+const DEFAULT_LOCATION_MODE: EquipmentLocationMode = "EMS Supply Locker";
+
+function normalizeText(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function findApparatusOptionByName(
+  apparatusOptions: EmsEquipmentApparatusOption[],
+  apparatusName: string,
+) {
+  const normalizedName = normalizeText(apparatusName);
+  if (!normalizedName) {
+    return null;
+  }
+
+  return apparatusOptions.find((option) => normalizeText(option.name) === normalizedName) ?? null;
+}
+
+function getInitialLocationState(
+  location: string,
+  apparatusOptions: EmsEquipmentApparatusOption[],
+): {
+  locationMode: EquipmentLocationMode;
+  apparatusId: string;
+  stationFacilityLocation: string;
+  customLocation: string;
+} {
+  const normalizedLocation = location.trim();
+  if (!normalizedLocation) {
+    return {
+      locationMode: DEFAULT_LOCATION_MODE,
+      apparatusId: "",
+      stationFacilityLocation: "",
+      customLocation: "",
+    };
+  }
+
+  if (normalizeText(normalizedLocation) === "ems supply locker") {
+    return {
+      locationMode: "EMS Supply Locker",
+      apparatusId: "",
+      stationFacilityLocation: "",
+      customLocation: "",
+    };
+  }
+
+  const apparatusPrefix = "Apparatus:";
+  if (normalizedLocation.startsWith(apparatusPrefix)) {
+    const apparatusName = normalizedLocation.slice(apparatusPrefix.length).trim();
+    const matchedOption = findApparatusOptionByName(apparatusOptions, apparatusName);
+    if (matchedOption) {
+      return {
+        locationMode: "Apparatus",
+        apparatusId: matchedOption.id,
+        stationFacilityLocation: "",
+        customLocation: "",
+      };
+    }
+  }
+
+  const directApparatusMatch = findApparatusOptionByName(apparatusOptions, normalizedLocation);
+  if (directApparatusMatch) {
+    return {
+      locationMode: "Apparatus",
+      apparatusId: directApparatusMatch.id,
+      stationFacilityLocation: "",
+      customLocation: "",
+    };
+  }
+
+  const stationFacilityPrefixes = ["Station/Facility:", "Station:", "Facility:"];
+  for (const prefix of stationFacilityPrefixes) {
+    if (normalizedLocation.startsWith(prefix)) {
+      return {
+        locationMode: "Station/Facility",
+        apparatusId: "",
+        stationFacilityLocation: normalizedLocation.slice(prefix.length).trim(),
+        customLocation: "",
+      };
+    }
+  }
+
+  return {
+    locationMode: "Custom",
+    apparatusId: "",
+    stationFacilityLocation: "",
+    customLocation: normalizedLocation,
+  };
+}
 
 const EMPTY_VALUES: EmsEquipmentFormValues = {
   equipmentName: "",
@@ -46,13 +145,17 @@ export default function EmsEquipmentFormModal({
   isOpen,
   mode,
   initialValues,
+  apparatusOptions,
   existingPhotoUrl = null,
   isSaving = false,
+  errorMessage = null,
   canDelete = false,
   onClose,
   onSave,
   onDelete,
 }: EmsEquipmentFormModalProps) {
+  const initialLocationState = getInitialLocationState(initialValues?.location ?? "", apparatusOptions);
+
   const [formValues, setFormValues] = useState<EmsEquipmentFormValues>(() => {
     if (mode === "edit" && initialValues) {
       return {
@@ -64,6 +167,11 @@ export default function EmsEquipmentFormModal({
 
     return EMPTY_VALUES;
   });
+  const [locationMode, setLocationMode] = useState<EquipmentLocationMode>(initialLocationState.locationMode);
+  const [locationApparatusId, setLocationApparatusId] = useState(initialLocationState.apparatusId);
+  const [stationFacilityLocation, setStationFacilityLocation] = useState(initialLocationState.stationFacilityLocation);
+  const [customLocation, setCustomLocation] = useState(initialLocationState.customLocation);
+  const [locationError, setLocationError] = useState<string | null>(null);
 
   const selectedPhotoPreviewUrl = useMemo(() => {
     if (!formValues.photoFile) {
@@ -81,6 +189,8 @@ export default function EmsEquipmentFormModal({
 
   const statusBadgeClass = formValues.status === "Active"
     ? "border-green-700/40 bg-green-900/20 text-green-200"
+    : formValues.status === "Out of Service"
+      ? "border-red-700/40 bg-red-900/20 text-red-200"
     : "border-neutral-600/40 bg-neutral-900 text-neutral-300";
 
   if (!isOpen) {
@@ -206,17 +316,81 @@ export default function EmsEquipmentFormModal({
             <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">
               Location
             </span>
-            <input
-              value={formValues.location}
-              onChange={(event) =>
-                setFormValues((current) => ({
-                  ...current,
-                  location: event.target.value,
-                }))
-              }
+            <select
+              value={locationMode}
+              onChange={(event) => {
+                setLocationMode(event.target.value as EquipmentLocationMode);
+                setLocationError(null);
+              }}
               className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
-            />
+            >
+              <option value="Apparatus">Apparatus</option>
+              <option value="EMS Supply Locker">EMS Supply Locker</option>
+              <option value="Station/Facility">Station/Facility</option>
+              <option value="Custom">Custom Location</option>
+            </select>
           </label>
+
+          {locationMode === "Apparatus" ? (
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">
+                Apparatus
+              </span>
+              <select
+                value={locationApparatusId}
+                onChange={(event) => {
+                  setLocationApparatusId(event.target.value);
+                  setLocationError(null);
+                }}
+                className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
+              >
+                <option value="">Select apparatus</option>
+                {apparatusOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+
+          {locationMode === "Station/Facility" ? (
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">
+                Station/Facility Location
+              </span>
+              <input
+                value={stationFacilityLocation}
+                onChange={(event) => {
+                  setStationFacilityLocation(event.target.value);
+                  setLocationError(null);
+                }}
+                placeholder="Station 1 Bay 2"
+                className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
+              />
+            </label>
+          ) : null}
+
+          {locationMode === "Custom" ? (
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">
+                Custom Location
+              </span>
+              <input
+                value={customLocation}
+                onChange={(event) => {
+                  setCustomLocation(event.target.value);
+                  setLocationError(null);
+                }}
+                placeholder="Building, room, cabinet"
+                className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
+              />
+            </label>
+          ) : null}
+
+          {locationError ? (
+            <p className="-mt-1 text-xs font-medium text-red-300 md:col-span-2">{locationError}</p>
+          ) : null}
 
           <label className="block">
             <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">
@@ -227,13 +401,19 @@ export default function EmsEquipmentFormModal({
               onChange={(event) =>
                 setFormValues((current) => ({
                   ...current,
-                  status: event.target.value === "Inactive" ? "Inactive" : "Active",
+                  status:
+                    event.target.value === "Inactive"
+                      ? "Inactive"
+                      : event.target.value === "Out of Service"
+                        ? "Out of Service"
+                        : "Active",
                 }))
               }
               className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
             >
               <option value="Active">Active</option>
               <option value="Inactive">Inactive</option>
+              <option value="Out of Service">Out of Service</option>
             </select>
           </label>
 
@@ -301,6 +481,12 @@ export default function EmsEquipmentFormModal({
           </div>
         </div>
 
+        {errorMessage ? (
+          <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-100">
+            {errorMessage}
+          </div>
+        ) : null}
+
         <div className="mt-6 flex flex-wrap justify-between gap-2">
           <div>
             {mode === "edit" && canDelete && onDelete ? (
@@ -325,7 +511,48 @@ export default function EmsEquipmentFormModal({
             <button
               type="button"
               disabled={isSaving}
-              onClick={() => onSave(formValues)}
+              onClick={() => {
+                let resolvedLocation = "";
+
+                if (locationMode === "EMS Supply Locker") {
+                  resolvedLocation = "EMS Supply Locker";
+                }
+
+                if (locationMode === "Apparatus") {
+                  const selectedOption = apparatusOptions.find((option) => option.id === locationApparatusId);
+                  if (!selectedOption) {
+                    setLocationError("Select an apparatus location.");
+                    return;
+                  }
+
+                  resolvedLocation = `Apparatus: ${selectedOption.name}`;
+                }
+
+                if (locationMode === "Station/Facility") {
+                  const trimmedStationFacilityLocation = stationFacilityLocation.trim();
+                  if (!trimmedStationFacilityLocation) {
+                    setLocationError("Station/Facility location is required.");
+                    return;
+                  }
+
+                  resolvedLocation = `Station/Facility: ${trimmedStationFacilityLocation}`;
+                }
+
+                if (locationMode === "Custom") {
+                  const trimmedCustomLocation = customLocation.trim();
+                  if (!trimmedCustomLocation) {
+                    setLocationError("Custom location is required.");
+                    return;
+                  }
+
+                  resolvedLocation = trimmedCustomLocation;
+                }
+
+                onSave({
+                  ...formValues,
+                  location: resolvedLocation,
+                });
+              }}
               className="rounded-lg border border-red-500/40 bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isSaving ? "Saving..." : mode === "add" ? "Create Equipment" : "Save Changes"}

@@ -3,6 +3,7 @@ import EmsSupplyWorkspace, {
 } from "@/components/inventory/EmsSupplyWorkspace";
 import { getActiveApparatusOptions } from "@/lib/database";
 import { getCurrentMember } from "@/lib/current-member";
+import { hasDepartmentPermission } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 function compareItemNames(left: string | null | undefined, right: string | null | undefined) {
@@ -31,8 +32,14 @@ export default async function EmsSuppliesInventoryPage() {
   const supabase = await createSupabaseServerClient();
   const currentMember = await getCurrentMember(supabase);
   const departmentId = currentMember?.departmentId ?? null;
-  const canManageSupplies =
-    currentMember?.role === "administrator" || currentMember?.role === "officer";
+  const canManageSupplies = departmentId
+    ? await hasDepartmentPermission(
+        supabase,
+        departmentId,
+        currentMember?.role,
+        "inventory_management",
+      )
+    : false;
 
   let departmentName: string | null = null;
   const checkedOutByName = currentMember?.name || "Authenticated Member";

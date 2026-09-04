@@ -3,15 +3,16 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import PpeFormModal, {
+  type PpeApparatusOption,
+  type PpeAssignmentType,
   type PpeFormValues,
   type PpeMemberOption,
 } from "@/components/inventory/PpeFormModal";
-import type { PpeReadinessResult } from "@/lib/inventory/ppe-readiness";
 
 export type PpeRow = {
   id: string;
   item_name: string;
-  assigned_member_id: string;
+  assigned_member_id: string | null;
   assigned_member_name: string | null;
   manufacturer: string | null;
   model: string | null;
@@ -22,7 +23,7 @@ export type PpeRow = {
   placed_in_service_date: string | null;
   expiration_date: string | null;
   location: string | null;
-  status: "Active" | "Inactive";
+  status: "Active" | "Inactive" | "Out of Service";
   notes: string | null;
   photo_path: string | null;
   created_at: string;
@@ -50,12 +51,15 @@ type WorkspaceProps = {
   departmentName: string | null;
   canManagePpe: boolean;
   memberOptions: PpeMemberOption[];
+  apparatusOptions: PpeApparatusOption[];
   initialRows: PpeRow[];
-  readinessState: PpeReadinessResult;
   initialError?: string | null;
 };
 
-type StatusFilter = "All" | "Active" | "Inactive";
+type StatusFilter = "All" | "Active" | "Inactive" | "Out of Service";
+
+const STATION_SUPPLY_LABEL = "Station Supply";
+const APPARATUS_LOCATION_PREFIX = "Apparatus:";
 
 function compareNames(left: string | null | undefined, right: string | null | undefined): number {
   const leftValue = typeof left === "string" ? left.trim() : "";
@@ -101,25 +105,11 @@ function statusBadgeClasses(status: StatusFilter) {
     return "border-green-700/40 bg-green-900/20 text-green-300";
   }
 
+  if (status === "Out of Service") {
+    return "border-red-700/40 bg-red-900/20 text-red-300";
+  }
+
   return "border-neutral-600/40 bg-neutral-900 text-neutral-300";
-}
-
-function summaryCardClasses(active: boolean, tone: "all" | "active" | "inactive") {
-  const base = "rounded-xl border px-4 py-3 text-left transition";
-
-  if (active) {
-    return `${base} border-white/20 bg-white/[0.06]`;
-  }
-
-  if (tone === "active") {
-    return `${base} border-green-700/30 bg-green-950/20 hover:bg-green-950/30`;
-  }
-
-  if (tone === "inactive") {
-    return `${base} border-neutral-700/30 bg-neutral-900/40 hover:bg-neutral-900/60`;
-  }
-
-  return `${base} border-white/10 bg-[#1b1b1b] hover:bg-[#202020]`;
 }
 
 function normalizeApiError(payload: unknown, fallback: string) {
@@ -170,19 +160,59 @@ function deficiencyStatusClasses(value: string | null | undefined) {
   return "border-neutral-600/40 bg-neutral-900 text-neutral-300";
 }
 
-function formatPpeReadinessPercent(value: number | null) {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    return "NOT RATED";
+function parseAssignment(row: PpeRow): {
+  assignmentType: PpeAssignmentType;
+  assignedMemberId: string;
+  apparatusId: string;
+} {
+  const locationValue = typeof row.location === "string" ? row.location.trim() : "";
+
+  if (locationValue.startsWith(APPARATUS_LOCATION_PREFIX)) {
+    return {
+      assignmentType: "Apparatus",
+      assignedMemberId: "",
+      apparatusId: locationValue.slice(APPARATUS_LOCATION_PREFIX.length).trim(),
+    };
   }
 
-  const rounded = Math.round(value * 10) / 10;
-  return Number.isInteger(rounded) ? `${rounded}%` : `${rounded.toFixed(1)}%`;
+  if (row.assigned_member_id) {
+    return {
+      assignmentType: "Department Member",
+      assignedMemberId: row.assigned_member_id,
+      apparatusId: "",
+    };
+  }
+
+  return {
+    assignmentType: "Station Supply",
+    assignedMemberId: "",
+    apparatusId: "",
+  };
+}
+
+function getAssignmentLabel(row: PpeRow, apparatusById: Map<string, PpeApparatusOption>): string {
+  const assignment = parseAssignment(row);
+
+  if (assignment.assignmentType === "Apparatus") {
+    const apparatus = assignment.apparatusId ? apparatusById.get(assignment.apparatusId) : null;
+    return apparatus?.label || "Apparatus";
+  }
+
+  if (assignment.assignmentType === "Department Member") {
+    return row.assigned_member_name || "Department Member";
+  }
+
+  return STATION_SUPPLY_LABEL;
 }
 
 function toFormValues(row: PpeRow): PpeFormValues {
+  const assignment = parseAssignment(row);
+
   return {
     itemName: row.item_name,
-    assignedMemberId: row.assigned_member_id,
+    assignmentType: assignment.assignmentType,
+    assignedMemberId: assignment.assignedMemberId,
+    apparatusId: assignment.apparatusId,
     manufacturer: row.manufacturer ?? "",
     model: row.model ?? "",
     serialNumber: row.serial_number ?? "",
@@ -191,7 +221,6 @@ function toFormValues(row: PpeRow): PpeFormValues {
     dateManufactured: row.date_manufactured ?? "",
     placedInServiceDate: row.placed_in_service_date ?? "",
     expirationDate: row.expiration_date ?? "",
-    location: row.location ?? "",
     status: row.status,
     notes: row.notes ?? "",
     photoFile: null,
@@ -218,8 +247,8 @@ export default function PpeWorkspace({
   departmentName,
   canManagePpe,
   memberOptions,
+  apparatusOptions,
   initialRows,
-  readinessState,
   initialError = null,
 }: WorkspaceProps) {
   const router = useRouter();
@@ -241,14 +270,9 @@ export default function PpeWorkspace({
   const [isFormSaving, setIsFormSaving] = useState(false);
   const [formInstanceKey, setFormInstanceKey] = useState(0);
 
-  const activeRows = useMemo(
-    () => rows.filter((row) => row.status === "Active"),
-    [rows],
-  );
-
-  const inactiveRows = useMemo(
-    () => rows.filter((row) => row.status === "Inactive"),
-    [rows],
+  const apparatusById = useMemo(
+    () => new Map(apparatusOptions.map((option) => [option.id, option])),
+    [apparatusOptions],
   );
 
   const filteredRows = useMemo(() => {
@@ -270,6 +294,7 @@ export default function PpeWorkspace({
 
         const searchableFields = [
           row.item_name,
+          getAssignmentLabel(row, apparatusById),
           row.assigned_member_name,
           row.manufacturer,
           row.model,
@@ -280,9 +305,7 @@ export default function PpeWorkspace({
         return searchableFields.some((field) => (field ?? "").toLowerCase().includes(normalizedSearch));
       })
       .sort((left, right) => compareNames(left.item_name, right.item_name));
-  }, [rows, searchTerm, statusFilter, memberFilter]);
-
-  const selectedSummaryFilter = statusFilter === "All" ? "all" : statusFilter === "Active" ? "active" : "inactive";
+  }, [rows, searchTerm, statusFilter, memberFilter, apparatusById]);
 
   const formInitialValues =
     formMode === "edit" && selectedItem ? toFormValues(selectedItem) : undefined;
@@ -307,11 +330,18 @@ export default function PpeWorkspace({
       return;
     }
 
+    const assignment = parseAssignment(selectedItem);
+    const resolvedApparatusId =
+      assignment.assignmentType === "Apparatus" && assignment.apparatusId
+        ? assignment.apparatusId
+        : "station-supply";
+
     const params = new URLSearchParams({
       inventoryCategory: "ppe",
       inventoryItemId: selectedItem.id,
       inventoryItemLabel: selectedItem.item_name,
       returnTo: "/inventory/ppe",
+      apparatusId: resolvedApparatusId,
     });
 
     router.push(`/deficiencies/report?${params.toString()}`);
@@ -319,6 +349,8 @@ export default function PpeWorkspace({
 
   const loadDetail = async (itemId: string) => {
     setSelectedItemId(itemId);
+    setSelectedItem(null);
+    setSelectedPhotoUrl(null);
     setIsDetailLoading(true);
     setIsDeficienciesLoading(true);
     setSelectedDeficiencies([]);
@@ -425,8 +457,15 @@ export default function PpeWorkspace({
       return;
     }
 
-    if (!values.assignedMemberId.trim()) {
-      setToastMessage("Assigned member is required.");
+    const assignmentType = values.assignmentType;
+
+    if (assignmentType === "Department Member" && !values.assignedMemberId.trim()) {
+      setToastMessage("Department member is required for member assignment.");
+      return;
+    }
+
+    if (assignmentType === "Apparatus" && !values.apparatusId.trim()) {
+      setToastMessage("Apparatus is required for apparatus assignment.");
       return;
     }
 
@@ -436,7 +475,9 @@ export default function PpeWorkspace({
       const photoUpload = values.photoFile ? await fileToUploadPayload(values.photoFile) : null;
       const requestPayload = {
         itemName: values.itemName,
+        assignmentType: values.assignmentType,
         assignedMemberId: values.assignedMemberId,
+        apparatusId: values.apparatusId,
         manufacturer: values.manufacturer,
         model: values.model,
         serialNumber: values.serialNumber,
@@ -445,7 +486,6 @@ export default function PpeWorkspace({
         dateManufactured: values.dateManufactured,
         placedInServiceDate: values.placedInServiceDate,
         expirationDate: values.expirationDate,
-        location: values.location,
         status: values.status,
         notes: values.notes,
         photoUpload,
@@ -519,56 +559,13 @@ export default function PpeWorkspace({
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">Inventory</p>
           <h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">PPE Inventory</h1>
-          <p className="mt-3 max-w-2xl text-lg text-neutral-400">
-            Department-scoped personal protective equipment records assigned to firefighters.
+          <p className="mt-2 max-w-3xl text-sm text-neutral-400">
+            Manage personal protective equipment records, assignment ownership, and deficiency linkage.
           </p>
-          <p className="mt-1 text-sm text-neutral-500">
+          <p className="mt-2 text-sm text-neutral-500">
             {departmentName ? `${departmentName} PPE Management` : "PPE Management"}
           </p>
         </div>
-
-        <section className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-5">
-          <div className="grid gap-3 sm:grid-cols-4">
-            <button
-              type="button"
-              onClick={() => setStatusFilter("All")}
-              className={summaryCardClasses(selectedSummaryFilter === "all", "all")}
-            >
-              <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-500">Total PPE</p>
-              <p className="mt-2 text-2xl font-black text-white">{rows.length}</p>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setStatusFilter("Active")}
-              className={summaryCardClasses(selectedSummaryFilter === "active", "active")}
-            >
-              <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-500">Active</p>
-              <p className="mt-2 text-2xl font-black text-green-300">{activeRows.length}</p>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setStatusFilter("Inactive")}
-              className={summaryCardClasses(selectedSummaryFilter === "inactive", "inactive")}
-            >
-              <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-500">Inactive</p>
-              <p className="mt-2 text-2xl font-black text-neutral-200">{inactiveRows.length}</p>
-            </button>
-
-            <div className="rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-500">PPE Readiness</p>
-              <p className="mt-2 text-2xl font-black text-white">
-                {formatPpeReadinessPercent(readinessState.readinessPercent)}
-              </p>
-              <p className="mt-1 text-xs text-neutral-400">
-                {readinessState.isRated
-                  ? "Based on active PPE and open deficiencies."
-                  : "Add active PPE to establish a readiness score."}
-              </p>
-            </div>
-          </div>
-        </section>
 
         <section className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-5">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -595,6 +592,7 @@ export default function PpeWorkspace({
                 <option value="All">All</option>
                 <option value="Active">Active</option>
                 <option value="Inactive">Inactive</option>
+                <option value="Out of Service">Out of Service</option>
               </select>
 
               <select
@@ -636,7 +634,7 @@ export default function PpeWorkspace({
                 <thead className="sticky top-0 z-10 bg-[#242424] text-xs uppercase tracking-[0.14em] text-neutral-500">
                   <tr>
                     <th className="px-4 py-3 font-semibold">PPE Item</th>
-                    <th className="px-4 py-3 font-semibold">Assigned Member</th>
+                    <th className="px-4 py-3 font-semibold">Assignment</th>
                     <th className="px-4 py-3 font-semibold">Serial / Asset ID</th>
                     <th className="px-4 py-3 font-semibold">Status</th>
                   </tr>
@@ -654,7 +652,7 @@ export default function PpeWorkspace({
                           {[row.manufacturer, row.model].filter(Boolean).join(" • ") || "-"}
                         </p>
                       </td>
-                      <td className="px-4 py-3 align-top text-sm text-neutral-300">{row.assigned_member_name || "Unknown Member"}</td>
+                      <td className="px-4 py-3 align-top text-sm text-neutral-300">{getAssignmentLabel(row, apparatusById)}</td>
                       <td className="px-4 py-3 align-top text-sm text-neutral-300">
                         <p>{row.serial_number || "-"}</p>
                         <p className="mt-1 text-xs text-neutral-500">{row.asset_number || "-"}</p>
@@ -704,7 +702,7 @@ export default function PpeWorkspace({
 
                 <div>
                   <h3 className="text-xl font-black text-white">{selectedItem.item_name}</h3>
-                  <p className="mt-1 text-sm text-neutral-400">Assigned Member: {selectedItem.assigned_member_name || "Unknown Member"}</p>
+                  <p className="mt-1 text-sm text-neutral-400">Assignment: {getAssignmentLabel(selectedItem, apparatusById)}</p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 text-sm">
@@ -745,8 +743,8 @@ export default function PpeWorkspace({
                     <p className="mt-1 text-neutral-200">{formatDate(selectedItem.expiration_date)}</p>
                   </div>
                   <div>
-                    <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-500">Location</p>
-                    <p className="mt-1 text-neutral-200">{selectedItem.location || "-"}</p>
+                    <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-500">Assignment</p>
+                    <p className="mt-1 text-neutral-200">{getAssignmentLabel(selectedItem, apparatusById)}</p>
                   </div>
                 </div>
 
@@ -844,6 +842,7 @@ export default function PpeWorkspace({
         isOpen={isFormOpen}
         mode={formMode}
         memberOptions={memberOptions}
+        apparatusOptions={apparatusOptions}
         initialValues={formInitialValues}
         existingPhotoUrl={selectedPhotoUrl}
         isSaving={isFormSaving}

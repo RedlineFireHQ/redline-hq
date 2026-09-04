@@ -1,4 +1,5 @@
 import { getCurrentMember } from "@/lib/current-member";
+import { hasDepartmentPermission } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 type UploadPayload = {
@@ -27,9 +28,7 @@ type RouteContext = {
   }>;
 };
 
-function isElevatedRole(role: unknown): boolean {
-  return role === "administrator" || role === "officer";
-}
+const ALLOWED_STATUS_VALUES = new Set(["Active", "Inactive", "Out of Service"]);
 
 function jsonResponse(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
@@ -190,13 +189,20 @@ export async function PATCH(request: Request, context: RouteContext) {
       return jsonResponse({ ok: false, error: "Unauthorized" }, 401);
     }
 
-    if (!isElevatedRole(currentMember.role)) {
+    const canManageInventory = await hasDepartmentPermission(
+      supabase,
+      currentMember.departmentId,
+      currentMember.role,
+      "inventory_management",
+    );
+
+    if (!canManageInventory) {
       return jsonResponse({ ok: false, error: "Forbidden" }, 403);
     }
 
     const { data: existingItem, error: existingError } = await supabase
       .from("ems_equipment")
-      .select("id, photo_path")
+      .select("id, photo_path, status")
       .eq("id", id)
       .eq("department_id", currentMember.departmentId)
       .maybeSingle();
@@ -216,13 +222,19 @@ export async function PATCH(request: Request, context: RouteContext) {
     const assetId = asTrimmedString(payload.assetId) || null;
     const placedInServiceDate = parseOptionalDate(payload.placedInServiceDate);
     const location = asTrimmedString(payload.location) || null;
-    const status = asTrimmedString(payload.status) === "Inactive" ? "Inactive" : "Active";
+    const rawStatus = asTrimmedString(payload.status);
+    const existingStatus = asTrimmedString(existingItem.status);
+    const status = rawStatus || existingStatus || "Active";
     const notes = asTrimmedString(payload.notes) || null;
     const photoUpload = parseUpload(payload.photoUpload);
     const removePhoto = payload.removePhoto === true;
 
     if (!equipmentName) {
       return jsonResponse({ ok: false, error: "Equipment name is required." }, 400);
+    }
+
+    if (!ALLOWED_STATUS_VALUES.has(status)) {
+      return jsonResponse({ ok: false, error: "Status must be Active, Inactive, or Out of Service." }, 400);
     }
 
     let nextPhotoPath: string | null = existingItem.photo_path;
@@ -288,7 +300,14 @@ export async function DELETE(_: Request, context: RouteContext) {
       return jsonResponse({ ok: false, error: "Unauthorized" }, 401);
     }
 
-    if (!isElevatedRole(currentMember.role)) {
+    const canManageInventory = await hasDepartmentPermission(
+      supabase,
+      currentMember.departmentId,
+      currentMember.role,
+      "inventory_management",
+    );
+
+    if (!canManageInventory) {
       return jsonResponse({ ok: false, error: "Forbidden" }, 403);
     }
 

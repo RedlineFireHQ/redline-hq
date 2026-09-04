@@ -1,7 +1,10 @@
 import EmsEquipmentWorkspace, {
   type EmsEquipmentRow,
 } from "@/components/inventory/EmsEquipmentWorkspace";
+import type { EmsEquipmentApparatusOption } from "@/components/inventory/EmsEquipmentFormModal";
 import { getCurrentMember } from "@/lib/current-member";
+import { getActiveApparatusOptions } from "@/lib/database";
+import { hasDepartmentPermission } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 function compareEquipmentNames(left: string | null | undefined, right: string | null | undefined) {
@@ -30,15 +33,22 @@ export default async function EmsEquipmentInventoryPage() {
   const supabase = await createSupabaseServerClient();
   const currentMember = await getCurrentMember(supabase);
   const departmentId = currentMember?.departmentId ?? null;
-  const canManageEquipment =
-    currentMember?.role === "administrator" || currentMember?.role === "officer";
+  const canManageEquipment = departmentId
+    ? await hasDepartmentPermission(
+        supabase,
+        departmentId,
+        currentMember?.role,
+        "inventory_management",
+      )
+    : false;
 
   let departmentName: string | null = null;
   let initialRows: EmsEquipmentRow[] = [];
+  let apparatusOptions: EmsEquipmentApparatusOption[] = [];
   let initialError: string | null = null;
 
   if (departmentId) {
-    const [{ data: departmentData }, { data, error }] = await Promise.all([
+    const [{ data: departmentData }, { data, error }, apparatusData] = await Promise.all([
       supabase
         .from("departments")
         .select("name")
@@ -52,6 +62,7 @@ export default async function EmsEquipmentInventoryPage() {
         .eq("department_id", departmentId)
         .order("status", { ascending: true })
         .order("equipment_name", { ascending: true }),
+      getActiveApparatusOptions({ client: supabase, departmentId }),
     ]);
 
     departmentName = typeof departmentData?.name === "string" ? departmentData.name : null;
@@ -60,6 +71,13 @@ export default async function EmsEquipmentInventoryPage() {
       console.error("[ems-equipment] initial load failed", error);
       initialError = error.message || "Unable to load EMS equipment.";
     }
+
+    apparatusOptions = apparatusData
+      .map((row) => ({
+        id: row.id,
+        name: typeof row.name === "string" && row.name.trim() ? row.name.trim() : row.id,
+      }))
+      .filter((row) => Boolean(row.id));
 
     initialRows = [...((data ?? []) as EmsEquipmentRow[])].sort((left, right) =>
       compareEquipmentNames(left.equipment_name, right.equipment_name),
@@ -71,6 +89,7 @@ export default async function EmsEquipmentInventoryPage() {
       <EmsEquipmentWorkspace
         departmentName={departmentName}
         canManageEquipment={canManageEquipment}
+        apparatusOptions={apparatusOptions}
         initialRows={initialRows}
         initialError={initialError}
       />

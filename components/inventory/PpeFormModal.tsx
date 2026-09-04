@@ -7,9 +7,18 @@ export type PpeMemberOption = {
   label: string;
 };
 
+export type PpeApparatusOption = {
+  id: string;
+  label: string;
+};
+
+export type PpeAssignmentType = "Station Supply" | "Department Member" | "Apparatus";
+
 export type PpeFormValues = {
   itemName: string;
+  assignmentType: PpeAssignmentType;
   assignedMemberId: string;
+  apparatusId: string;
   manufacturer: string;
   model: string;
   serialNumber: string;
@@ -18,8 +27,7 @@ export type PpeFormValues = {
   dateManufactured: string;
   placedInServiceDate: string;
   expirationDate: string;
-  location: string;
-  status: "Active" | "Inactive";
+  status: "Active" | "Inactive" | "Out of Service";
   notes: string;
   photoFile: File | null;
   removePhoto: boolean;
@@ -29,6 +37,7 @@ type PpeFormModalProps = {
   isOpen: boolean;
   mode: "add" | "edit";
   memberOptions: PpeMemberOption[];
+  apparatusOptions: PpeApparatusOption[];
   initialValues?: Omit<PpeFormValues, "photoFile" | "removePhoto">;
   existingPhotoUrl?: string | null;
   isSaving?: boolean;
@@ -40,7 +49,9 @@ type PpeFormModalProps = {
 
 const EMPTY_VALUES: PpeFormValues = {
   itemName: "",
+  assignmentType: "Department Member",
   assignedMemberId: "",
+  apparatusId: "",
   manufacturer: "",
   model: "",
   serialNumber: "",
@@ -49,17 +60,31 @@ const EMPTY_VALUES: PpeFormValues = {
   dateManufactured: "",
   placedInServiceDate: "",
   expirationDate: "",
-  location: "",
   status: "Active",
   notes: "",
   photoFile: null,
   removePhoto: false,
 };
 
+function formatDateInputValue(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function buildEmptyValues(): PpeFormValues {
+  return {
+    ...EMPTY_VALUES,
+    placedInServiceDate: formatDateInputValue(new Date()),
+  };
+}
+
 export default function PpeFormModal({
   isOpen,
   mode,
   memberOptions,
+  apparatusOptions,
   initialValues,
   existingPhotoUrl = null,
   isSaving = false,
@@ -77,7 +102,7 @@ export default function PpeFormModal({
       };
     }
 
-    return EMPTY_VALUES;
+    return buildEmptyValues();
   });
 
   const selectedPhotoPreviewUrl = useMemo(() => {
@@ -139,24 +164,75 @@ export default function PpeFormModal({
 
           <label className="block md:col-span-2">
             <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">
-              Assigned Member *
+              Assignment Type *
             </span>
             <select
-              value={formValues.assignedMemberId}
+              value={formValues.assignmentType}
               onChange={(event) =>
                 setFormValues((current) => ({
                   ...current,
-                  assignedMemberId: event.target.value,
+                  assignmentType:
+                    event.target.value === "Station Supply" ||
+                    event.target.value === "Apparatus"
+                      ? event.target.value
+                      : "Department Member",
+                  assignedMemberId: event.target.value === "Department Member" ? current.assignedMemberId : "",
+                  apparatusId: event.target.value === "Apparatus" ? current.apparatusId : "",
                 }))
               }
               className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
             >
-              <option value="">Select member</option>
-              {memberOptions.map((member) => (
-                <option key={member.id} value={member.id}>{member.label}</option>
-              ))}
+              <option value="Station Supply">Station Supply</option>
+              <option value="Department Member">Department Member</option>
+              <option value="Apparatus">Apparatus</option>
             </select>
           </label>
+
+          {formValues.assignmentType === "Department Member" ? (
+            <label className="block md:col-span-2">
+              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">
+                Department Member *
+              </span>
+              <select
+                value={formValues.assignedMemberId}
+                onChange={(event) =>
+                  setFormValues((current) => ({
+                    ...current,
+                    assignedMemberId: event.target.value,
+                  }))
+                }
+                className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
+              >
+                <option value="">Select member</option>
+                {memberOptions.map((member) => (
+                  <option key={member.id} value={member.id}>{member.label}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+
+          {formValues.assignmentType === "Apparatus" ? (
+            <label className="block md:col-span-2">
+              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">
+                Apparatus *
+              </span>
+              <select
+                value={formValues.apparatusId}
+                onChange={(event) =>
+                  setFormValues((current) => ({
+                    ...current,
+                    apparatusId: event.target.value,
+                  }))
+                }
+                className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
+              >
+                <option value="">Select apparatus</option>
+                {apparatusOptions.map((apparatus) => (
+                  <option key={apparatus.id} value={apparatus.id}>{apparatus.label}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
 
           <label className="block">
             <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">
@@ -291,22 +367,6 @@ export default function PpeFormModal({
 
           <label className="block">
             <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">
-              Location
-            </span>
-            <input
-              value={formValues.location}
-              onChange={(event) =>
-                setFormValues((current) => ({
-                  ...current,
-                  location: event.target.value,
-                }))
-              }
-              className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
-            />
-          </label>
-
-          <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">
               Status
             </span>
             <select
@@ -314,13 +374,17 @@ export default function PpeFormModal({
               onChange={(event) =>
                 setFormValues((current) => ({
                   ...current,
-                  status: event.target.value === "Inactive" ? "Inactive" : "Active",
+                  status:
+                    event.target.value === "Inactive" || event.target.value === "Out of Service"
+                      ? event.target.value
+                      : "Active",
                 }))
               }
               className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
             >
               <option value="Active">Active</option>
               <option value="Inactive">Inactive</option>
+              <option value="Out of Service">Out of Service</option>
             </select>
           </label>
 

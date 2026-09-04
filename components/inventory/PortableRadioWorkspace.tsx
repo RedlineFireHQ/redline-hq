@@ -53,7 +53,7 @@ interface PortableRadioWorkspaceProps {
 	departmentName: string | null;
 	initialRows: PortableRadioRecord[];
 	initialError?: string | null;
-	canDeleteRadio: boolean;
+	canManageRadios: boolean;
 }
 
 type AssignmentDraft = {
@@ -145,10 +145,9 @@ function getMemberName(member: MemberRecord | undefined) {
 
 export default function PortableRadioWorkspace({
 	departmentId: initialDepartmentId,
-	departmentName = null,
 	initialRows,
 	initialError = null,
-	canDeleteRadio,
+	canManageRadios,
 }: PortableRadioWorkspaceProps) {
 	const router = useRouter();
 	const [departmentId, setDepartmentId] = useState<string | null>(initialDepartmentId);
@@ -429,16 +428,7 @@ export default function PortableRadioWorkspace({
 		[sortedRows],
 	);
 
-	const totalCount = sortedRows.length;
-	const inServiceCount = activeRows.filter((row) => row.status === "In Service").length;
-	const unassignedCount = activeRows.filter((row) => row.status === "Unassigned").length;
 	const outOfServiceCount = activeRows.filter((row) => row.status === "Out of Service").length;
-	const lostStolenCount = activeRows.filter((row) => row.status === "Lost" || row.status === "Stolen").length;
-	const retiredCount = sortedRows.filter((row) => row.status === "Retired").length;
-	const inServiceReadyCount = activeRows.filter(
-		(row) => row.status === "In Service" && activeDeficiencyByRadioId[row.id] !== true,
-	).length;
-	const readinessPercentage = activeRows.length > 0 ? Math.round((inServiceReadyCount / activeRows.length) * 100) : 100;
 	const editingRow = useMemo(
 		() => (editRadioId ? sortedRows.find((row) => row.id === editRadioId) ?? null : null),
 		[editRadioId, sortedRows],
@@ -465,11 +455,17 @@ export default function PortableRadioWorkspace({
 	}, [assignmentRows, historyRadioId]);
 
 	const openAddModal = () => {
+		if (!canManageRadios) {
+			return;
+		}
 		setEditRadioId(null);
 		setIsFormModalOpen(true);
 	};
 
 	const openEditModal = (radio: PortableRadioRecord) => {
+		if (!canManageRadios) {
+			return;
+		}
 		setEditRadioId(radio.id);
 		setIsFormModalOpen(true);
 	};
@@ -480,6 +476,9 @@ export default function PortableRadioWorkspace({
 	};
 
 	const openAssignmentModal = (radio: PortableRadioRecord) => {
+		if (!canManageRadios) {
+			return;
+		}
 		const currentAssignment = openAssignmentsByRadioId.get(radio.id);
 		setAssignmentRadioId(radio.id);
 		setAssignmentDraft({
@@ -508,6 +507,10 @@ export default function PortableRadioWorkspace({
 
 	const saveRadio = (values: PortableRadioFormValues, initialAssignment?: PortableRadioInitialAssignmentValues) => {
 		void (async () => {
+			if (!canManageRadios) {
+				setToastMessage("You do not have permission to manage portable radios.");
+				return;
+			}
 			if (!departmentId) {
 				setToastMessage("Unable to determine department. Please refresh and try again.");
 				return;
@@ -606,6 +609,10 @@ export default function PortableRadioWorkspace({
 	};
 
 	const retireRadio = async () => {
+		if (!canManageRadios) {
+			setToastMessage("You do not have permission to manage portable radios.");
+			return;
+		}
 		if (!departmentId || !editingRow) {
 			return;
 		}
@@ -629,7 +636,11 @@ export default function PortableRadioWorkspace({
 	};
 
 	const deleteRadio = async () => {
-		if (!departmentId || !editingRow || !canDeleteRadio) {
+		if (!canManageRadios) {
+			setToastMessage("You do not have permission to manage portable radios.");
+			return;
+		}
+		if (!departmentId || !editingRow) {
 			return;
 		}
 		const confirmed = window.confirm(`Delete Radio ${editingRow.radio_number}?\n\nThis permanently removes the inventory record.`);
@@ -654,6 +665,10 @@ export default function PortableRadioWorkspace({
 
 	const saveAssignment = () => {
 		void (async () => {
+			if (!canManageRadios) {
+				setToastMessage("You do not have permission to manage portable radios.");
+				return;
+			}
 			if (!departmentId || !assignmentRadioId || !assignmentRow) {
 				setToastMessage("Unable to determine radio assignment context.");
 				return;
@@ -740,12 +755,18 @@ export default function PortableRadioWorkspace({
 	};
 
 	const reportDeficiencyForRow = (row: PortableRadioRecord) => {
+		const activeAssignment = openAssignmentsByRadioId.get(row.id);
+		const resolvedApparatusId =
+			activeAssignment?.assignment_type === "Apparatus" && activeAssignment.apparatus_id
+				? activeAssignment.apparatus_id
+				: "station-supply";
+
 		const params = new URLSearchParams();
 		params.set("returnTo", "/inventory/portable-radios");
 		params.set("inventoryCategory", "portable-radios");
 		params.set("inventoryItemId", row.id);
 		params.set("inventoryItemLabel", row.radio_number);
-		params.set("apparatusId", "station-supply");
+		params.set("apparatusId", resolvedApparatusId);
 		router.push(`/deficiencies/report?${params.toString()}`);
 	};
 
@@ -767,7 +788,6 @@ export default function PortableRadioWorkspace({
 
 	const hasRows = rows.length > 0;
 	const hasVisibleRows = filteredRows.length > 0;
-	const scoreWidth = `${Math.max(0, Math.min(100, readinessPercentage))}%`;
 
 	return (
 		<div className="mx-auto max-w-7xl space-y-8 pb-16">
@@ -779,10 +799,11 @@ export default function PortableRadioWorkspace({
 						<p className="mt-2 max-w-3xl text-sm text-neutral-400">
 							Manage portable radio accountability, custody assignments, and deficiency linkage across your department.
 						</p>
-						<div className="mt-4 flex flex-wrap items-center gap-2">
+						<div className="mt-3 flex flex-wrap items-center gap-2">
 							<button
 								type="button"
 								onClick={openAddModal}
+								disabled={!canManageRadios}
 								className="inline-flex rounded-lg border border-red-500/40 bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700"
 							>
 								+ Add Radio
@@ -797,43 +818,13 @@ export default function PortableRadioWorkspace({
 						</div>
 					</div>
 
-					<div className="w-full max-w-[220px] rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3">
-						<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Accountability</p>
-						<p className="mt-1 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">{readinessPercentage}%</p>
-						<p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-red-400">In Service Ready</p>
-						<div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-neutral-800">
-							<div className="h-full rounded-full bg-red-500 transition-all" style={{ width: scoreWidth }} />
-						</div>
-						<p className="mt-2 text-[11px] text-neutral-500">{departmentName ?? "Department"}</p>
-					</div>
-				</div>
-			</section>
-
-			<section className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-5">
-				<div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
-					<button type="button" onClick={() => setActiveSummaryFilter("all")} className={summaryCardClasses(activeSummaryFilter === "all", "neutral")}>
-						<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Total Radios</p>
-						<p className="mt-2 text-2xl font-black text-white">{totalCount}</p>
-					</button>
-					<button type="button" onClick={() => setActiveSummaryFilter("in-service")} className={summaryCardClasses(activeSummaryFilter === "in-service", "good")}>
-						<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">In Service</p>
-						<p className="mt-2 text-2xl font-black text-white">{inServiceCount}</p>
-					</button>
-					<button type="button" onClick={() => setActiveSummaryFilter("unassigned")} className={summaryCardClasses(activeSummaryFilter === "unassigned", "warn")}>
-						<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Unassigned</p>
-						<p className="mt-2 text-2xl font-black text-white">{unassignedCount}</p>
-					</button>
-					<button type="button" onClick={() => setActiveSummaryFilter("out-of-service")} className={summaryCardClasses(activeSummaryFilter === "out-of-service", "bad")}>
+					<button
+						type="button"
+						onClick={() => setActiveSummaryFilter("out-of-service")}
+						className={`${summaryCardClasses(activeSummaryFilter === "out-of-service", "bad")} w-full max-w-[220px] shrink-0`}
+					>
 						<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Out of Service</p>
 						<p className="mt-2 text-2xl font-black text-white">{outOfServiceCount}</p>
-					</button>
-					<button type="button" onClick={() => setActiveSummaryFilter("lost-stolen")} className={summaryCardClasses(activeSummaryFilter === "lost-stolen", "bad")}>
-						<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Lost / Stolen</p>
-						<p className="mt-2 text-2xl font-black text-white">{lostStolenCount}</p>
-					</button>
-					<button type="button" onClick={() => setActiveSummaryFilter("retired")} className={summaryCardClasses(activeSummaryFilter === "retired", "neutral")}>
-						<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Retired</p>
-						<p className="mt-2 text-2xl font-black text-white">{retiredCount}</p>
 					</button>
 				</div>
 			</section>
@@ -876,7 +867,7 @@ export default function PortableRadioWorkspace({
 					</div>
 				) : null}
 
-				<div className="overflow-x-auto">
+				<div className="max-h-[420px] overflow-x-auto overflow-y-auto">
 					<table className="min-w-full border-separate border-spacing-0 text-left">
 						<thead>
 							<tr>
@@ -924,8 +915,12 @@ export default function PortableRadioWorkspace({
 											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">{getAssignmentLabel(row)}</td>
 											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">
 												<div className="flex flex-wrap gap-2">
-													<button type="button" onClick={() => openEditModal(row)} className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800">Edit</button>
-													<button type="button" onClick={() => openAssignmentModal(row)} className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-100 transition hover:bg-red-500/20">Assign</button>
+													{canManageRadios ? (
+														<button type="button" onClick={() => openEditModal(row)} className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800">Edit</button>
+													) : null}
+													{canManageRadios ? (
+														<button type="button" onClick={() => openAssignmentModal(row)} className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-100 transition hover:bg-red-500/20">Assign</button>
+													) : null}
 													<button type="button" onClick={() => openHistoryModal(row)} className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800">History</button>
 													<button type="button" onClick={() => reportDeficiencyForRow(row)} className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800">Report Deficiency</button>
 												</div>
@@ -943,7 +938,7 @@ export default function PortableRadioWorkspace({
 				isOpen={isFormModalOpen}
 				mode={editingRow ? "edit" : "add"}
 				isSaving={isSaving}
-				canDelete={canDeleteRadio}
+				canDelete={canManageRadios}
 				memberOptions={memberSelectOptions}
 				apparatusOptions={apparatusSelectOptions}
 				initialValues={
@@ -961,8 +956,8 @@ export default function PortableRadioWorkspace({
 				}
 				onClose={closeFormModal}
 				onSave={saveRadio}
-				onRetire={editingRow ? () => void retireRadio() : undefined}
-				onDelete={editingRow ? () => void deleteRadio() : undefined}
+				onRetire={editingRow && canManageRadios ? () => void retireRadio() : undefined}
+				onDelete={editingRow && canManageRadios ? () => void deleteRadio() : undefined}
 				onReportDeficiency={editingRow ? () => reportDeficiencyForRow(editingRow) : undefined}
 			/>
 

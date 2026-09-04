@@ -175,13 +175,20 @@ export default function ResolveDeficiencyPage() {
       setIsLoadingContext(true);
       setErrorMessage(null);
 
-      const [membersResult, statusesResult, deficiencyResult] = await Promise.all([
+      const [permissionResult, membersResult, statusesResult, deficiencyResult] = await Promise.all([
+        supabase.rpc("can_resolve_deficiency", { p_deficiency_id: deficiencyId }),
         supabase.from("members").select("id, first_name, last_name").order("last_name").order("first_name"),
         supabase.from("deficiency_statuses").select("id, name").order("display_order"),
         supabase.from("deficiencies").select("id, apparatus_id").eq("id", deficiencyId).maybeSingle(),
       ]);
 
       if (!isMounted) {
+        return;
+      }
+
+      if (!permissionResult.error && !permissionResult.data) {
+        setErrorMessage("You do not have permission to resolve this deficiency.");
+        setIsLoadingContext(false);
         return;
       }
 
@@ -244,6 +251,12 @@ export default function ResolveDeficiencyPage() {
   async function handleResolve() {
     if (!resolvedStatusId || !selectedResolvedByMemberId) {
       setErrorMessage("Select who resolved this deficiency.");
+      return;
+    }
+
+    const permissionResult = await supabase.rpc("can_resolve_deficiency", { p_deficiency_id: deficiencyId });
+    if (permissionResult.error || !permissionResult.data) {
+      setErrorMessage("You do not have permission to resolve this deficiency.");
       return;
     }
 
