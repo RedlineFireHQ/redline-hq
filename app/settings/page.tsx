@@ -5,6 +5,8 @@ import RoleRequirementsSection from "@/components/settings/RoleRequirementsSecti
 import ReadinessRequirementsSection from "@/components/settings/ReadinessRequirementsSection";
 import TrainingCategoriesSection from "@/components/settings/TrainingCategoriesSection";
 import ApparatusInspectionSettingsSection from "@/components/settings/ApparatusInspectionSettingsSection";
+import GasMonitorCalibrationSettingsSection from "@/components/settings/GasMonitorCalibrationSettingsSection";
+import GroundLadderInspectionSettingsSection from "@/components/settings/GroundLadderInspectionSettingsSection";
 import { getCurrentMember } from "@/lib/current-member";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -83,6 +85,8 @@ export default async function SettingsPage() {
     { data: roleRequiredCertificationData, error: roleRequiredCertificationError },
     { data: requirementsData, error: requirementsError },
     { data: apparatusInspectionSettingsData, error: apparatusInspectionSettingsError },
+    { data: groundLadderInspectionSettingsData, error: groundLadderInspectionSettingsError },
+    { data: gasMonitorCalibrationSettingsData, error: gasMonitorCalibrationSettingsError },
   ] = await Promise.all([
     supabase
       .from("certifications")
@@ -119,6 +123,16 @@ export default async function SettingsPage() {
       .select("require_checklist")
       .eq("department_id", currentMember.departmentId)
       .maybeSingle(),
+    supabase
+      .from("ground_ladder_inspection_settings")
+      .select("require_checklist")
+      .eq("department_id", currentMember.departmentId)
+      .maybeSingle(),
+    supabase
+      .from("gas_monitor_calibration_settings")
+      .select("calibration_interval_months")
+      .eq("department_id", currentMember.departmentId)
+      .maybeSingle(),
   ]);
 
   if (certificationError) {
@@ -143,6 +157,14 @@ export default async function SettingsPage() {
 
   if (apparatusInspectionSettingsError) {
     throw new Error(apparatusInspectionSettingsError.message || "Unable to load apparatus inspection settings.");
+  }
+
+  if (groundLadderInspectionSettingsError) {
+    throw new Error(groundLadderInspectionSettingsError.message || "Unable to load ground ladder inspection settings.");
+  }
+
+  if (gasMonitorCalibrationSettingsError) {
+    throw new Error(gasMonitorCalibrationSettingsError.message || "Unable to load gas monitor calibration settings.");
   }
 
   const certificationTypes: CertificationTypeRow[] = (certificationData ?? []).map((row) => ({
@@ -208,6 +230,11 @@ export default async function SettingsPage() {
   }));
 
   const requireApparatusChecklist = apparatusInspectionSettingsData?.require_checklist === true;
+  const requireGroundLadderChecklist = groundLadderInspectionSettingsData?.require_checklist === true;
+  const gasMonitorCalibrationIntervalMonths =
+    typeof gasMonitorCalibrationSettingsData?.calibration_interval_months === "number"
+      ? gasMonitorCalibrationSettingsData.calibration_interval_months
+      : 6;
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
@@ -273,6 +300,22 @@ export default async function SettingsPage() {
           departmentId={currentMember.departmentId}
           currentMemberId={currentMember.id}
           initialRequireChecklist={requireApparatusChecklist}
+        />
+      </div>
+
+      <div className="mt-6">
+        <GroundLadderInspectionSettingsSection
+          departmentId={currentMember.departmentId}
+          currentMemberId={currentMember.id}
+          initialRequireChecklist={requireGroundLadderChecklist}
+        />
+      </div>
+
+      <div className="mt-6">
+        <GasMonitorCalibrationSettingsSection
+          departmentId={currentMember.departmentId}
+          currentMemberId={currentMember.id}
+          initialCalibrationIntervalMonths={gasMonitorCalibrationIntervalMonths}
         />
       </div>
     </div>

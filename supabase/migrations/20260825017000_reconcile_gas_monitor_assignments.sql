@@ -2,7 +2,7 @@ create table if not exists public.gas_monitor_assignments (
   id uuid primary key default gen_random_uuid(),
   department_id uuid not null references public.departments (id) on delete cascade,
   gas_monitor_id uuid not null references public.gas_monitors (id) on delete cascade,
-  assignment_type text not null check (assignment_type in ('Member', 'Apparatus', 'Unassigned')),
+  assignment_type text not null check (assignment_type in ('Member', 'Apparatus', 'Station Storage', 'Unassigned')),
   member_id uuid references public.members (id) on delete set null,
   apparatus_id uuid references public.apparatus (id) on delete set null,
   assigned_at timestamptz not null default now(),
@@ -13,6 +13,7 @@ create table if not exists public.gas_monitor_assignments (
   check (
     (assignment_type = 'Member' and member_id is not null and apparatus_id is null)
     or (assignment_type = 'Apparatus' and apparatus_id is not null and member_id is null)
+    or (assignment_type = 'Station Storage' and member_id is null and apparatus_id is null)
     or (assignment_type = 'Unassigned' and member_id is null and apparatus_id is null)
   ),
   check (ended_at is null or ended_at >= assigned_at)

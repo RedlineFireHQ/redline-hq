@@ -33,7 +33,7 @@ type GasMonitorAssignmentRecord = {
 	id: string;
 	department_id: string;
 	gas_monitor_id: string;
-	assignment_type: "Member" | "Apparatus" | "Unassigned";
+	assignment_type: "Member" | "Apparatus" | "Station Storage" | "Unassigned";
 	member_id: string | null;
 	apparatus_id: string | null;
 	assigned_at: string;
@@ -55,7 +55,7 @@ type ApparatusRecord = {
 };
 
 type AssignmentDraft = {
-	assignmentType: "Member" | "Apparatus" | "Unassigned";
+	assignmentType: "Member" | "Apparatus" | "Station Storage" | "Unassigned";
 	memberId: string;
 	apparatusId: string;
 	notes: string;
@@ -627,7 +627,9 @@ export default function GasMonitorWorkspace({
 						? assignment.apparatus_id
 							? apparatusById.get(assignment.apparatus_id)?.name ?? "Apparatus"
 							: "Apparatus"
-						: "Unassigned";
+						: assignment?.assignment_type === "Station Storage"
+							? "Station Storage"
+							: "Unassigned";
 				const haystack = [
 					row.monitor_number,
 					row.serial_number,
@@ -675,10 +677,6 @@ export default function GasMonitorWorkspace({
 	const lostStolenCount = activeRows.filter((row) => row.status === "Lost" || row.status === "Stolen").length;
 	const retiredCount = derivedRows.filter((row) => row.status === "Retired").length;
 	const calibrationDueCount = activeRows.filter((row) => row.isCalibrationDue).length;
-	const inServiceReadyCount = activeRows.filter(
-		(row) => row.status === "In Service" && activeDeficiencyByMonitorId[row.id] !== true,
-	).length;
-	const readinessPercentage = activeRows.length > 0 ? Math.round((inServiceReadyCount / activeRows.length) * 100) : 100;
 
 	const editingRow = useMemo(
 		() => (editMonitorId ? derivedRows.find((row) => row.id === editMonitorId) ?? null : null),
@@ -716,7 +714,6 @@ export default function GasMonitorWorkspace({
 
 	const hasRows = rows.length > 0;
 	const hasVisibleRows = filteredRows.length > 0;
-	const scoreWidth = `${Math.max(0, Math.min(100, readinessPercentage))}%`;
 
 	const reportDeficiencyForRow = (row: GasMonitorRecord) => {
 		const activeAssignment = openAssignmentsByMonitorId.get(row.id);
@@ -827,7 +824,9 @@ export default function GasMonitorWorkspace({
 			}
 
 			const hasOperationalAssignment =
-				initialAssignment?.assignmentType === "Member" || initialAssignment?.assignmentType === "Apparatus";
+				initialAssignment?.assignmentType === "Member" ||
+				initialAssignment?.assignmentType === "Apparatus" ||
+				initialAssignment?.assignmentType === "Station Storage";
 
 			const computedStatus = isProtectedMonitorStatus(values.status)
 				? values.status
@@ -989,6 +988,14 @@ export default function GasMonitorWorkspace({
 			if (assignmentDraft.assignmentType === "Apparatus" && !assignmentDraft.apparatusId) {
 				setToastMessage("Select an apparatus for apparatus assignment.");
 				return;
+			}
+
+			if (assignmentDraft.assignmentType === "Station Storage") {
+				setAssignmentDraft((current) => ({
+					...current,
+					memberId: "",
+					apparatusId: "",
+				}));
 			}
 
 			setIsSavingAssignment(true);
@@ -1368,14 +1375,6 @@ export default function GasMonitorWorkspace({
 		if (!assignment) {
 			return "Unassigned";
 		}
-		return assignment.assignment_type;
-	};
-
-	const getAssignmentHolderLabel = (row: GasMonitorRecord) => {
-		const assignment = openAssignmentsByMonitorId.get(row.id);
-		if (!assignment) {
-			return "Unassigned";
-		}
 
 		if (assignment.assignment_type === "Member") {
 			return assignment.member_id ? getMemberName(membersById.get(assignment.member_id)) : "Member";
@@ -1385,6 +1384,10 @@ export default function GasMonitorWorkspace({
 			const apparatus = assignment.apparatus_id ? apparatusById.get(assignment.apparatus_id) : undefined;
 			const apparatusName = typeof apparatus?.name === "string" ? apparatus.name.trim() : "";
 			return apparatusName || "Apparatus";
+		}
+
+		if (assignment.assignment_type === "Station Storage") {
+			return "Station Storage";
 		}
 
 		return "Unassigned";
@@ -1412,60 +1415,32 @@ export default function GasMonitorWorkspace({
 								onClick={() => setIsSessionCalibrationModalOpen(true)}
 								className="inline-flex rounded-lg border border-emerald-500/30 bg-emerald-900/20 px-3 py-2 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-900/30"
 							>
-								Session Calibration
+								Calibration Test
 							</button>
 							<button
 								type="button"
 								onClick={() => router.push("/inventory/gas-monitors/session-history")}
 								className="inline-flex rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
 							>
-								View Session History
+								Calibration History
 							</button>
 						</div>
 					</div>
 
-					<div className="w-full max-w-[240px] rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3">
-						<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Readiness</p>
-						<p className="mt-1 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">{readinessPercentage}%</p>
-						<p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-red-400">In Service Ready</p>
-						<div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-neutral-800">
-							<div className="h-full rounded-full bg-red-500 transition-all" style={{ width: scoreWidth }} />
+					<div className="flex w-full max-w-[480px] flex-col gap-3 sm:flex-row">
+						<button
+							type="button"
+							onClick={() => setStatusFilter("Out of Service")}
+							className="w-full rounded-xl border border-red-700/30 bg-red-950/20 px-4 py-3 text-left transition hover:bg-red-950/30"
+						>
+							<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Out of Service</p>
+							<p className="mt-2 text-2xl font-black text-white">{outOfServiceCount}</p>
+						</button>
+						<div className="w-full rounded-xl border border-amber-700/30 bg-amber-950/20 px-4 py-3">
+							<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Calibration Due</p>
+							<p className="mt-2 text-2xl font-black text-white">{calibrationDueCount}</p>
+							<p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-amber-200">Interval {calibrationIntervalMonths} months</p>
 						</div>
-						<p className="mt-2 text-[11px] text-neutral-500">{departmentName ?? "Department"}</p>
-					</div>
-				</div>
-			</section>
-
-			<section className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-5">
-				<div className="grid gap-3 md:grid-cols-3 xl:grid-cols-7">
-					<button type="button" onClick={() => setActiveSummaryFilter("all")} className={summaryCardClasses(activeSummaryFilter === "all", "neutral")}>
-						<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Total Monitors</p>
-						<p className="mt-2 text-2xl font-black text-white">{totalCount}</p>
-					</button>
-					<button type="button" onClick={() => setActiveSummaryFilter("in-service")} className={summaryCardClasses(activeSummaryFilter === "in-service", "good")}>
-						<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">In Service</p>
-						<p className="mt-2 text-2xl font-black text-white">{inServiceCount}</p>
-					</button>
-					<button type="button" onClick={() => setActiveSummaryFilter("unassigned")} className={summaryCardClasses(activeSummaryFilter === "unassigned", "warn")}>
-						<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Unassigned</p>
-						<p className="mt-2 text-2xl font-black text-white">{unassignedCount}</p>
-					</button>
-					<button type="button" onClick={() => setActiveSummaryFilter("out-of-service")} className={summaryCardClasses(activeSummaryFilter === "out-of-service", "bad")}>
-						<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Out of Service</p>
-						<p className="mt-2 text-2xl font-black text-white">{outOfServiceCount}</p>
-					</button>
-					<button type="button" onClick={() => setActiveSummaryFilter("lost-stolen")} className={summaryCardClasses(activeSummaryFilter === "lost-stolen", "bad")}>
-						<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Lost / Stolen</p>
-						<p className="mt-2 text-2xl font-black text-white">{lostStolenCount}</p>
-					</button>
-					<button type="button" onClick={() => setActiveSummaryFilter("retired")} className={summaryCardClasses(activeSummaryFilter === "retired", "neutral")}>
-						<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Retired</p>
-						<p className="mt-2 text-2xl font-black text-white">{retiredCount}</p>
-					</button>
-					<div className="rounded-xl border border-amber-700/30 bg-amber-950/20 px-4 py-3">
-						<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Calibration Due</p>
-						<p className="mt-2 text-2xl font-black text-white">{calibrationDueCount}</p>
-						<p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-amber-200">Interval {calibrationIntervalMonths} months</p>
 					</div>
 				</div>
 			</section>
@@ -1496,19 +1471,16 @@ export default function GasMonitorWorkspace({
 					</div>
 				</div>
 
-				<div className="mt-5 overflow-x-auto">
+				<div className="mt-5 max-h-[22rem] overflow-y-auto overflow-x-auto">
 					<table className="min-w-full border-separate border-spacing-0 text-left">
-						<thead>
+						<thead className="sticky top-0 z-10 bg-[#2E2E2E]">
 							<tr>
 								{[
 									"Monitor Number",
-									"Serial Number",
 									"Manufacturer",
-									"Model",
 									"Last Calibration",
 									"Next Due",
 									"Current Assignment",
-									"Assignment Holder / Location",
 									"Status",
 									"Actions",
 								].map((label) => (
@@ -1525,13 +1497,13 @@ export default function GasMonitorWorkspace({
 						<tbody>
 							{!hasRows ? (
 								<tr>
-									<td colSpan={10} className="border-b border-white/5 px-4 py-8 text-center text-sm text-neutral-400">
+									<td colSpan={7} className="border-b border-white/5 px-4 py-8 text-center text-sm text-neutral-400">
 										No gas monitors have been added yet.
 									</td>
 								</tr>
 							) : !hasVisibleRows ? (
 								<tr>
-									<td colSpan={10} className="border-b border-white/5 px-4 py-8 text-center text-sm text-neutral-400">
+									<td colSpan={7} className="border-b border-white/5 px-4 py-8 text-center text-sm text-neutral-400">
 										No monitors match the current filters.
 									</td>
 								</tr>
@@ -1541,9 +1513,7 @@ export default function GasMonitorWorkspace({
 									return (
 										<tr key={row.id} className="transition hover:bg-white/5">
 											<td className="border-b border-white/5 px-4 py-3 text-sm font-semibold text-white">{row.monitor_number}</td>
-											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">{row.serial_number}</td>
 											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">{row.manufacturer ?? "-"}</td>
-											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">{row.model ?? "-"}</td>
 											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">{formatDate(row.lastCalibrationDate)}</td>
 											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">
 												<div className="flex items-center gap-2">
@@ -1554,7 +1524,6 @@ export default function GasMonitorWorkspace({
 												</div>
 											</td>
 											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">{getAssignmentLabel(row)}</td>
-											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">{getAssignmentHolderLabel(row)}</td>
 											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">
 												<div className="flex items-center gap-2">
 													<span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusBadgeClasses(row.status, hasActiveDeficiency)}`}>
@@ -1566,9 +1535,7 @@ export default function GasMonitorWorkspace({
 											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">
 												<div className="flex flex-wrap gap-2">
 													<button type="button" onClick={() => openEditModal(row)} className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800">Edit</button>
-													<button type="button" onClick={() => openAssignmentModal(row)} className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-100 transition hover:bg-red-500/20">Assign</button>
 													<button type="button" onClick={() => openCalibrationModal(row)} className="rounded-lg border border-emerald-500/30 bg-emerald-900/20 px-3 py-1.5 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-900/30">Calibrate</button>
-													<button type="button" onClick={() => openHistoryModal(row)} className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800">History</button>
 													<button type="button" onClick={() => router.push(`/inventory/gas-monitors/calibration-history?monitorId=${encodeURIComponent(row.id)}`)} className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800">Calibration History</button>
 													<button type="button" onClick={() => reportDeficiencyForRow(row)} className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800">Report Deficiency</button>
 												</div>
@@ -1605,6 +1572,8 @@ export default function GasMonitorWorkspace({
 				onSave={saveMonitor}
 				onRetire={editingRow ? () => void retireMonitor() : undefined}
 				onDelete={editingRow ? () => void deleteMonitor() : undefined}
+				onAssign={editingRow ? () => openAssignmentModal(editingRow) : undefined}
+				onHistory={editingRow ? () => openHistoryModal(editingRow) : undefined}
 				onReportDeficiency={editingRow ? () => reportDeficiencyForRow(editingRow) : undefined}
 			/>
 
@@ -1648,7 +1617,12 @@ export default function GasMonitorWorkspace({
 								<select
 									value={assignmentDraft.assignmentType}
 									onChange={(event) => {
-										const nextType = event.target.value === "Apparatus" || event.target.value === "Unassigned" ? event.target.value : "Member";
+										const nextType =
+											event.target.value === "Apparatus" ||
+											event.target.value === "Unassigned" ||
+											event.target.value === "Station Storage"
+												? event.target.value
+												: "Member";
 										setAssignmentDraft((current) => ({
 											...current,
 											assignmentType: nextType,
@@ -1660,6 +1634,7 @@ export default function GasMonitorWorkspace({
 								>
 									<option value="Member">Department Member</option>
 									<option value="Apparatus">Apparatus</option>
+									<option value="Station Storage">Station Storage</option>
 									<option value="Unassigned">Unassigned</option>
 								</select>
 							</label>

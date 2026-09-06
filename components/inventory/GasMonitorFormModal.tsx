@@ -12,7 +12,7 @@ export type GasMonitorFormValues = {
 };
 
 export type GasMonitorInitialAssignmentValues = {
-	assignmentType: "Unassigned" | "Member" | "Apparatus";
+	assignmentType: "Unassigned" | "Member" | "Apparatus" | "Station Storage";
 	memberId: string;
 	apparatusId: string;
 };
@@ -40,6 +40,8 @@ interface GasMonitorFormModalProps {
 		values: GasMonitorFormValues,
 		initialAssignment?: GasMonitorInitialAssignmentValues,
 	) => void;
+	onAssign?: () => void;
+	onHistory?: () => void;
 	onRetire?: () => void;
 	onDelete?: () => void;
 	onReportDeficiency?: () => void;
@@ -54,20 +56,22 @@ const EMPTY_VALUES: GasMonitorFormValues = {
 	notes: "",
 };
 
+const ADD_MODE_STATUS_OPTIONS: GasMonitorFormValues["status"][] = [
+	"In Service",
+	"Out of Service",
+];
+
+const STATUS_OPTIONS: GasMonitorFormValues["status"][] = [
+	"In Service",
+	"Out of Service",
+	"Retired",
+];
+
 const EMPTY_INITIAL_ASSIGNMENT: GasMonitorInitialAssignmentValues = {
 	assignmentType: "Unassigned",
 	memberId: "",
 	apparatusId: "",
 };
-
-const STATUS_OPTIONS: GasMonitorFormValues["status"][] = [
-	"In Service",
-	"Unassigned",
-	"Out of Service",
-	"Lost",
-	"Stolen",
-	"Retired",
-];
 
 function statusBadgeClasses(status: string) {
 	if (status === "In Service") {
@@ -99,6 +103,8 @@ export default function GasMonitorFormModal({
 	apparatusOptions = [],
 	onClose,
 	onSave,
+	onAssign,
+	onHistory,
 	onRetire,
 	onDelete,
 	onReportDeficiency,
@@ -122,6 +128,12 @@ export default function GasMonitorFormModal({
 				status: initialValues.status ?? "Unassigned",
 				notes: initialValues.notes ?? "",
 			});
+			setInitialAssignment(EMPTY_INITIAL_ASSIGNMENT);
+			return;
+		}
+
+		if (mode === "add") {
+			setFormValues({ ...EMPTY_VALUES, status: "In Service" });
 			setInitialAssignment(EMPTY_INITIAL_ASSIGNMENT);
 			return;
 		}
@@ -197,17 +209,23 @@ export default function GasMonitorFormModal({
 						<span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Status *</span>
 						<select
 							value={formValues.status}
-							onChange={(event) =>
+							onChange={(event) => {
+								const nextStatus = mode === "add"
+									? (ADD_MODE_STATUS_OPTIONS.includes(event.target.value as GasMonitorFormValues["status"])
+										? (event.target.value as GasMonitorFormValues["status"])
+										: "In Service")
+									: (STATUS_OPTIONS.includes(event.target.value as GasMonitorFormValues["status"])
+										? (event.target.value as GasMonitorFormValues["status"])
+										: "Unassigned");
+
 								setFormValues((current) => ({
 									...current,
-									status: STATUS_OPTIONS.includes(event.target.value as GasMonitorFormValues["status"])
-										? (event.target.value as GasMonitorFormValues["status"])
-										: "Unassigned",
-								}))
-							}
+									status: nextStatus,
+								}));
+							}}
 							className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
 						>
-							{STATUS_OPTIONS.map((status) => (
+							{(mode === "add" ? ADD_MODE_STATUS_OPTIONS : STATUS_OPTIONS).map((status) => (
 								<option key={status} value={status}>{status}</option>
 							))}
 						</select>
@@ -236,7 +254,9 @@ export default function GasMonitorFormModal({
 										onChange={(event) => {
 											const nextType =
 												event.target.value === "Member" ||
-												event.target.value === "Apparatus"
+												event.target.value === "Apparatus" ||
+												event.target.value === "Station Storage" ||
+												event.target.value === "Unassigned"
 													? event.target.value
 													: "Unassigned";
 
@@ -251,8 +271,7 @@ export default function GasMonitorFormModal({
 									>
 										<option value="Unassigned">Unassigned</option>
 										<option value="Member">Department Member</option>
-										<option value="Apparatus">Apparatus</option>
-									</select>
+										<option value="Apparatus">Apparatus</option>											<option value="Station Storage">Station Storage</option>									</select>
 								</label>
 
 								{initialAssignment.assignmentType === "Member" ? (
@@ -303,17 +322,37 @@ export default function GasMonitorFormModal({
 
 				<div className="mt-6 flex flex-wrap items-center justify-between gap-3">
 					<div className="flex flex-wrap items-center gap-2">
-						{mode === "edit" && onReportDeficiency ? (
-							<button
-								type="button"
-								onClick={onReportDeficiency}
-								className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
-							>
-								Report Deficiency
-							</button>
-						) : null}
+									{mode === "edit" && onAssign ? (
+										<button
+											type="button"
+											onClick={onAssign}
+											className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-100 transition hover:bg-red-500/20"
+										>
+											Assign
+										</button>
+									) : null}
 
-						{mode === "edit" && onRetire ? (
+									{mode === "edit" && onHistory ? (
+										<button
+											type="button"
+											onClick={onHistory}
+											className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+										>
+											History
+										</button>
+									) : null}
+
+									{mode === "edit" && onReportDeficiency ? (
+										<button
+											type="button"
+											onClick={onReportDeficiency}
+											className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+										>
+											Report Deficiency
+										</button>
+									) : null}
+
+									{mode === "edit" && onRetire ? (
 							<button
 								type="button"
 								onClick={onRetire}
