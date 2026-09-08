@@ -199,6 +199,7 @@ export const REPORT_SOURCES: ReportSourceConfig[] = [
 				options: [
 					{ value: "overview", label: "Overview" },
 					{ value: "mileage-hours", label: "Mileage & Hours" },
+					{ value: "pump-testing", label: "Pump Testing" },
 				],
 			},
 			{
@@ -288,6 +289,10 @@ export const REPORT_SOURCES: ReportSourceConfig[] = [
 			{ key: "latest_maintenance_labor_hours", label: "Latest Maintenance Labor Hours" },
 			{ key: "latest_maintenance_cost", label: "Latest Maintenance Cost" },
 			{ key: "latest_maintenance_deficiency", label: "Latest Maintenance Deficiency" },
+			{ key: "pump_test_date", label: "Pump Test Date" },
+			{ key: "pump_tested_by", label: "Pump Tested By" },
+			{ key: "pump_test_result", label: "Pump Result" },
+			{ key: "pump_test_notes", label: "Pump Notes" },
 		],
 	},
 	{
@@ -606,6 +611,7 @@ export const REPORT_SOURCES: ReportSourceConfig[] = [
 					{ value: "gas-monitor-calibration", label: "Gas Monitor Calibration" },
 					{ value: "rope-inspections", label: "Rope Inspections" },
 					{ value: "ground-ladder-service-testing", label: "Ground Ladder Service Testing" },
+					{ value: "ground-ladder-inspection", label: "Ground Ladder Inspection" },
 				],
 			},
 			{

@@ -925,7 +925,7 @@ async function runDeficiencyReport(
 			};
 		});
 
-	const pageSize = Math.max(1, Math.min(Number(request.pageSize) || 50, 200));
+	const pageSize = request.pageSize === 0 ? Number.MAX_SAFE_INTEGER : Math.max(1, Math.min(Number(request.pageSize) || 50, 200));
 	const page = Math.max(1, Number(request.page) || 1);
 	const offset = (page - 1) * pageSize;
 	const pagedRows = rows.slice(offset, offset + pageSize);
@@ -1226,7 +1226,7 @@ async function runCertificationReport(
 		{ label: "Expired", value: String(expiredCount) },
 	];
 
-	const pageSize = Math.max(1, Math.min(Number(request.pageSize) || 50, 200));
+	const pageSize = request.pageSize === 0 ? Number.MAX_SAFE_INTEGER : Math.max(1, Math.min(Number(request.pageSize) || 50, 200));
 	const page = Math.max(1, Number(request.page) || 1);
 	const offset = (page - 1) * pageSize;
 	const pagedRows = filtered.slice(offset, offset + pageSize).map((item): ReportRow => ({
@@ -2113,7 +2113,7 @@ async function runEmsReport(
 		const notMaintainedCount = sortedRows.filter((row) => row.overall_status_key === "not_maintained").length;
 		const noTrackCount = sortedRows.filter((row) => row.overall_status_key === "no_track").length;
 
-		const pageSize = Math.max(1, Math.min(Number(request.pageSize) || 50, 200));
+		const pageSize = request.pageSize === 0 ? Number.MAX_SAFE_INTEGER : Math.max(1, Math.min(Number(request.pageSize) || 50, 200));
 		const page = Math.max(1, Number(request.page) || 1);
 		const offset = (page - 1) * pageSize;
 		const pagedRows = sortedRows.slice(offset, offset + pageSize).map((row) => {
@@ -2618,7 +2618,7 @@ async function runEmsReport(
 		),
 	];
 
-	const pageSize = Math.max(1, Math.min(Number(request.pageSize) || 50, 200));
+	const pageSize = request.pageSize === 0 ? Number.MAX_SAFE_INTEGER : Math.max(1, Math.min(Number(request.pageSize) || 50, 200));
 	const page = Math.max(1, Number(request.page) || 1);
 	const offset = (page - 1) * pageSize;
 	const pagedRows = filteredRows.slice(offset, offset + pageSize).map((row) => ({
@@ -2685,6 +2685,7 @@ async function runInspectionsReport(
 	const includeGasMonitorCalibration = includeAllInspectionTypes || reportType === "gas-monitor-calibration";
 	const includeRopeInspections = includeAllInspectionTypes || reportType === "rope-inspections";
 	const includeGroundLadderServiceTesting = includeAllInspectionTypes || reportType === "ground-ladder-service-testing";
+	const includeGroundLadderInspection = includeAllInspectionTypes || reportType === "ground-ladder-inspection";
 
 	type CentralInspectionRow = {
 		inspectionDateRaw: string | null;
@@ -2694,7 +2695,8 @@ async function runInspectionsReport(
 			| "scba-pack-flow-testing"
 			| "gas-monitor-calibration"
 			| "rope-inspections"
-			| "ground-ladder-service-testing";
+			| "ground-ladder-service-testing"
+			| "ground-ladder-inspection";
 		inspectionTypeLabel: string;
 		itemId: string;
 		itemName: string;
@@ -2804,10 +2806,10 @@ async function runInspectionsReport(
 				data: [] as Array<{ id: string; rope_item_id: string | null; inspection_date: string | null; result: string | null; primary_inspector_member_id: string | null; notes: string | null; created_at: string | null }>,
 				error: null,
 			}),
-		includeGroundLadderServiceTesting
-			? context.supabase.from("ground_ladders").select("id, ladder_number, status").eq("department_id", context.departmentId)
+		(includeGroundLadderServiceTesting || includeGroundLadderInspection)
+			? context.supabase.from("ground_ladders").select("id, ladder_number, status, notes, updated_at").eq("department_id", context.departmentId)
 			: Promise.resolve({
-				data: [] as Array<{ id: string; ladder_number: string | null; status: string | null }>,
+				data: [] as Array<{ id: string; ladder_number: string | null; status: string | null; notes: string | null; updated_at: string | null }>,
 				error: null,
 			}),
 		includeGroundLadderServiceTesting
@@ -3072,6 +3074,37 @@ async function runInspectionsReport(
 		});
 	}
 
+	if (includeGroundLadderInspection) {
+		for (const row of (groundLaddersQuery.data ?? []) as Array<{
+			id: string;
+			ladder_number: string | null;
+			status: string | null;
+			notes: string | null;
+			updated_at: string | null;
+		}>) {
+			const ladderId = normalizeText(row.id);
+			if (!ladderId) continue;
+			const notes = normalizeText(row.notes) ?? "";
+			const match = notes.match(/Inspection\s*\(([^)]+)\):\s*(Ready for Duty|Out of Service)/i);
+			if (!match) continue;
+			const ladder = groundLadderById.get(ladderId);
+			rows.push({
+				inspectionDateRaw: normalizeText(match[1]) || normalizeText(row.updated_at) || null,
+				inspectionTypeKey: "ground-ladder-inspection",
+				inspectionTypeLabel: "Ground Ladder Inspection",
+				itemId: ladderId,
+				itemName: normalizeText(ladder?.ladder_number) || normalizeText(row.ladder_number) || ladderId,
+				itemIdentifier: normalizeText(ladder?.ladder_number) || normalizeText(row.ladder_number) || "-",
+				result: normalizeText(match[2]) || "-",
+				inspectedBy: "-",
+				itemStatus: normalizeText(ladder?.status) || normalizeText(row.status) || "-",
+				nextDueDateRaw: null,
+				openDeficiencies: groundLadderOpenCounts.get(ladderId) ?? 0,
+				notes: normalizeText(row.notes) || "-",
+			});
+		}
+	}
+
 	const filteredRows = rows
 		.filter((row) => {
 			if (reportType !== "all-inspections" && row.inspectionTypeKey !== reportType) {
@@ -3093,7 +3126,7 @@ async function runInspectionsReport(
 			if (row.inspectionTypeKey === "rope-inspections" && ropeItemFilter && ropeItemFilter !== "all" && row.itemId !== ropeItemFilter) {
 				return false;
 			}
-			if (row.inspectionTypeKey === "ground-ladder-service-testing" && groundLadderFilter && groundLadderFilter !== "all" && row.itemId !== groundLadderFilter) {
+			if ((row.inspectionTypeKey === "ground-ladder-service-testing" || row.inspectionTypeKey === "ground-ladder-inspection") && groundLadderFilter && groundLadderFilter !== "all" && row.itemId !== groundLadderFilter) {
 				return false;
 			}
 
@@ -3161,7 +3194,7 @@ async function runInspectionsReport(
 		})),
 	];
 
-	const pageSize = Math.max(1, Math.min(Number(request.pageSize) || 50, 200));
+	const pageSize = request.pageSize === 0 ? Number.MAX_SAFE_INTEGER : Math.max(1, Math.min(Number(request.pageSize) || 50, 200));
 	const page = Math.max(1, Number(request.page) || 1);
 	const offset = (page - 1) * pageSize;
 	const pagedRows = filteredRows.slice(offset, offset + pageSize).map((row): ReportRow => {
@@ -3275,9 +3308,18 @@ async function runApparatusReport(
 		"latest_maintenance_cost",
 		"latest_maintenance_deficiency",
 	]);
+	const pumpTestingColumnKeys = new Set([
+		"pump_test_date",
+		"apparatus_name",
+		"pump_tested_by",
+		"pump_test_result",
+		"pump_test_notes",
+	]);
 	const columnsForMode = reportType === "mileage-hours"
 		? source.columns.filter((column) => mileageHoursColumnKeys.has(column.key))
-		: source.columns.filter((column) => overviewColumnKeys.has(column.key));
+		: reportType === "pump-testing"
+			? source.columns.filter((column) => pumpTestingColumnKeys.has(column.key))
+			: source.columns.filter((column) => overviewColumnKeys.has(column.key));
 
 	const apparatusQuery = await context.supabase
 		.from("apparatus")
@@ -3351,6 +3393,143 @@ async function runApparatusReport(
 			totalRows: 0,
 			page: 1,
 			pageSize: 0,
+		};
+	}
+
+	if (reportType === "pump-testing") {
+		const pumpTestsQuery = await context.supabase
+			.from("apparatus_pump_tests")
+			.select("id, apparatus_id, test_date, tester_type, tester_member_id, external_tester_name, external_tester_company, result, notes, created_at")
+			.eq("department_id", context.departmentId)
+			.in("apparatus_id", apparatusIds)
+			.order("test_date", { ascending: false })
+			.order("created_at", { ascending: false });
+
+		if (pumpTestsQuery.error) {
+			return buildError("QUERY_ERROR", pumpTestsQuery.error.message || "Unable to load apparatus pump tests.");
+		}
+
+		const pumpTestRows = (pumpTestsQuery.data ?? []) as Array<{
+			id: string;
+			apparatus_id: string;
+			test_date: string | null;
+			tester_type: string | null;
+			tester_member_id: string | null;
+			external_tester_name: string | null;
+			external_tester_company: string | null;
+			result: string | null;
+			notes: string | null;
+			created_at: string | null;
+		}>;
+		const memberIds = Array.from(
+			new Set(
+				pumpTestRows
+					.map((row) => row.tester_member_id)
+					.filter((value): value is string => typeof value === "string" && value.length > 0),
+			),
+		);
+
+		let memberNameById = new Map<string, string>();
+		if (memberIds.length > 0) {
+			const membersQuery = await context.supabase
+				.from("members")
+				.select("id, first_name, last_name")
+				.eq("department_id", context.departmentId)
+				.in("id", memberIds);
+
+			if (membersQuery.error) {
+				return buildError("QUERY_ERROR", membersQuery.error.message || "Unable to resolve pump test members.");
+			}
+
+			memberNameById = new Map(
+				((membersQuery.data ?? []) as MemberNameRow[]).map((member) => [member.id, formatMemberName(member)]),
+			);
+		}
+
+		const apparatusById = new Map(apparatusRows.map((row) => [row.id, row]));
+		const filteredTests = pumpTestRows
+			.filter((row) => {
+				if (!row.test_date) {
+					return false;
+				}
+				if (!isWithinUtcRange(row.test_date, fromIso, toExclusiveIso)) {
+					return false;
+				}
+				if (apparatusFilter && apparatusFilter !== "all" && row.apparatus_id !== apparatusFilter) {
+					return false;
+				}
+				if (!searchTerm) {
+					return true;
+				}
+				const apparatus = apparatusById.get(row.apparatus_id);
+				const testerName = row.tester_type === "External Tester"
+					? [normalizeText(row.external_tester_name), normalizeText(row.external_tester_company)].filter(Boolean).join(" ")
+					: row.tester_member_id
+						? (memberNameById.get(row.tester_member_id) ?? row.tester_member_id)
+						: "Unknown";
+				const searchable = [
+					apparatus?.name,
+					row.result,
+					testerName,
+					row.notes,
+					row.tester_type,
+				].map((value) => normalizeText(value).toLowerCase()).filter(Boolean).join(" ");
+				return searchable.includes(searchTerm);
+			})
+			.sort((left, right) => {
+				const leftTime = getComparableTimestamp(left.test_date ?? left.created_at ?? "") ?? 0;
+				const rightTime = getComparableTimestamp(right.test_date ?? right.created_at ?? "") ?? 0;
+				return rightTime - leftTime;
+			});
+
+		const summary = [
+			{ label: "Pump Tests", value: String(filteredTests.length) },
+			{ label: "Pass", value: String(filteredTests.filter((row) => normalizeText(row.result).toLowerCase() === "pass").length) },
+			{ label: "Fail", value: String(filteredTests.filter((row) => normalizeText(row.result).toLowerCase() === "fail").length) },
+		];
+
+		const pageSize = request.pageSize === 0 ? Number.MAX_SAFE_INTEGER : Math.max(1, Math.min(Number(request.pageSize) || 50, 200));
+		const page = Math.max(1, Number(request.page) || 1);
+		const offset = (page - 1) * pageSize;
+		const pagedRows = filteredTests.slice(offset, offset + pageSize).map((row): ReportRow => {
+			const apparatus = apparatusById.get(row.apparatus_id);
+			const testerName = row.tester_type === "External Tester"
+				? [normalizeText(row.external_tester_name), normalizeText(row.external_tester_company)].filter(Boolean).join(" / ") || "External Tester"
+				: row.tester_member_id
+					? (memberNameById.get(row.tester_member_id) ?? row.tester_member_id)
+					: "Unknown";
+			return {
+				pump_test_date: row.test_date ? formatDateTimeLabel(row.test_date) : "-",
+				apparatus_name: normalizeText(apparatus?.name) || row.apparatus_id,
+				pump_tested_by: testerName,
+				pump_test_result: normalizeText(row.result) || "-",
+				pump_test_notes: normalizeText(row.notes) || "-",
+			};
+		});
+
+		return {
+			ok: true,
+			comingSoon: false,
+			source: {
+				key: source.key,
+				name: source.name,
+				description: source.description,
+			},
+			departmentName: context.departmentName,
+			generatedAt: new Date().toISOString(),
+			period: {
+				from: request.dateRange.from,
+				to: request.dateRange.to,
+				label: formatReportPeriodLabel(request.dateRange.from, request.dateRange.to),
+				basisLabel: "Pump Test Date",
+			},
+			filtersApplied: buildAppliedFilters(source, request.filters, request.searchTerm),
+			summary,
+			columns: columnsForMode,
+			rows: pagedRows,
+			totalRows: filteredTests.length,
+			page,
+			pageSize,
 		};
 	}
 
@@ -3554,7 +3733,7 @@ async function runApparatusReport(
 			{ label: "Engine Hours Change (Sum By Apparatus)", value: `${formatHoursValue(totalEngineHourDelta)} hrs across ${apparatusWithEngineHourDelta}` },
 		];
 
-		const pageSize = Math.max(1, Math.min(Number(request.pageSize) || 50, 200));
+		const pageSize = request.pageSize === 0 ? Number.MAX_SAFE_INTEGER : Math.max(1, Math.min(Number(request.pageSize) || 50, 200));
 		const page = Math.max(1, Number(request.page) || 1);
 		const offset = (page - 1) * pageSize;
 		const pagedRows = filteredReadings.slice(offset, offset + pageSize).map((row): ReportRow => {
@@ -3833,7 +4012,7 @@ async function runApparatusReport(
 		{ label: "Apparatus With Engine Hours", value: String(apparatusEvaluations.filter((item) => parseNullableNumber(item.apparatus.engine_hours) !== null).length) },
 	];
 
-	const pageSize = Math.max(1, Math.min(Number(request.pageSize) || 50, 200));
+	const pageSize = request.pageSize === 0 ? Number.MAX_SAFE_INTEGER : Math.max(1, Math.min(Number(request.pageSize) || 50, 200));
 	const page = Math.max(1, Number(request.page) || 1);
 	const offset = (page - 1) * pageSize;
 	const pagedRows = apparatusEvaluations.slice(offset, offset + pageSize).map((item): ReportRow => {
@@ -4082,7 +4261,7 @@ async function runMaintenanceReport(
 			.map(([typeLabel, count]) => ({ label: `Type: ${typeLabel}`, value: String(count) })),
 	];
 
-	const pageSize = Math.max(1, Math.min(Number(request.pageSize) || 50, 200));
+		const pageSize = request.pageSize === 0 ? Number.MAX_SAFE_INTEGER : Math.max(1, Math.min(Number(request.pageSize) || 50, 200));
 	const page = Math.max(1, Number(request.page) || 1);
 	const offset = (page - 1) * pageSize;
 	const pagedRows = filtered.slice(offset, offset + pageSize).map((row): ReportRow => {
@@ -4241,7 +4420,7 @@ async function runPrePlansReport(
 		{ label: "Updated", value: String(filtered.length) },
 	];
 
-	const pageSize = Math.max(1, Math.min(Number(request.pageSize) || 50, 200));
+		const pageSize = request.pageSize === 0 ? Number.MAX_SAFE_INTEGER : Math.max(1, Math.min(Number(request.pageSize) || 50, 200));
 	const page = Math.max(1, Number(request.page) || 1);
 	const offset = (page - 1) * pageSize;
 	const pagedRows = filtered.slice(offset, offset + pageSize).map((row): ReportRow => {
@@ -4712,7 +4891,7 @@ async function runActivityReport(
 		return rightTime - leftTime;
 	});
 
-	const pageSize = Math.max(1, Math.min(Number(request.pageSize) || 50, 200));
+	const pageSize = request.pageSize === 0 ? Number.MAX_SAFE_INTEGER : Math.max(1, Math.min(Number(request.pageSize) || 50, 200));
 	const page = Math.max(1, Number(request.page) || 1);
 	const offset = (page - 1) * pageSize;
 	const pagedRows = events.slice(offset, offset + pageSize).map((event): ReportRow => ({
@@ -4848,7 +5027,7 @@ async function runPersonnelReport(
 
 	const totalActive = rows.filter((row) => row.active === true).length;
 	const totalInactive = rows.filter((row) => row.active === false).length;
-	const pageSize = Math.max(1, Math.min(Number(request.pageSize) || 50, 200));
+	const pageSize = request.pageSize === 0 ? Number.MAX_SAFE_INTEGER : Math.max(1, Math.min(Number(request.pageSize) || 50, 200));
 	const page = Math.max(1, Number(request.page) || 1);
 	const offset = (page - 1) * pageSize;
 	const pagedRows = rows.slice(offset, offset + pageSize).map((member): ReportRow => {
@@ -5144,7 +5323,7 @@ async function runTrainingReport(
 		});
 
 	const totalHours = filteredRecords.reduce((total, record) => total + record.hours, 0);
-	const pageSize = Math.max(1, Math.min(Number(request.pageSize) || 50, 200));
+	const pageSize = request.pageSize === 0 ? Number.MAX_SAFE_INTEGER : Math.max(1, Math.min(Number(request.pageSize) || 50, 200));
 	const page = Math.max(1, Number(request.page) || 1);
 	const offset = (page - 1) * pageSize;
 	const pagedRows = filteredRecords.slice(offset, offset + pageSize).map((record): ReportRow => ({

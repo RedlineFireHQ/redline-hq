@@ -78,6 +78,8 @@ test("Inspections report is available with centralized inventory inspection/test
   assert.ok(reportTypeOptions.some((option) => option.value === "gas-monitor-calibration"), "Inspections report should include gas monitor calibration mode");
   assert.ok(reportTypeOptions.some((option) => option.value === "rope-inspections"), "Inspections report should include rope inspections mode");
   assert.ok(reportTypeOptions.some((option) => option.value === "ground-ladder-service-testing"), "Inspections report should include ground ladder service testing mode");
+  assert.ok(reportTypeOptions.some((option) => option.value === "ground-ladder-inspection"), "Inspections report should include ground ladder inspection mode");
+  assert.equal(reportTypeOptions.some((option) => option.value === "ground-ladder-testing"), false, "Inspections report should not include the legacy ground ladder testing label");
 
   const columnKeys = new Set(source.columns.map((column) => column.key));
   assert.ok(columnKeys.has("inspection_date"), "Inspections report should include inspection date column");
@@ -110,6 +112,21 @@ test("Apparatus report exposes mileage and hours reporting mode", () => {
   assert.ok(columnKeys.has("reading_mileage"), "Apparatus report should include mileage history column");
   assert.ok(columnKeys.has("reading_engine_hours"), "Apparatus report should include engine hours history column");
   assert.ok(columnKeys.has("checked_by"), "Apparatus report should include checked by column");
+});
+
+test("Apparatus report includes Pump Testing mode", () => {
+  const source = getReportSourceConfig("apparatus");
+
+  assert.ok(source, "Apparatus report source should exist");
+  const reportTypeFilter = source.filters.find((filter) => filter.key === "report_type");
+  assert.ok(reportTypeFilter, "Apparatus report should include a report type selector");
+  const reportTypeOptions = reportTypeFilter?.options ?? [];
+  assert.ok(reportTypeOptions.some((option) => option.value === "pump-testing"), "Apparatus report should include pump testing mode");
+
+  const columnKeys = new Set(source.columns.map((column) => column.key));
+  assert.ok(columnKeys.has("pump_test_date"), "Apparatus report should include pump test date column");
+  assert.ok(columnKeys.has("pump_tested_by"), "Apparatus report should include tested-by column");
+  assert.ok(columnKeys.has("pump_test_result"), "Apparatus report should include pump test result column");
 });
 
 test("Activity report is available with centralized timeline filters and columns", () => {

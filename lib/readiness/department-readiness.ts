@@ -1308,6 +1308,7 @@ export async function getDepartmentReadinessData(
         certificationName: row.certificationName,
         status: row.status,
         authority: certificationTypeById.get(row.certificationId)?.authority ?? null,
+        expiresAt: memberCertifications.find((record) => record.certification_id === row.certificationId)?.expires_at ?? null,
       })),
       roleRequiredCertifications,
       includeIowaAuthority: effectiveIowaProfile !== null,

@@ -1005,6 +1005,7 @@ export default async function PersonnelProfilePage({
       certificationName: row.certificationName,
       status: row.status,
       authority: certificationTypeById.get(row.certificationId)?.authority ?? null,
+      expiresAt: canonicalMemberCertificationRows.find((record) => record.certification_id === row.certificationId)?.expires_at ?? null,
     })),
     roleRequiredCertifications,
     includeIowaAuthority: activeIowaProfile !== null,

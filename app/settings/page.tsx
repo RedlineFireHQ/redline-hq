@@ -8,6 +8,7 @@ import ApparatusInspectionSettingsSection from "@/components/settings/ApparatusI
 import GasMonitorCalibrationSettingsSection from "@/components/settings/GasMonitorCalibrationSettingsSection";
 import GroundLadderInspectionSettingsSection from "@/components/settings/GroundLadderInspectionSettingsSection";
 import { getCurrentMember } from "@/lib/current-member";
+import { hasDepartmentPermission } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 type CertificationTypeRow = {
@@ -74,7 +75,14 @@ export default async function SettingsPage() {
     redirect("/login");
   }
 
-  if (currentMember.role !== "administrator") {
+  const hasSettingsAccess = await hasDepartmentPermission(
+    supabase,
+    currentMember.departmentId,
+    currentMember.role,
+    "settings_management",
+  );
+
+  if (!hasSettingsAccess) {
     redirect("/");
   }
 

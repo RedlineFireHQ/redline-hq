@@ -404,10 +404,18 @@ export function buildQualificationReadinessAdapter(params: {
   memberQualifications: MemberQualificationRow[];
 }): QualificationReadinessAdapter {
   const state = buildRoleRequirementState(params);
+  const nonExpiringCertificationIds = new Set(
+    params.memberCertifications
+      .filter((record) => record.expires_at === null)
+      .map((record) => record.certification_id),
+  );
 
   const requiredNames = new Map<string, string>();
   for (const requirement of state.selectedRoleCertRequirements) {
-    if (requirement.normalizedName.length > 0) {
+    if (
+      requirement.normalizedName.length > 0 &&
+      nonExpiringCertificationIds.has(requirement.id)
+    ) {
       requiredNames.set(requirement.normalizedName, requirement.name);
     }
   }

@@ -7,6 +7,7 @@ export type CertificationStatusInput = {
 	certificationName: string;
 	status: CertificationStatus;
 	authority: EmsAuthority | null;
+	expiresAt?: string | null;
 };
 
 export type RoleRequiredCertificationScopeRow = {
@@ -36,6 +37,9 @@ export function buildScoredCertificationStatuses(params: {
 		}
 
 		const existing = byId.get(row.certification_id);
+		if (existing?.expiresAt === null) {
+			continue;
+		}
 		selectedIds.add(row.certification_id);
 		selected.push({
 			certificationId: row.certification_id,
@@ -52,7 +56,7 @@ export function buildScoredCertificationStatuses(params: {
 			(row.authority === "iowa" && params.includeIowaAuthority) ||
 			(row.authority === "nremt" && params.includeNremtAuthority);
 
-		if (!includeAuthority || selectedIds.has(row.certificationId)) {
+		if (!includeAuthority || row.expiresAt === null || selectedIds.has(row.certificationId)) {
 			continue;
 		}
 

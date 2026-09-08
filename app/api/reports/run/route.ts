@@ -1,4 +1,5 @@
 import { getCurrentMember } from "@/lib/current-member";
+import { hasDepartmentPermission } from "@/lib/member-permissions";
 import { runReport } from "@/lib/reports/server-runner";
 import type { ReportRunRequest } from "@/lib/reports/types";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
@@ -67,6 +68,20 @@ export async function POST(request: Request) {
 			return jsonResponse(
 				{ ok: false, errorCode: "UNAUTHORIZED", error: "You must be signed in to run reports." },
 				401,
+			);
+		}
+
+		const hasReportsAccess = await hasDepartmentPermission(
+			supabase,
+			currentMember.departmentId,
+			currentMember.role,
+			"reports_management",
+		);
+
+		if (!hasReportsAccess) {
+			return jsonResponse(
+				{ ok: false, errorCode: "FORBIDDEN", error: "You do not have permission to run reports." },
+				403,
 			);
 		}
 

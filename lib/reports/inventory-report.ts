@@ -279,7 +279,8 @@ export function getInventoryReportTypeOptions(categoryKey: string): InventoryRep
 	if (normalized === "ground-ladders") {
 		return [
 			{ value: "inventory", label: "Inventory" },
-			{ value: "ground-ladder-service-testing", label: "Ladder Testing" },
+			{ value: "ground-ladder-service-testing", label: "Service Testing" },
+			{ value: "ground-ladder-inspection", label: "Ladder Inspection" },
 			{ value: "deficiencies", label: "Deficiencies" },
 		];
 	}
@@ -385,7 +386,10 @@ function getModeDisplayName(categoryKey: string, reportTypeKey: string) {
 		return "Rope Inspection Report";
 	}
 	if (reportTypeKey === "ground-ladder-service-testing") {
-		return "Ground Ladder Testing Report";
+		return "Ground Ladder Service Testing Report";
+	}
+	if (reportTypeKey === "ground-ladder-inspection") {
+		return "Ground Ladder Inspection Report";
 	}
 	return `${typeLabel} Report`;
 }
@@ -682,7 +686,7 @@ export async function runInventoryReport(
 			.eq("department_id", context.departmentId)
 			.order("test_date", { ascending: false })
 			.order("created_at", { ascending: false });
-		if (error) return buildError(error.message || "Unable to load ground ladder testing records.");
+		if (error) return buildError(error.message || "Unable to load ground ladder service testing records.");
 		const rows = ((data ?? []) as Array<Record<string, unknown>>)
 			.filter((row) => categoryKey === "all" || categoryKey === "ground-ladders")
 			.filter((row) => isWithinUtcRange(normalizeText(row.test_date), fromIso, toExclusiveIso))
@@ -704,6 +708,55 @@ export async function runInventoryReport(
 			summary: [{ label: "Tests", value: toSummaryValue(rows.length) }, { label: "Passed", value: toSummaryValue(pass) }, { label: "Failed", value: toSummaryValue(fail) }],
 			columns: [{ key: "test_date", label: "Test Date" }, { key: "ladder_number", label: "Ladder" }, { key: "tester_type", label: "Tester Type" }, { key: "result", label: "Result" }],
 			rows: rows.map((row) => ({ id: normalizeText(row.id) || null, test_date: formatDate(normalizeText(row.test_date) || null), ladder_number: displayText(((Array.isArray(row.ground_ladder) ? row.ground_ladder[0] : row.ground_ladder) as { ladder_number?: unknown } | null | undefined)?.ladder_number), tester_type: displayText(row.tester_type), result: displayText(row.result) })),
+			totalRows: rows.length,
+			page: Number(request.page) || 1,
+			pageSize: Number(request.pageSize) || 50,
+		};
+	}
+
+	if (mode.reportTypeKey === "ground-ladder-inspection") {
+		const { data, error } = await context.supabase
+			.from("ground_ladders")
+			.select("id, ladder_number, ladder_type, status, notes, updated_at")
+			.eq("department_id", context.departmentId)
+			.order("updated_at", { ascending: false });
+		if (error) return buildError(error.message || "Unable to load ground ladder inspection records.");
+		const rows = ((data ?? []) as Array<Record<string, unknown>>)
+			.filter((row) => categoryKey === "all" || categoryKey === "ground-ladders")
+			.map((row) => {
+				const notes = normalizeText(row.notes) ?? "";
+				const match = notes.match(/Inspection\s*\(([^)]+)\):\s*(Ready for Duty|Out of Service)/i);
+				if (!match) {
+					return null;
+				}
+				return {
+					id: normalizeText(row.id),
+					inspection_date: match[1],
+					ladder_number: normalizeText(row.ladder_number),
+					result: match[2].toLowerCase() === "ready for duty" ? "Ready for Duty" : "Out of Service",
+					status: normalizeText(row.status),
+					notes,
+				};
+			})
+			.filter((row): row is NonNullable<typeof row> => Boolean(row))
+			.filter((row) => isWithinUtcRange(row.inspection_date, fromIso, toExclusiveIso))
+			.filter((row) => {
+				if (!searchTerm) return true;
+				return buildInventorySearchText([row.inspection_date, row.ladder_number, row.result, row.status, row.notes]).includes(searchTerm);
+			});
+		const passed = rows.filter((row) => normalizeText(row.result).toLowerCase() === "ready for duty").length;
+		const failed = rows.filter((row) => normalizeText(row.result).toLowerCase() === "out of service").length;
+		return {
+			ok: true,
+			comingSoon: false,
+			source: { key: source.key, name: getModeDisplayName("ground-ladders", mode.reportTypeKey), description: source.description },
+			departmentName: context.departmentName,
+			generatedAt: new Date().toISOString(),
+			period: { from: request.dateRange.from, to: request.dateRange.to, label: formatReportPeriodLabel(request.dateRange.from, request.dateRange.to), basisLabel: "Inspection Date" },
+			filtersApplied: buildAppliedFilters(source, request.filters, request.searchTerm),
+			summary: [{ label: "Inspections", value: toSummaryValue(rows.length) }, { label: "Ready", value: toSummaryValue(passed) }, { label: "Out of Service", value: toSummaryValue(failed) }],
+			columns: [{ key: "inspection_date", label: "Inspection Date" }, { key: "ladder_number", label: "Ladder" }, { key: "result", label: "Result" }, { key: "status", label: "Status" }],
+			rows: rows.map((row) => ({ id: row.id || null, inspection_date: formatDate(row.inspection_date || null), ladder_number: displayText(row.ladder_number), result: displayText(row.result), status: displayText(row.status) })),
 			totalRows: rows.length,
 			page: Number(request.page) || 1,
 			pageSize: Number(request.pageSize) || 50,
@@ -1328,7 +1381,7 @@ export async function runInventoryReport(
 		return left.itemName.localeCompare(right.itemName, undefined, { numeric: true, sensitivity: "base" });
 	});
 
-	const pageSize = Math.max(1, Math.min(Number(request.pageSize) || 50, 200));
+	const pageSize = request.pageSize === 0 ? Number.MAX_SAFE_INTEGER : Math.max(1, Math.min(Number(request.pageSize) || 50, 200));
 	const page = Math.max(1, Number(request.page) || 1);
 	const offset = (page - 1) * pageSize;
 	const pagedRows = toReportRows(filteredRows.slice(offset, offset + pageSize));

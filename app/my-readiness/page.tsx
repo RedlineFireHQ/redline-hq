@@ -1110,6 +1110,7 @@ export default async function MyReadinessPage() {
       certificationName: row.name,
       status: row.status,
       authority: certificationTypeById.get(row.certificationId)?.authority ?? null,
+      expiresAt: row.expiresAt,
     })),
     roleRequiredCertifications,
     includeIowaAuthority: activeIowaProfile !== null,

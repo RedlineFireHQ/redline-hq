@@ -39,18 +39,22 @@ export default function GasMonitorCalibrationSettingsSection({
       calibration_interval_months: parsedValue,
     };
 
-    const { error } = await supabase
-      .from("gas_monitor_calibration_settings")
-      .upsert(payload, { onConflict: "department_id" });
+    try {
+      const { error } = await supabase
+        .from("gas_monitor_calibration_settings")
+        .upsert(payload, { onConflict: "department_id" });
 
-    if (error) {
-      setErrorMessage(error.message || "Unable to save gas monitor calibration interval.");
+      if (error) {
+        setErrorMessage(error.message || "Unable to save gas monitor calibration interval.");
+        return;
+      }
+
+      setSuccessMessage(`Gas monitor calibration interval saved: ${parsedValue} month${parsedValue === 1 ? "" : "s"}.`);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to save gas monitor calibration interval.");
+    } finally {
       setIsSaving(false);
-      return;
     }
-
-    setSuccessMessage(`Gas monitor calibration interval saved: ${parsedValue} month${parsedValue === 1 ? "" : "s"}.`);
-    setIsSaving(false);
   }
 
   return (

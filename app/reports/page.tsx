@@ -1,6 +1,7 @@
+import { redirect } from "next/navigation";
 import ReportsWorkspace from "@/components/reports/ReportsWorkspace";
-import { getActiveApparatusOptions } from "@/lib/database";
 import { getCurrentMember } from "@/lib/current-member";
+import { hasDepartmentPermission } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 type ReportMemberOption = {
@@ -42,6 +43,21 @@ export default async function ReportsPage() {
   const supabase = await createSupabaseServerClient();
   const currentMember = await getCurrentMember(supabase);
 
+  if (!currentMember?.departmentId) {
+    redirect("/login");
+  }
+
+  const hasReportsAccess = await hasDepartmentPermission(
+    supabase,
+    currentMember.departmentId,
+    currentMember.role,
+    "reports_management",
+  );
+
+  if (!hasReportsAccess) {
+    redirect("/");
+  }
+
   let departmentName: string | null = null;
   let members: ReportMemberOption[] = [];
   let trainingCategories: ReportTrainingCategoryOption[] = [];
@@ -57,6 +73,7 @@ export default async function ReportsPage() {
   let inspectionGroundLadders: ReportInspectionItemOption[] = [];
   let emsEquipment: Array<{ id: string; name: string; equipment_number?: string | null; equipment_type?: string | null; status?: string | null; location?: string | null }> = [];
   let emsSupplies: Array<{ id: string; name: string; item_category?: string | null; status?: string | null; location?: string | null }> = [];
+  let initialLookupError: string | null = null;
   if (currentMember?.departmentId) {
     const [departmentResult, membersResult, categoriesResult, certificationsResult, apparatusResult, inspectionMembersResult, departmentRoleResult, emsEquipmentResult, emsSuppliesResult, fireHoseResult, scbaCylindersResult, scbaPacksResult, gasMonitorsResult, ropeItemsResult, groundLaddersResult] = await Promise.all([
       supabase
@@ -80,7 +97,12 @@ export default async function ReportsPage() {
         .select("id, name")
         .eq("department_id", currentMember.departmentId)
         .order("name", { ascending: true }),
-      getActiveApparatusOptions({ client: supabase, departmentId: currentMember.departmentId }),
+      supabase
+        .from("apparatus")
+        .select("id, name")
+        .eq("department_id", currentMember.departmentId)
+        .eq("lifecycle_status", "active")
+        .order("name", { ascending: true }),
       supabase
         .from("apparatus_inspections")
         .select("member_id")
@@ -135,6 +157,29 @@ export default async function ReportsPage() {
         .order("ladder_number", { ascending: true }),
     ]);
 
+    const lookupErrors = [
+      { label: "the department name", error: departmentResult.error },
+      { label: "department members", error: membersResult.error },
+      { label: "training categories", error: categoriesResult.error },
+      { label: "certification list", error: certificationsResult.error },
+      { label: "apparatus data", error: apparatusResult.error },
+      { label: "apparatus check members", error: inspectionMembersResult.error },
+      { label: "department roles", error: departmentRoleResult.error },
+      { label: "EMS equipment", error: emsEquipmentResult.error },
+      { label: "EMS supplies", error: emsSuppliesResult.error },
+      { label: "fire hose inspection items", error: fireHoseResult.error },
+      { label: "SCBA cylinder inspection items", error: scbaCylindersResult.error },
+      { label: "SCBA pack inspection items", error: scbaPacksResult.error },
+      { label: "gas monitor inspection items", error: gasMonitorsResult.error },
+      { label: "rope inspection items", error: ropeItemsResult.error },
+      { label: "ground ladder inspection items", error: groundLaddersResult.error },
+    ];
+    const failedLookup = lookupErrors.find((item) => item.error);
+    if (failedLookup) {
+      console.error("[reports] initial lookup failed", failedLookup.error);
+      initialLookupError = `Unable to load ${failedLookup.label}. Please try again.`;
+    }
+
     departmentName = typeof departmentResult.data?.name === "string" ? departmentResult.data.name : null;
 
     members = (membersResult.data ?? [])
@@ -168,7 +213,7 @@ export default async function ReportsPage() {
       }))
       .filter((row) => row.id.length > 0 && row.name.length > 0);
 
-    apparatuses = apparatusResult
+    apparatuses = (apparatusResult.data ?? [])
       .map((row) => ({
         id: row.id,
         name: typeof row.name === "string" ? row.name : "",
@@ -290,6 +335,7 @@ export default async function ReportsPage() {
       inspectionGroundLadders={inspectionGroundLadders}
       emsEquipment={emsEquipment}
       emsSupplies={emsSupplies}
+      initialError={initialLookupError}
     />
   );
 }

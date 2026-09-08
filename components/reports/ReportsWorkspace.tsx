@@ -19,6 +19,7 @@ import type {
 type ReportsWorkspaceProps = {
 	isAuthenticated: boolean;
 	departmentName: string | null;
+	initialError?: string | null;
 	members: Array<{
 		id: string;
 		name: string;
@@ -465,6 +466,7 @@ function ReportResultsTable({
 export default function ReportsWorkspace({
 	isAuthenticated,
 	departmentName,
+	initialError = null,
 	members = [],
 	trainingCategories = [],
 	certifications = [],
@@ -494,7 +496,11 @@ export default function ReportsWorkspace({
 		: inventoryReportTypeOptions[0]?.value ?? "inventory";
 	const [isRunning, setIsRunning] = useState(false);
 	const [result, setResult] = useState<ReportResultPayload | null>(null);
-	const [error, setError] = useState<ReportErrorPayload | null>(null);
+	const [error, setError] = useState<ReportErrorPayload | null>(
+		initialError
+			? { ok: false, errorCode: "QUERY_ERROR", error: initialError }
+			: null,
+	);
 	const [sortColumn, setSortColumn] = useState<string | null>(null);
 	const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
@@ -945,7 +951,7 @@ export default function ReportsWorkspace({
 			dateRange,
 			filters,
 			page: 1,
-			pageSize: 100,
+			pageSize: 0,
 		};
 
 		setIsRunning(true);
