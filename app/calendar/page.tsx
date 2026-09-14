@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import PageLayout from "@/components/layout/PageLayout";
 import CalendarWorkspace from "@/components/calendar/CalendarWorkspace";
 import { getCurrentMember } from "@/lib/current-member";
+import { hasDepartmentPermission } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 export default async function CalendarPage() {
@@ -11,6 +12,13 @@ export default async function CalendarPage() {
   if (!currentMember?.departmentId) {
     redirect("/login");
   }
+
+  const canManageCalendar = await hasDepartmentPermission(
+    supabase,
+    currentMember.departmentId,
+    currentMember.role,
+    "calendar_management",
+  );
 
   const [{ data: activityRows, error: activitiesError }, { data: memberRows, error: membersError }] = await Promise.all([
     supabase
@@ -81,6 +89,7 @@ export default async function CalendarPage() {
           role: currentMember.role,
           name: currentMember.name,
         }}
+        canManageCalendar={canManageCalendar}
         initialActivities={activities}
         memberOptions={memberOptions}
       />

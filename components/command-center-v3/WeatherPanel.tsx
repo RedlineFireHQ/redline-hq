@@ -6,7 +6,9 @@ import {
   Gauge,
 } from "lucide-react";
 import { MapPin } from "lucide-react";
-import { getElliottWeather } from "@/lib/weather/weatherapi";
+import { getCurrentMember } from "@/lib/current-member";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { getWeatherForLocation } from "@/lib/weather/weatherapi";
 
 function formatTemperature(value: number | null) {
   return value === null ? "--" : `${Math.round(value)}°F`;
@@ -25,8 +27,40 @@ function formatWind(direction: string | null, speed: number | null) {
   return direction ? `${direction} ${roundedSpeed}` : roundedSpeed;
 }
 
+async function resolveDepartmentLocationQuery(): Promise<string | null> {
+  const supabase = await createSupabaseServerClient();
+  const currentMember = await getCurrentMember(supabase);
+
+  if (!currentMember?.departmentId) {
+    return null;
+  }
+
+  const { data } = await supabase
+    .from("departments")
+    .select("city, state, latitude, longitude")
+    .eq("id", currentMember.departmentId)
+    .maybeSingle();
+
+  const latitude = typeof data?.latitude === "number" && Number.isFinite(data.latitude) ? data.latitude : null;
+  const longitude = typeof data?.longitude === "number" && Number.isFinite(data.longitude) ? data.longitude : null;
+
+  // Coordinates avoid the ambiguous-city-name geocoding failures that
+  // free-text city/state search can hit; prefer them when a department has
+  // them set, otherwise fall back to the existing city/state text search.
+  if (latitude !== null && longitude !== null) {
+    return `${latitude},${longitude}`;
+  }
+
+  const city = typeof data?.city === "string" ? data.city.trim() : "";
+  const state = typeof data?.state === "string" ? data.state.trim() : "";
+  const locationQuery = [city, state].filter(Boolean).join(", ");
+
+  return locationQuery || null;
+}
+
 export default async function WeatherPanel() {
-  const weather = await getElliottWeather();
+  const locationQuery = await resolveDepartmentLocationQuery();
+  const weather = await getWeatherForLocation(locationQuery);
   const weatherDetails = [
     { label: "Humidity", value: formatHumidity(weather.humidityPercent), icon: Droplets },
     { label: "Wind", value: formatWind(weather.windDirection, weather.windMph), icon: Wind },

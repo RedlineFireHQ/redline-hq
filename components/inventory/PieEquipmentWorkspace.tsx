@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Plus, Search } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import PieEquipmentFormModal, {
 	PieEquipmentFormValues,
@@ -47,18 +46,48 @@ type ApparatusOption = {
 
 type AssignmentModalState = {
 	pieEquipment: PieEquipmentRecord;
-	type: "Apparatus" | "Station" | "Equipment";
+	type: "Apparatus" | "Station" | "Equipment" | "Unassigned";
 	apparatusId: string;
 	stationName: string;
 	equipmentReference: string;
 	notes: string;
 };
 
+export function validateInitialPieAssignment(
+	initialAssignment: PieEquipmentInitialAssignmentValues | undefined,
+	apparatusOptions: ApparatusOption[],
+) {
+	const assignmentType = initialAssignment?.assignmentType ?? "Unassigned";
+
+	if (assignmentType === "Apparatus") {
+		const apparatusId = initialAssignment?.apparatusId ?? "";
+		if (!apparatusId) {
+			return "Select an apparatus for initial assignment.";
+		}
+
+		const isValidApparatus = apparatusOptions.some((option) => option.id === apparatusId);
+		if (!isValidApparatus) {
+			return "Select a valid apparatus for initial assignment.";
+		}
+	}
+
+	if (assignmentType === "Station" && !initialAssignment?.stationName.trim()) {
+		return "Enter a station for initial assignment.";
+	}
+
+	if (assignmentType === "Equipment" && !initialAssignment?.equipmentReference.trim()) {
+		return "Enter an equipment reference for initial assignment.";
+	}
+
+	return null;
+}
+
 interface PieEquipmentWorkspaceProps {
 	departmentId: string | null;
 	initialEquipment: PieEquipmentRecord[];
 	initialAssignments: PieEquipmentAssignmentRecord[];
 	apparatusOptions: ApparatusOption[];
+	canManagePie: boolean;
 }
 
 function toTitleCase(value: string) {
@@ -154,6 +183,16 @@ function statusClasses(status: string) {
 	return "border-white/15 bg-neutral-900 text-neutral-200";
 }
 
+function summaryCardClasses(active: boolean) {
+	const base = "rounded-xl border px-4 py-3 text-left transition";
+
+	if (active) {
+		return `${base} border-white/20 bg-white/[0.06]`;
+	}
+
+	return `${base} border-red-700/30 bg-red-950/20 hover:bg-red-950/30`;
+}
+
 function formatDate(value: string | null | undefined) {
 	if (!value) {
 		return "-";
@@ -195,6 +234,7 @@ export default function PieEquipmentWorkspace({
 	initialEquipment,
 	initialAssignments,
 	apparatusOptions,
+	canManagePie,
 }: PieEquipmentWorkspaceProps) {
 	const router = useRouter();
 	const [equipment, setEquipment] = useState<PieEquipmentRecord[]>(initialEquipment);
@@ -221,33 +261,6 @@ export default function PieEquipmentWorkspace({
 		() => new Map(apparatusOptions.map((option) => [option.id, option] as const)),
 		[apparatusOptions],
 	);
-
-	const metrics = useMemo(() => {
-		let inService = 0;
-		let unassigned = 0;
-		let outOfService = 0;
-		let accountabilityRisk = 0;
-
-		for (const item of equipment) {
-			const status = normalizeStatus(item.status);
-			if (status === "In Service") {
-				inService += 1;
-			}
-			if (status === "Unassigned") {
-				unassigned += 1;
-			}
-			if (status === "Out of Service") {
-				outOfService += 1;
-			}
-			if (status === "Lost" || status === "Stolen") {
-				accountabilityRisk += 1;
-			}
-		}
-
-		const total = equipment.length;
-		const readinessScore = total > 0 ? Math.round((inService / total) * 100) : 0;
-		return { total, inService, unassigned, outOfService, accountabilityRisk, readinessScore };
-	}, [equipment]);
 
 	const filteredEquipment = useMemo(() => {
 		const search = searchTerm.trim().toLowerCase();
@@ -312,6 +325,14 @@ export default function PieEquipmentWorkspace({
 		: undefined;
 
 	const canDelete = Boolean(formEquipment);
+	const activeRows = useMemo(
+		() => equipment.filter((row) => normalizeStatus(row.status) !== "Retired"),
+		[equipment],
+	);
+	const outOfServiceCount = useMemo(
+		() => activeRows.filter((row) => normalizeStatus(row.status) === "Out of Service").length,
+		[activeRows],
+	);
 
 	const formApparatusOptions = useMemo(
 		() =>
@@ -334,12 +355,18 @@ export default function PieEquipmentWorkspace({
 	}, [departmentId, apparatusOptions.length]);
 
 	function openAddModal() {
+		if (!canManagePie) {
+			return;
+		}
 		setFormMode("add");
 		setFormEquipment(null);
 		setIsFormOpen(true);
 	}
 
 	function openEditModal(item: PieEquipmentRecord) {
+		if (!canManagePie) {
+			return;
+		}
 		setFormMode("edit");
 		setFormEquipment(item);
 		setIsFormOpen(true);
@@ -369,6 +396,10 @@ export default function PieEquipmentWorkspace({
 		values: PieEquipmentFormValues,
 		initialAssignment?: PieEquipmentInitialAssignmentValues,
 	) {
+		if (!canManagePie) {
+			alert("You do not have permission to manage PIE equipment.");
+			return;
+		}
 		if (!departmentId) {
 			alert("Unable to determine department. Please refresh and try again.");
 			return;
@@ -376,6 +407,17 @@ export default function PieEquipmentWorkspace({
 		if (!values.equipmentNumber.trim()) {
 			alert("Equipment / Asset Number is required.");
 			return;
+		}
+
+		if (formMode === "add") {
+			const initialAssignmentError = validateInitialPieAssignment(
+				initialAssignment,
+				apparatusOptions,
+			);
+			if (initialAssignmentError) {
+				alert(initialAssignmentError);
+				return;
+			}
 		}
 
 		setIsSavingForm(true);
@@ -437,22 +479,6 @@ export default function PieEquipmentWorkspace({
 
 				setEquipment((current) => [newEquipment, ...current]);
 
-				if (assignmentType === "Apparatus" && !initialAssignment?.apparatusId) {
-					alert("Select an apparatus for initial assignment.");
-					setIsSavingForm(false);
-					return;
-				}
-				if (assignmentType === "Station" && !initialAssignment?.stationName.trim()) {
-					alert("Enter a station for initial assignment.");
-					setIsSavingForm(false);
-					return;
-				}
-				if (assignmentType === "Equipment" && !initialAssignment?.equipmentReference.trim()) {
-					alert("Enter an equipment reference for initial assignment.");
-					setIsSavingForm(false);
-					return;
-				}
-
 				const { error: assignmentError } = await supabase.from("pie_equipment_assignments").insert({
 					department_id: departmentId,
 					pie_equipment_id: newEquipment.id,
@@ -512,6 +538,10 @@ export default function PieEquipmentWorkspace({
 	}
 
 	async function handleDeleteEquipment() {
+		if (!canManagePie) {
+			alert("You do not have permission to manage PIE equipment.");
+			return;
+		}
 		if (!formEquipment) {
 			return;
 		}
@@ -543,6 +573,10 @@ export default function PieEquipmentWorkspace({
 	}
 
 	async function handleRetireEquipment() {
+		if (!canManagePie) {
+			alert("You do not have permission to manage PIE equipment.");
+			return;
+		}
 		if (!formEquipment) {
 			return;
 		}
@@ -572,17 +606,25 @@ export default function PieEquipmentWorkspace({
 	}
 
 	function openAssignmentModal(item: PieEquipmentRecord) {
+		if (!canManagePie) {
+			return;
+		}
+		const currentAssignment = activeAssignmentByEquipmentId.get(item.id);
 		setAssignmentModal({
 			pieEquipment: item,
-			type: "Apparatus",
-			apparatusId: "",
-			stationName: "",
-			equipmentReference: "",
+			type: currentAssignment?.assignment_type ?? "Apparatus",
+			apparatusId: currentAssignment?.apparatus_id ?? "",
+			stationName: currentAssignment?.station_name ?? "",
+			equipmentReference: currentAssignment?.equipment_reference ?? "",
 			notes: "",
 		});
 	}
 
 	async function handleSaveAssignment() {
+		if (!canManagePie) {
+			alert("You do not have permission to manage PIE equipment.");
+			return;
+		}
 		if (!assignmentModal) {
 			return;
 		}
@@ -606,6 +648,9 @@ export default function PieEquipmentWorkspace({
 		setIsSavingAssignment(true);
 		try {
 			const equipmentId = assignmentModal.pieEquipment.id;
+			const isProtectedUnassign =
+				assignmentModal.type === "Unassigned" &&
+				isOutOfServiceLikeStatus(assignmentModal.pieEquipment.status);
 			const { data: activeRows, error: activeQueryError } = await supabase
 				.from("pie_equipment_assignments")
 				.select("id")
@@ -655,13 +700,24 @@ export default function PieEquipmentWorkspace({
 				throw insertAssignmentError;
 			}
 
+			if (isProtectedUnassign) {
+				await refreshAssignmentsForEquipment(equipmentId);
+				setAssignmentModal(null);
+				return;
+			}
+
 			const shouldSetInServiceDate = !assignmentModal.pieEquipment.in_service_date;
+			const nextStatus = assignmentModal.type === "Unassigned" ? "Unassigned" : "In Service";
+			const nextStatusPayload =
+				assignmentModal.type === "Unassigned"
+					? { status: nextStatus }
+					: {
+						status: nextStatus,
+						...(shouldSetInServiceDate ? { in_service_date: getCurrentDateIso() } : {}),
+					  };
 			const { data: updatedRow, error: statusError } = await supabase
 				.from("pie_equipment")
-				.update({
-					status: "In Service",
-					...(shouldSetInServiceDate ? { in_service_date: getCurrentDateIso() } : {}),
-				})
+				.update(nextStatusPayload)
 				.eq("id", equipmentId)
 				.eq("department_id", departmentId)
 				.not("status", "in", '("Out of Service","Lost","Stolen","Retired")')
@@ -691,75 +747,6 @@ export default function PieEquipmentWorkspace({
 		}
 	}
 
-	async function handleUnassignEquipment(item: PieEquipmentRecord) {
-		const activeAssignment = activeAssignmentByEquipmentId.get(item.id);
-		if (!activeAssignment) {
-			return;
-		}
-		if (!departmentId) {
-			alert("Unable to determine department. Please refresh and try again.");
-			return;
-		}
-
-		setIsSavingAssignment(true);
-		try {
-			const nowIso = new Date().toISOString();
-			const { error: closeError } = await supabase
-				.from("pie_equipment_assignments")
-				.update({ ended_at: nowIso })
-				.eq("department_id", departmentId)
-				.eq("id", activeAssignment.id);
-
-			if (closeError) {
-				throw closeError;
-			}
-
-			const { error: unassignedInsertError } = await supabase
-				.from("pie_equipment_assignments")
-				.insert({
-					department_id: departmentId,
-					pie_equipment_id: item.id,
-					assignment_type: "Unassigned",
-					apparatus_id: null,
-					station_name: null,
-					equipment_reference: null,
-					notes: null,
-				});
-
-			if (unassignedInsertError) {
-				throw unassignedInsertError;
-			}
-
-			const shouldSetUnassigned = !isOutOfServiceLikeStatus(item.status);
-			if (shouldSetUnassigned) {
-				const { error: statusError } = await supabase
-					.from("pie_equipment")
-					.update({ status: "Unassigned" })
-					.eq("id", item.id)
-					.eq("department_id", departmentId)
-					.not("status", "in", '("Out of Service","Lost","Stolen","Retired")');
-				if (statusError) {
-					throw statusError;
-				}
-			}
-
-			setEquipment((current) =>
-				current.map((entry) =>
-					entry.id === item.id && shouldSetUnassigned
-						? { ...entry, status: "Unassigned" }
-						: entry,
-				),
-			);
-
-			await refreshAssignmentsForEquipment(item.id);
-		} catch (error) {
-			console.error("[pie][unassign] failed", error);
-			alert("Unable to unassign PIE equipment.");
-		} finally {
-			setIsSavingAssignment(false);
-		}
-	}
-
 	function handleReportDeficiency(item: PieEquipmentRecord) {
 		router.push(
 			`/deficiencies/report?inventoryCategory=pie&inventoryItemId=${item.id}&inventoryItemLabel=${encodeURIComponent(item.equipment_number)}`,
@@ -767,64 +754,62 @@ export default function PieEquipmentWorkspace({
 	}
 
 	return (
-		<div className="space-y-6">
-			<section className="rounded-2xl border border-white/10 bg-[#111111] p-6 shadow-[0_16px_40px_rgba(0,0,0,0.35)]">
-				<div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-					<div>
-						<p className="text-xs font-semibold uppercase tracking-[0.18em] text-red-400">PIE Asset Tracking</p>
+		<div className="mx-auto max-w-7xl space-y-8 pb-16">
+			<section className="rounded-2xl border border-red-900 bg-[#242424] p-5">
+				<div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+					<div className="min-w-0 flex-1">
+						<p className="text-xs font-semibold uppercase tracking-[0.28em] text-red-500">Inventory Module</p>
 						<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">Power & Industrial Equipment</h1>
-						<p className="mt-2 max-w-2xl text-sm text-neutral-400">Track assignments, accountability, and readiness for portable power and industrial tools.</p>
+						<p className="mt-2 max-w-3xl text-sm text-neutral-400">Track assignments, accountability, and readiness for portable power and industrial tools.</p>
+						<div className="mt-3 flex flex-wrap items-center gap-2">
+							<button
+								type="button"
+								onClick={openAddModal}
+								disabled={!canManagePie}
+								className="inline-flex rounded-lg border border-red-500/40 bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700"
+							>
+								+ Add PIE Unit
+							</button>
+							<button
+								type="button"
+								onClick={() => router.push("/deficiencies/report")}
+								className="inline-flex rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+							>
+								Report Deficiency
+							</button>
+						</div>
 					</div>
+
 					<button
 						type="button"
-						onClick={openAddModal}
-						className="inline-flex items-center gap-2 rounded-lg border border-red-500/40 bg-red-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+						onClick={() => setStatusFilter((current) => (current === "Out of Service" ? "All" : "Out of Service"))}
+						className={`${summaryCardClasses(statusFilter === "Out of Service")} w-full max-w-[220px] shrink-0`}
 					>
-						<Plus size={16} />
-						Add PIE Unit
+						<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Out of Service</p>
+						<p className="mt-2 text-2xl font-black text-white">{outOfServiceCount}</p>
 					</button>
-				</div>
-
-				<div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-					<div className="rounded-xl border border-white/10 bg-[#1b1b1b] p-4">
-						<p className="text-xs uppercase tracking-[0.12em] text-neutral-400">Total</p>
-						<p className="mt-2 text-2xl font-black text-white">{metrics.total}</p>
-					</div>
-					<div className="rounded-xl border border-green-800/30 bg-green-900/10 p-4">
-						<p className="text-xs uppercase tracking-[0.12em] text-green-300">In Service</p>
-						<p className="mt-2 text-2xl font-black text-green-200">{metrics.inService}</p>
-					</div>
-					<div className="rounded-xl border border-amber-700/30 bg-amber-900/10 p-4">
-						<p className="text-xs uppercase tracking-[0.12em] text-amber-300">Unassigned</p>
-						<p className="mt-2 text-2xl font-black text-amber-200">{metrics.unassigned}</p>
-					</div>
-					<div className="rounded-xl border border-red-800/30 bg-red-900/10 p-4">
-						<p className="text-xs uppercase tracking-[0.12em] text-red-300">Out of Service</p>
-						<p className="mt-2 text-2xl font-black text-red-200">{metrics.outOfService}</p>
-					</div>
-					<div className="rounded-xl border border-blue-800/30 bg-blue-900/10 p-4">
-						<p className="text-xs uppercase tracking-[0.12em] text-blue-300">Readiness</p>
-						<p className="mt-2 text-2xl font-black text-blue-200">{metrics.readinessScore}%</p>
-					</div>
 				</div>
 			</section>
 
-			<section className="rounded-2xl border border-white/10 bg-[#111111] p-5">
+			<section className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-5">
 				<div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-					<div className="relative w-full md:max-w-md">
-						<Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
+					<div className="flex-1">
+						<label htmlFor="pie-search" className="sr-only">
+							Search PIE equipment
+						</label>
 						<input
+							id="pie-search"
 							value={searchTerm}
 							onChange={(event) => setSearchTerm(event.target.value)}
-							placeholder="Search equipment number, serial, assignment..."
-							className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] py-2 pl-9 pr-3 text-sm text-white placeholder:text-neutral-500 focus:border-red-500/50 focus:outline-none"
+							placeholder="Search by equipment number, serial number, manufacturer, model, type, or assignment..."
+							className="w-full rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3 text-sm text-white placeholder:text-neutral-500 focus:border-red-500/50 focus:outline-none"
 						/>
 					</div>
 
 					<select
 						value={statusFilter}
 						onChange={(event) => setStatusFilter(event.target.value)}
-						className="rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
+						className="rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3 text-sm text-white focus:border-red-500/50 focus:outline-none"
 					>
 						<option value="All">All Statuses</option>
 						<option value="In Service">In Service</option>
@@ -836,55 +821,56 @@ export default function PieEquipmentWorkspace({
 					</select>
 				</div>
 
-				<div className="mt-4 overflow-x-auto">
-					<table className="min-w-full divide-y divide-white/10 text-sm">
+				<div className="mt-4 max-h-[420px] overflow-x-auto overflow-y-auto">
+					<table className="min-w-full border-separate border-spacing-0 text-left">
 						<thead>
-							<tr className="text-left text-xs uppercase tracking-[0.14em] text-neutral-400">
-								<th className="px-3 py-2">Equipment</th>
-								<th className="px-3 py-2">Type / Model</th>
-								<th className="px-3 py-2">Assignment</th>
-								<th className="px-3 py-2">Status</th>
-								<th className="px-3 py-2">In Service Since</th>
-								<th className="px-3 py-2 text-right">Actions</th>
+							<tr>
+								<th className="border-b border-white/10 bg-[#1b1b1b] px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">Equipment</th>
+								<th className="border-b border-white/10 bg-[#1b1b1b] px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">Type / Model</th>
+								<th className="border-b border-white/10 bg-[#1b1b1b] px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">Assignment</th>
+								<th className="border-b border-white/10 bg-[#1b1b1b] px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">Status</th>
+								<th className="border-b border-white/10 bg-[#1b1b1b] px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">In Service Since</th>
+								<th className="border-b border-white/10 bg-[#1b1b1b] px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">Actions</th>
 							</tr>
 						</thead>
-						<tbody className="divide-y divide-white/5">
+						<tbody>
 							{filteredEquipment.length === 0 ? (
 								<tr>
-									<td colSpan={6} className="px-3 py-8 text-center text-neutral-500">No PIE equipment matches your filters.</td>
+									<td colSpan={6} className="border-b border-white/5 px-4 py-8 text-center text-sm text-neutral-400">No PIE equipment matches your filters.</td>
 								</tr>
 							) : (
 								filteredEquipment.map((item) => {
 									const assignment = activeAssignmentByEquipmentId.get(item.id);
 									const status = normalizeStatus(item.status);
 									return (
-										<tr key={item.id} className="hover:bg-white/[0.03]">
-											<td className="px-3 py-3">
+										<tr key={item.id} className="transition hover:bg-white/5">
+											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">
 												<p className="font-semibold text-white">{item.equipment_number}</p>
 												<p className="text-xs text-neutral-500">SN: {item.serial_number || "N/A"}</p>
 											</td>
-											<td className="px-3 py-3 text-neutral-300">
+											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">
 												<p>{item.equipment_type || "-"}</p>
 												<p className="text-xs text-neutral-500">{item.manufacturer || ""} {item.model || ""}</p>
 											</td>
-											<td className="px-3 py-3 text-neutral-300">
-												<p>{getAssignmentLabel(assignment, apparatusLookupById)}</p>
+											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">
+												{getAssignmentLabel(assignment, apparatusLookupById)}
 											</td>
-											<td className="px-3 py-3">
+											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">
 												<span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClasses(status)}`}>
 													{status}
 												</span>
 											</td>
-											<td className="px-3 py-3 text-neutral-300">{formatDate(item.in_service_date)}</td>
-											<td className="px-3 py-3">
-												<div className="flex justify-end gap-2">
-													<button type="button" onClick={() => openEditModal(item)} className="rounded-lg border border-white/15 bg-neutral-900 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800">Edit</button>
-													<button type="button" onClick={() => openAssignmentModal(item)} className="rounded-lg border border-white/15 bg-neutral-900 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800">Assign</button>
-													{assignment ? (
-														<button type="button" onClick={() => handleUnassignEquipment(item)} disabled={isSavingAssignment} className="rounded-lg border border-amber-700/50 bg-amber-900/20 px-2.5 py-1.5 text-xs font-semibold text-amber-200 transition hover:bg-amber-900/30 disabled:opacity-60">Unassign</button>
+											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">{formatDate(item.in_service_date)}</td>
+											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">
+												<div className="flex flex-wrap gap-2">
+													{canManagePie ? (
+														<button type="button" onClick={() => openEditModal(item)} className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800">Edit</button>
 													) : null}
-													<button type="button" onClick={() => setHistoryEquipment(item)} className="rounded-lg border border-white/15 bg-neutral-900 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800">History</button>
-													<button type="button" onClick={() => handleReportDeficiency(item)} className="inline-flex items-center gap-1 rounded-lg border border-red-500/40 bg-red-600/90 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-red-700">Deficiency <ArrowRight size={12} /></button>
+													{canManagePie ? (
+														<button type="button" onClick={() => openAssignmentModal(item)} className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-100 transition hover:bg-red-500/20">Assign</button>
+													) : null}
+													<button type="button" onClick={() => setHistoryEquipment(item)} className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800">History</button>
+													<button type="button" onClick={() => handleReportDeficiency(item)} className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800">Report Deficiency</button>
 												</div>
 											</td>
 										</tr>
@@ -930,7 +916,7 @@ export default function PieEquipmentWorkspace({
 									value={assignmentModal.type}
 									onChange={(event) => {
 										const nextType =
-											event.target.value === "Station" || event.target.value === "Equipment"
+											event.target.value === "Station" || event.target.value === "Equipment" || event.target.value === "Unassigned"
 												? event.target.value
 												: "Apparatus";
 										setAssignmentModal((current) => (current ? { ...current, type: nextType } : current));
@@ -940,6 +926,7 @@ export default function PieEquipmentWorkspace({
 									<option value="Apparatus">Apparatus</option>
 									<option value="Station">Station</option>
 									<option value="Equipment">Equipment</option>
+									<option value="Unassigned">Unassigned</option>
 								</select>
 							</label>
 

@@ -4,6 +4,7 @@ import TrainingWorkspace from "@/components/training/TrainingWorkspace";
 import { getCurrentMember } from "@/lib/current-member";
 import { hasDepartmentPermission } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import PublicHomepage from "@/components/public/PublicHomepage";
 
 type TrainingCategoryRow = {
   id: string;
@@ -30,6 +31,11 @@ export default async function HomePage() {
   const currentMember = await getCurrentMember(supabase);
 
   if (!currentMember?.departmentId) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return <PublicHomepage />;
+    }
+
     return (
       <PageLayout>
         <CommandCenter />
@@ -38,9 +44,14 @@ export default async function HomePage() {
   }
 
   const [canManageTraining, canAssignHomework, canReviewTraining] = await Promise.all([
-    hasDepartmentPermission(supabase, currentMember.departmentId, currentMember.role, "training_management"),
-    hasDepartmentPermission(supabase, currentMember.departmentId, currentMember.role, "homework_assignment"),
-    hasDepartmentPermission(supabase, currentMember.departmentId, currentMember.role, "training_review"),
+    hasDepartmentPermission(supabase, currentMember.departmentId, currentMember.role, "training_program_management")
+      || hasDepartmentPermission(supabase, currentMember.departmentId, currentMember.role, "training_management"),
+    hasDepartmentPermission(supabase, currentMember.departmentId, currentMember.role, "training_assignment_management")
+      || hasDepartmentPermission(supabase, currentMember.departmentId, currentMember.role, "homework_assignment")
+      || hasDepartmentPermission(supabase, currentMember.departmentId, currentMember.role, "training_management"),
+    hasDepartmentPermission(supabase, currentMember.departmentId, currentMember.role, "training_review_management")
+      || hasDepartmentPermission(supabase, currentMember.departmentId, currentMember.role, "training_review")
+      || hasDepartmentPermission(supabase, currentMember.departmentId, currentMember.role, "training_management"),
   ]);
 
   const hasAnyManagementCapabilities = canManageTraining || canAssignHomework || canReviewTraining;
@@ -111,6 +122,7 @@ export default async function HomePage() {
             assignmentMembers={[]}
             assignmentEvidenceRows={[]}
             emsCourseDefinitions={emsCourseDefinitions}
+            departmentTrainingHoursThisYear={0}
           />
         </div>
       ) : null}

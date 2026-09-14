@@ -836,44 +836,41 @@ export default function BatteryWorkspace({
 
 	return (
 		<div className="space-y-6">
-			<section className="rounded-2xl border border-white/10 bg-[#111111] p-6 shadow-[0_16px_40px_rgba(0,0,0,0.35)]">
-				<div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-					<div>
-						<p className="text-xs font-semibold uppercase tracking-[0.18em] text-red-400">Inventory Accountability</p>
+			<section className="rounded-2xl border border-red-900 bg-[#242424] p-5">
+				<div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+					<div className="min-w-0 flex-1">
+						<p className="text-xs font-semibold uppercase tracking-[0.28em] text-red-500">Inventory Module</p>
 						<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">Batteries</h1>
-						<p className="mt-2 max-w-2xl text-sm text-neutral-400">Manage battery assets, assignment accountability, and readiness status without introducing test/calibration workflows.</p>
+						<p className="mt-2 max-w-3xl text-sm text-neutral-400">
+							Manage battery assets, assignment accountability, and readiness status without introducing test/calibration workflows.
+						</p>
+						<div className="mt-3 flex flex-wrap items-center gap-2">
+							<button
+								type="button"
+								onClick={openAddModal}
+								className="inline-flex rounded-lg border border-red-500/40 bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700"
+							>
+								<Plus size={16} />
+								Add Battery
+							</button>
+							<button
+								type="button"
+								onClick={() => router.push("/deficiencies/report")}
+								className="inline-flex rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+							>
+								Report Deficiency
+							</button>
+						</div>
 					</div>
+
 					<button
 						type="button"
-						onClick={openAddModal}
-						className="inline-flex items-center gap-2 rounded-lg border border-red-500/40 bg-red-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+						onClick={() => setStatusFilter("Out of Service")}
+						className="w-full max-w-[220px] shrink-0 rounded-xl border border-red-700/30 bg-red-950/20 px-4 py-3 text-left transition hover:bg-red-950/30"
 					>
-						<Plus size={16} />
-						Add Battery
+						<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Out of Service</p>
+						<p className="mt-2 text-2xl font-black text-white">{metrics.outOfService}</p>
 					</button>
-				</div>
-
-				<div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-					<div className="rounded-xl border border-white/10 bg-[#1b1b1b] p-4">
-						<p className="text-xs uppercase tracking-[0.12em] text-neutral-400">Total</p>
-						<p className="mt-2 text-2xl font-black text-white">{metrics.total}</p>
-					</div>
-					<div className="rounded-xl border border-green-800/30 bg-green-900/10 p-4">
-						<p className="text-xs uppercase tracking-[0.12em] text-green-300">In Service</p>
-						<p className="mt-2 text-2xl font-black text-green-200">{metrics.inService}</p>
-					</div>
-					<div className="rounded-xl border border-amber-700/30 bg-amber-900/10 p-4">
-						<p className="text-xs uppercase tracking-[0.12em] text-amber-300">Unassigned</p>
-						<p className="mt-2 text-2xl font-black text-amber-200">{metrics.unassigned}</p>
-					</div>
-					<div className="rounded-xl border border-red-800/30 bg-red-900/10 p-4">
-						<p className="text-xs uppercase tracking-[0.12em] text-red-300">Out of Service</p>
-						<p className="mt-2 text-2xl font-black text-red-200">{metrics.outOfService}</p>
-					</div>
-					<div className="rounded-xl border border-blue-800/30 bg-blue-900/10 p-4">
-						<p className="text-xs uppercase tracking-[0.12em] text-blue-300">Readiness</p>
-						<p className="mt-2 text-2xl font-black text-blue-200">{metrics.readinessScore}%</p>
-					</div>
 				</div>
 			</section>
 
@@ -905,47 +902,47 @@ export default function BatteryWorkspace({
 				</div>
 
 				<div className="mt-4 overflow-x-auto">
-					<table className="min-w-full divide-y divide-white/10 text-sm">
-						<thead>
-							<tr className="text-left text-xs uppercase tracking-[0.14em] text-neutral-400">
-								<th className="px-3 py-2">Battery</th>
-								<th className="px-3 py-2">Type / Model</th>
-								<th className="px-3 py-2">Assignment</th>
-								<th className="px-3 py-2">Status</th>
-								<th className="px-3 py-2">In Service Since</th>
-								<th className="px-3 py-2 text-right">Actions</th>
-							</tr>
-						</thead>
-						<tbody className="divide-y divide-white/5">
-							{filteredBatteries.length === 0 ? (
-								<tr>
-									<td colSpan={6} className="px-3 py-8 text-center text-neutral-500">No batteries match your filters.</td>
+					<div className="h-[calc(8*4rem+3rem)] max-h-[56vh] min-h-[26rem] overflow-y-auto overflow-x-auto">
+						<table className="min-w-full divide-y divide-white/10 text-sm">
+							<thead className="sticky top-0 z-10 bg-[#111111]">
+								<tr className="text-left text-xs uppercase tracking-[0.14em] text-neutral-400">
+									<th className="px-3 py-2">Battery</th>
+									<th className="px-3 py-2">Model</th>
+									<th className="px-3 py-2">Assignment</th>
+									<th className="px-3 py-2">Status</th>
+									<th className="px-3 py-2">In Service Since</th>
+									<th className="px-3 py-2 text-right">Actions</th>
 								</tr>
-							) : (
-								filteredBatteries.map((battery) => {
-									const assignment = activeAssignmentByBatteryId.get(battery.id);
-									const status = normalizeStatus(battery.status);
+							</thead>
+							<tbody className="divide-y divide-white/5">
+								{filteredBatteries.length === 0 ? (
+									<tr>
+										<td colSpan={6} className="px-3 py-8 text-center text-neutral-500">No batteries match your filters.</td>
+									</tr>
+								) : (
+									filteredBatteries.map((battery) => {
+										const assignment = activeAssignmentByBatteryId.get(battery.id);
+										const status = normalizeStatus(battery.status);
 
-									return (
-										<tr key={battery.id} className="hover:bg-white/[0.03]">
-											<td className="px-3 py-3">
-												<p className="font-semibold text-white">{battery.battery_number}</p>
-												<p className="text-xs text-neutral-500">SN: {battery.serial_number || "N/A"}</p>
-											</td>
-											<td className="px-3 py-3 text-neutral-300">
-												<p>{battery.battery_type || "-"}</p>
-												<p className="text-xs text-neutral-500">{battery.manufacturer || ""} {battery.model || ""}</p>
-											</td>
-											<td className="px-3 py-3 text-neutral-300">
-												<p>{getAssignmentLabel(assignment, apparatusLookupById)}</p>
-											</td>
-											<td className="px-3 py-3">
-												<span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClasses(status)}`}>
-													{status}
-												</span>
-											</td>
-											<td className="px-3 py-3 text-neutral-300">{formatDate(battery.in_service_date)}</td>
-											<td className="px-3 py-3">
+										return (
+											<tr key={battery.id} className="hover:bg-white/[0.03]">
+												<td className="px-3 py-3">
+													<p className="font-semibold text-white">{battery.battery_number}</p>
+												</td>
+												<td className="px-3 py-3 text-neutral-300">
+													<p>{battery.manufacturer || "-"}</p>
+													<p className="text-xs text-neutral-500">{battery.model || ""}</p>
+												</td>
+												<td className="px-3 py-3 text-neutral-300">
+													<p>{getAssignmentLabel(assignment, apparatusLookupById)}</p>
+												</td>
+												<td className="px-3 py-3">
+													<span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClasses(status)}`}>
+														{status}
+													</span>
+												</td>
+												<td className="px-3 py-3 text-neutral-300">{formatDate(battery.in_service_date)}</td>
+												<td className="px-3 py-3">
 												<div className="flex justify-end gap-2">
 													<button
 														type="button"
@@ -954,25 +951,6 @@ export default function BatteryWorkspace({
 													>
 														Edit
 													</button>
-
-													<button
-														type="button"
-														onClick={() => openAssignmentModal(battery)}
-														className="rounded-lg border border-white/15 bg-neutral-900 px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800"
-													>
-														Assign
-													</button>
-
-													{assignment ? (
-														<button
-															type="button"
-															onClick={() => handleUnassignBattery(battery)}
-															disabled={isSavingAssignment}
-															className="rounded-lg border border-amber-700/50 bg-amber-900/20 px-2.5 py-1.5 text-xs font-semibold text-amber-200 transition hover:bg-amber-900/30 disabled:opacity-60"
-														>
-															Unassign
-														</button>
-													) : null}
 
 													<button
 														type="button"
@@ -998,6 +976,7 @@ export default function BatteryWorkspace({
 						</tbody>
 					</table>
 				</div>
+			</div>
 			</section>
 
 			<BatteryFormModal
@@ -1013,6 +992,8 @@ export default function BatteryWorkspace({
 				}}
 				onSave={handleSaveForm}
 				onRetire={formMode === "edit" ? handleRetireBattery : undefined}
+				onAssign={formMode === "edit" && formBattery ? () => openAssignmentModal(formBattery) : undefined}
+				onHistory={formMode === "edit" && formBattery ? () => setHistoryBattery(formBattery) : undefined}
 				onDelete={formMode === "edit" ? handleDeleteBattery : undefined}
 				onReportDeficiency={
 					formMode === "edit" && formBattery

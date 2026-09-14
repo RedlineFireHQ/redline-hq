@@ -4,6 +4,7 @@ import PieEquipmentWorkspace, {
 	PieEquipmentRecord,
 } from "@/components/inventory/PieEquipmentWorkspace";
 import { getActiveApparatusOptions } from "@/lib/database";
+import { hasDepartmentPermission } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentMember } from "@/lib/current-member";
 
@@ -73,6 +74,12 @@ export default async function PieInventoryPage() {
 	if (!departmentId) {
 		redirect("/login");
 	}
+	const canManagePie = await hasDepartmentPermission(
+		supabase,
+		departmentId,
+		member.role,
+		"inventory_management",
+	);
 
 	const [{ data: equipmentData }, { data: assignmentsData }, apparatusData] =
 		await Promise.all([
@@ -119,6 +126,7 @@ export default async function PieInventoryPage() {
 				initialEquipment={equipment}
 				initialAssignments={assignments}
 				apparatusOptions={apparatusOptions}
+				canManagePie={canManagePie}
 			/>
 		
 	);

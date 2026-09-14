@@ -124,21 +124,24 @@ function sanitizeFileName(name: string): string {
 
 async function uploadFilesToBucket({
   bucketName,
+  departmentId,
   maintenanceRecordId,
   files,
   folder,
 }: {
   bucketName: string;
+  departmentId: string;
   maintenanceRecordId: string;
   files: File[];
   folder: "photos" | "attachments";
 }): Promise<string[]> {
   const uploadedPaths: string[] = [];
 
-  for (const [index, file] of files.entries()) {
-    const originalName = file.name || `${folder}-${index + 1}`;
-    const sanitizedName = sanitizeFileName(originalName);
-    const storagePath = `${maintenanceRecordId}/${folder}/${Date.now()}-${index}-${sanitizedName}`;
+  try {
+    for (const [index, file] of files.entries()) {
+      const originalName = file.name || `${folder}-${index + 1}`;
+      const sanitizedName = sanitizeFileName(originalName);
+      const storagePath = `${departmentId}/maintenance/${maintenanceRecordId}/${folder}/${Date.now()}-${index}-${sanitizedName}`;
 
     const { error } = await supabase.storage
       .from(bucketName)
@@ -151,7 +154,13 @@ async function uploadFilesToBucket({
       throw new Error(error.message || `Unable to upload ${originalName}.`);
     }
 
-    uploadedPaths.push(storagePath);
+      uploadedPaths.push(storagePath);
+    }
+  } catch (error) {
+    if (uploadedPaths.length > 0) {
+      await supabase.storage.from(bucketName).remove(uploadedPaths);
+    }
+    throw error;
   }
 
   return uploadedPaths;
@@ -174,6 +183,7 @@ export default function MaintenanceFormModal({
   const [isLoadingOptions, setIsLoadingOptions] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [departmentId, setDepartmentId] = useState<string | null>(null);
   const [apparatusOptions, setApparatusOptions] = useState<SelectOption[]>([]);
   const [memberOptions, setMemberOptions] = useState<SelectOption[]>([]);
   const [serviceSpecifications, setServiceSpecifications] = useState<ServiceSpecificationReference | null>(null);
@@ -213,6 +223,57 @@ export default function MaintenanceFormModal({
     const match = apparatusOptions.find((option) => option.id === formState.apparatusId);
     return match?.label ?? "";
   }, [apparatusOptions, formState.apparatusId]);
+
+  useEffect(() => {
+    if (!isOpen || departmentId) {
+      return;
+    }
+
+    let isMounted = true;
+
+    async function loadDepartmentId() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        return;
+      }
+
+      // Roster email can differ from the auth login email, so resolve by
+      // auth_user_id first (matches useMaintenancePermission()) before falling back.
+      let memberQuery = await supabase
+        .from("members")
+        .select("department_id")
+        .eq("auth_user_id", user.id)
+        .maybeSingle();
+
+      if (!memberQuery.data && user.email) {
+        memberQuery = await supabase
+          .from("members")
+          .select("department_id")
+          .eq("email", user.email.trim())
+          .maybeSingle();
+      }
+
+      if (memberQuery.error || !isMounted) {
+        return;
+      }
+
+      const nextDepartmentId =
+        typeof memberQuery.data?.department_id === "string" ? memberQuery.data.department_id : null;
+
+      if (nextDepartmentId) {
+        setDepartmentId(nextDepartmentId);
+      }
+    }
+
+    void loadDepartmentId();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, departmentId]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -470,6 +531,11 @@ export default function MaintenanceFormModal({
       return;
     }
 
+    if (mode === "create" && !departmentId) {
+      setErrorMessage("Unable to determine your department. Please try again.");
+      return;
+    }
+
     setIsSubmitting(true);
     setErrorMessage(null);
 
@@ -484,28 +550,7 @@ export default function MaintenanceFormModal({
     let uploadedPhotoPaths: string[] = [];
     let uploadedAttachmentPaths: string[] = [];
 
-    try {
-      uploadedPhotoPaths = await uploadFilesToBucket({
-        bucketName: MAINTENANCE_PHOTOS_BUCKET,
-        maintenanceRecordId,
-        files: photoFiles,
-        folder: "photos",
-      });
-
-      uploadedAttachmentPaths = await uploadFilesToBucket({
-        bucketName: MAINTENANCE_ATTACHMENTS_BUCKET,
-        maintenanceRecordId,
-        files: attachmentFiles,
-        folder: "attachments",
-      });
-    } catch (uploadError) {
-      const message = uploadError instanceof Error ? uploadError.message : "Unable to upload files.";
-      setErrorMessage(message);
-      setIsSubmitting(false);
-      return;
-    }
-
-    const payload = {
+    const basePayload = {
       apparatus_id: lockApparatusSelection && defaultApparatusId
         ? defaultApparatusId
         : formState.apparatusId,
@@ -520,45 +565,78 @@ export default function MaintenanceFormModal({
       engine_hours: formState.engineHours ? Number(formState.engineHours) : null,
       cost: formState.cost ? Number(formState.cost) : null,
       notes: formState.notes.trim() || null,
-      photos: [...existingPhotoPaths, ...uploadedPhotoPaths],
-      attachments: [...existingAttachmentPaths, ...uploadedAttachmentPaths],
     };
 
     if (mode === "create") {
-      const { data, error } = await supabase
-        .from("maintenance_records")
-        .insert({
-          id: maintenanceRecordId,
-          ...payload,
-        })
-        .select("id, maintenance_number, deficiency_id")
-        .single();
+      try {
+        const formData = new FormData();
+        formData.set("payload", JSON.stringify(basePayload));
+        for (const file of photoFiles) formData.append("photos", file);
+        for (const file of attachmentFiles) formData.append("attachments", file);
 
-      if (error) {
-        setErrorMessage(error.message);
+        const response = await fetch("/api/maintenance/records", { method: "POST", body: formData });
+        const result = (await response.json().catch(() => null)) as {
+          ok?: boolean;
+          error?: string;
+          record?: { id?: string; maintenance_number?: string | null; deficiency_id?: string | null };
+        } | null;
+
+        if (!response.ok || !result?.ok || !result.record?.id) {
+          throw new Error(result?.error || "Unable to create maintenance record.");
+        }
+
+        if (result.record.deficiency_id && result.record.maintenance_number) {
+          const { error: historyError } = await supabase.from("deficiency_history").insert({
+            deficiency_id: result.record.deficiency_id,
+            event_type: "Maintenance",
+            event_description: `Linked Maintenance Record created (${result.record.maintenance_number}).`,
+            member_id: basePayload.completed_by,
+          });
+          if (historyError) console.error("maintenance history link insert failed", historyError);
+        }
+
+        setIsSubmitting(false);
+        onSaved(result.record.id);
+        return;
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : "Unable to create maintenance record.");
         setIsSubmitting(false);
         return;
       }
+    }
 
-      if (data?.deficiency_id && data.maintenance_number) {
-        const { error: historyError } = await supabase
-          .from("deficiency_history")
-          .insert({
-            deficiency_id: data.deficiency_id,
-            event_type: "Maintenance",
-            event_description: `Linked Maintenance Record created (${data.maintenance_number}).`,
-            member_id: payload.completed_by,
-          });
+    try {
+      uploadedPhotoPaths = await uploadFilesToBucket({
+        bucketName: MAINTENANCE_PHOTOS_BUCKET,
+        departmentId: departmentId ?? "",
+        maintenanceRecordId,
+        files: photoFiles,
+        folder: "photos",
+      });
 
-        if (historyError) {
-          console.error("maintenance history link insert failed", historyError);
-        }
+      uploadedAttachmentPaths = await uploadFilesToBucket({
+        bucketName: MAINTENANCE_ATTACHMENTS_BUCKET,
+        departmentId: departmentId ?? "",
+        maintenanceRecordId,
+        files: attachmentFiles,
+        folder: "attachments",
+      });
+    } catch (uploadError) {
+      const cleanupPaths = [...uploadedPhotoPaths, ...uploadedAttachmentPaths];
+      if (cleanupPaths.length > 0) {
+        await supabase.storage.from(MAINTENANCE_PHOTOS_BUCKET).remove(cleanupPaths);
       }
-
+      const message = uploadError instanceof Error ? uploadError.message : "Unable to upload files.";
+      setErrorMessage(message);
       setIsSubmitting(false);
-      onSaved(data.id as string);
       return;
     }
+
+    const payload = {
+      ...basePayload,
+      photos: [...existingPhotoPaths, ...uploadedPhotoPaths],
+      attachments: [...existingAttachmentPaths, ...uploadedAttachmentPaths],
+    };
 
     const { error } = await supabase
       .from("maintenance_records")
@@ -566,6 +644,10 @@ export default function MaintenanceFormModal({
       .eq("id", maintenanceRecordId);
 
     if (error) {
+      const cleanupPaths = [...uploadedPhotoPaths, ...uploadedAttachmentPaths];
+      if (cleanupPaths.length > 0) {
+        await supabase.storage.from(MAINTENANCE_PHOTOS_BUCKET).remove(cleanupPaths);
+      }
       setErrorMessage(error.message);
       setIsSubmitting(false);
       return;

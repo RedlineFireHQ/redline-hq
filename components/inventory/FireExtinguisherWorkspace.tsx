@@ -122,42 +122,6 @@ function statusBadgeClasses(status: StatusFilter) {
 	return "border-neutral-600/40 bg-neutral-900 text-neutral-300";
 }
 
-function summaryCardClasses(active: boolean, tone: "all" | "active" | "inactive" | "out") {
-	const base = "rounded-xl border px-4 py-3 text-left transition";
-
-	if (active) {
-		return `${base} border-white/20 bg-white/[0.06]`;
-	}
-
-	if (tone === "active") {
-		return `${base} border-green-700/30 bg-green-950/20 hover:bg-green-950/30`;
-	}
-
-	if (tone === "inactive") {
-		return `${base} border-neutral-700/30 bg-neutral-900/40 hover:bg-neutral-900/60`;
-	}
-
-	if (tone === "out") {
-		return `${base} border-red-700/30 bg-red-950/20 hover:bg-red-950/30`;
-	}
-
-	return `${base} border-white/10 bg-[#1b1b1b] hover:bg-[#202020]`;
-}
-
-function deficiencyStatusClasses(value: string | null | undefined) {
-	const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
-	if (normalized === "open") {
-		return "border-red-700/40 bg-red-900/20 text-red-300";
-	}
-	if (normalized === "in progress") {
-		return "border-amber-700/40 bg-amber-900/20 text-amber-300";
-	}
-	if (normalized === "resolved" || normalized === "closed") {
-		return "border-emerald-700/40 bg-emerald-900/20 text-emerald-300";
-	}
-	return "border-neutral-600/40 bg-neutral-900 text-neutral-300";
-}
-
 function getDisplayExtinguisherType(row: FireExtinguisherRow) {
 	return row.extinguisher_type || "Unknown";
 }
@@ -213,7 +177,6 @@ export default function FireExtinguisherWorkspace({
 	const [selectedPhotoUrl, setSelectedPhotoUrl] = useState<string | null>(null);
 	const [selectedDeficiencies, setSelectedDeficiencies] = useState<FireExtinguisherDeficiencyRow[]>([]);
 	const [isDetailLoading, setIsDetailLoading] = useState(false);
-	const [isDeficienciesLoading, setIsDeficienciesLoading] = useState(false);
 	const [isFormOpen, setIsFormOpen] = useState(false);
 	const [formMode, setFormMode] = useState<"add" | "edit">("add");
 	const [isFormSaving, setIsFormSaving] = useState(false);
@@ -227,11 +190,6 @@ export default function FireExtinguisherWorkspace({
 					hasOpenDeficiency: row.open_deficiency_count > 0,
 				})),
 			),
-		[rows],
-	);
-
-	const activeRows = useMemo(
-		() => rows.filter((row) => row.status === "Active"),
 		[rows],
 	);
 
@@ -270,20 +228,6 @@ export default function FireExtinguisherWorkspace({
 		}).length,
 		[selectedDeficiencies],
 	);
-	const openDeficiencies = useMemo(
-		() => selectedDeficiencies.filter((row) => {
-			const normalized = typeof row.status_name === "string" ? row.status_name.trim().toLowerCase() : "";
-			return normalized !== "resolved" && normalized !== "closed";
-		}),
-		[selectedDeficiencies],
-	);
-	const deficiencyHistory = useMemo(
-		() => selectedDeficiencies.filter((row) => {
-			const normalized = typeof row.status_name === "string" ? row.status_name.trim().toLowerCase() : "";
-			return normalized === "resolved" || normalized === "closed";
-		}),
-		[selectedDeficiencies],
-	);
 	const refreshToken = searchParams.get("refresh");
 	const preferredSelectedItemId = searchParams.get("selectedItemId");
 
@@ -305,7 +249,6 @@ export default function FireExtinguisherWorkspace({
 	const loadDetail = async (itemId: string) => {
 		setSelectedItemId(itemId);
 		setIsDetailLoading(true);
-		setIsDeficienciesLoading(true);
 		setSelectedDeficiencies([]);
 
 		try {
@@ -353,7 +296,6 @@ export default function FireExtinguisherWorkspace({
 		} catch {
 			setToastMessage("Unable to load fire extinguisher detail.");
 		} finally {
-			setIsDeficienciesLoading(false);
 			setIsDetailLoading(false);
 		}
 	};
@@ -574,39 +516,41 @@ export default function FireExtinguisherWorkspace({
 						<p className="text-xs font-semibold uppercase tracking-[0.28em] text-red-500">Inventory</p>
 						<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">Fire Extinguishers</h1>
 						<p className="max-w-2xl text-sm text-zinc-400">
-							Track extinguisher readiness, locations, photos, and shared deficiencies in one place.
+							Track extinguisher locations, photos, and open deficiencies in one place.
 						</p>
 						{departmentName ? (
 							<p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">{departmentName}</p>
 						) : null}
 					</div>
 
-					<div className="grid w-full gap-3 sm:grid-cols-3 lg:w-auto lg:min-w-[460px]">
-						<div className="rounded-2xl border border-white/10 bg-[#121212] px-4 py-3">
-							<p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Readiness</p>
-							<p className="mt-1 text-3xl font-black text-white">
-								{readinessState.readinessPercent === null ? "NR" : `${Math.round(readinessState.readinessPercent)}%`}
-							</p>
-							<p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-red-400">
-								{readinessState.readinessPercent === null ? "Not Rated" : readinessState.readinessPercent >= 100 ? "Ready" : "Needs Attention"}
-							</p>
-						</div>
-
-						<div className="rounded-2xl border border-white/10 bg-[#121212] px-4 py-3">
-							<p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Tracked</p>
-							<p className="mt-1 text-3xl font-black text-white">{readinessState.trackedExtinguisherCount}</p>
-							<p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">Active</p>
-						</div>
-
-						<div className="rounded-2xl border border-white/10 bg-[#121212] px-4 py-3">
-							<p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Open Deficiencies</p>
-							<p className="mt-1 text-3xl font-black text-white">{readinessState.openDeficiencyCount}</p>
-							<p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">
-								{readinessState.readyExtinguisherCount} ready
-							</p>
+					<div className="flex w-full flex-col gap-3 lg:w-auto lg:min-w-[320px] lg:items-end">
+						<div className="flex flex-wrap items-center gap-2 lg:justify-end">
+							<button
+								type="button"
+								onClick={openAddForm}
+								disabled={!canManageFireExtinguishers}
+								className="rounded-lg border border-red-500/40 bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+							>
+								Add Extinguisher
+							</button>
+							<button
+								type="button"
+								onClick={launchDeficiencyReport}
+								disabled={!selectedItem}
+								className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50"
+							>
+								Report Deficiency
+							</button>
+							<div className="rounded-2xl border border-white/10 bg-[#121212] px-4 py-3">
+								<p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Open Deficiencies</p>
+								<p className="mt-1 text-3xl font-black text-white">{readinessState.openDeficiencyCount}</p>
+								<p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">
+									{readinessState.readyExtinguisherCount} ready
+								</p>
+							</div>
 						</div>
 					</div>
-				</div>
+					</div>
 
 				<div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_390px] lg:items-start">
 					<section className="rounded-3xl border border-white/10 bg-[#111111] p-5 shadow-[0_24px_60px_rgba(0,0,0,0.35)]">
@@ -615,31 +559,6 @@ export default function FireExtinguisherWorkspace({
 								<p className="text-xs uppercase tracking-[0.24em] text-zinc-500">Inventory List</p>
 								<h2 className="mt-2 text-2xl font-black tracking-tight text-white">Extinguisher Records</h2>
 							</div>
-							<div className="flex gap-3">
-								<button
-									type="button"
-									onClick={openAddForm}
-									disabled={!canManageFireExtinguishers}
-									className="rounded-xl border border-red-500/40 bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
-								>
-									Add Extinguisher
-								</button>
-							</div>
-						</div>
-
-						<div className="mt-5 grid gap-3 sm:grid-cols-3">
-							<button type="button" onClick={() => setStatusFilter("All")} className={summaryCardClasses(statusFilter === "All", "all")}>
-								<p className="text-xs uppercase tracking-[0.18em] text-zinc-500">All</p>
-								<p className="mt-1 text-lg font-black text-white">{rows.length}</p>
-							</button>
-							<button type="button" onClick={() => setStatusFilter("Active")} className={summaryCardClasses(statusFilter === "Active", "active")}>
-								<p className="text-xs uppercase tracking-[0.18em] text-green-400">Active</p>
-								<p className="mt-1 text-lg font-black text-white">{activeRows.length}</p>
-							</button>
-							<button type="button" onClick={() => setStatusFilter("Out of Service")} className={summaryCardClasses(statusFilter === "Out of Service", "out")}>
-								<p className="text-xs uppercase tracking-[0.18em] text-red-400">Out of Service</p>
-								<p className="mt-1 text-lg font-black text-white">{rows.filter((row) => row.status === "Out of Service").length}</p>
-							</button>
 						</div>
 
 						<div className="mt-5 flex flex-col gap-3 md:flex-row">
@@ -670,7 +589,7 @@ export default function FireExtinguisherWorkspace({
 						</div>
 
 						<div className="mt-5 overflow-hidden rounded-2xl border border-white/10">
-							<div className="max-h-[56vh] overflow-y-auto">
+							<div className="h-[692px] overflow-x-auto overflow-y-auto">
 								<div className="sticky top-0 grid grid-cols-[1.1fr_1fr_1fr_0.7fr_0.7fr] gap-0 border-b border-white/10 bg-[#151515] px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
 									<div>Number</div>
 									<div>Type</div>
@@ -768,65 +687,6 @@ export default function FireExtinguisherWorkspace({
 											<p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Open Deficiencies</p>
 											<p className="mt-2 text-sm font-semibold text-white">{openDeficiencyCount}</p>
 										</div>
-									</div>
-								</div>
-
-								<div className="flex gap-3">
-									<button
-										type="button"
-										onClick={launchDeficiencyReport}
-										className="rounded-xl border border-red-500/40 bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
-									>
-										Report Deficiency
-									</button>
-								</div>
-
-								<div className="overflow-hidden rounded-2xl border border-white/10">
-									<div className="flex items-center justify-between gap-3 border-b border-white/10 bg-white/[0.03] px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
-										<span>Shared Deficiencies</span>
-										<span>{openDeficiencyCount} Open</span>
-									</div>
-									<div className="divide-y divide-white/5 bg-[#0d0d0d]">
-										{isDeficienciesLoading ? (
-											<div className="px-4 py-8 text-sm text-zinc-400">Loading deficiencies...</div>
-										) : selectedDeficiencies.length === 0 ? (
-											<div className="px-4 py-8 text-sm text-zinc-400">No shared deficiencies recorded.</div>
-										) : (
-											openDeficiencies.map((row) => (
-												<div key={row.id} className="px-4 py-4">
-													<div className="flex items-start justify-between gap-3">
-														<div>
-															<p className="text-sm font-semibold text-white">{row.deficiency_number ?? "Unassigned"}</p>
-															<p className="mt-1 text-sm text-zinc-300">{row.description ?? "No description provided."}</p>
-															<p className="mt-1 text-xs uppercase tracking-[0.16em] text-zinc-500">Priority {row.priority_name ?? "Unknown"}</p>
-														</div>
-														<span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${deficiencyStatusClasses(row.status_name)}`}>{row.status_name ?? "Unknown"}</span>
-													</div>
-													<p className="mt-2 text-xs uppercase tracking-[0.16em] text-zinc-500">Reported {formatDate(row.reported_at)}</p>
-												</div>
-											))
-										)}
-
-										{!isDeficienciesLoading && deficiencyHistory.length > 0 ? (
-											<div className="border-t border-white/10 px-4 py-3">
-												<p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">History</p>
-												<div className="mt-3 space-y-3">
-													{deficiencyHistory.map((row) => (
-														<div key={row.id} className="rounded-lg border border-white/10 bg-[#111111] px-3 py-3">
-															<div className="flex items-start justify-between gap-3">
-																<div>
-																	<p className="text-sm font-semibold text-white">{row.deficiency_number ?? "Unassigned"}</p>
-																	<p className="mt-1 text-sm text-zinc-300">{row.description ?? "No description provided."}</p>
-																	<p className="mt-1 text-xs uppercase tracking-[0.16em] text-zinc-500">Priority {row.priority_name ?? "Unknown"}</p>
-																</div>
-																<span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${deficiencyStatusClasses(row.status_name)}`}>{row.status_name ?? "Unknown"}</span>
-															</div>
-															<p className="mt-2 text-xs uppercase tracking-[0.16em] text-zinc-500">Reported {formatDate(row.reported_at)}</p>
-														</div>
-													))}
-												</div>
-											</div>
-										) : null}
 									</div>
 								</div>
 

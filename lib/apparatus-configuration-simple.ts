@@ -7,6 +7,7 @@ export const CHECK_FREQUENCY_OPTIONS = [
   "Weekly",
   "Every 2 Weeks",
   "Monthly",
+  "Yearly",
   "Quarterly",
   "Custom",
 ] as const;
@@ -94,6 +95,10 @@ function frequencyToIntervalDays(checkFrequency: string, customCheckFrequency: s
 
   if (normalizedFrequency === "monthly") {
     return 30;
+  }
+
+  if (normalizedFrequency === "yearly" || normalizedFrequency === "annual") {
+    return 365;
   }
 
   if (normalizedFrequency === "quarterly") {

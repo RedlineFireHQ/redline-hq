@@ -1,4 +1,5 @@
 import { getCurrentMember } from "@/lib/current-member";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 type CreatePrePlanPayload = {
@@ -173,6 +174,12 @@ function parseUpload(value: unknown): UploadPayload | null {
   };
 }
 
+type PrePlanArtifactRegistry = {
+  documentIds: string[];
+  revisionIds: string[];
+  storagePaths: string[];
+};
+
 async function createRevisionFromUpload({
   upload,
   title,
@@ -180,6 +187,7 @@ async function createRevisionFromUpload({
   supabase,
   departmentId,
   memberId,
+  artifactRegistry,
 }: {
   upload: UploadPayload;
   title: string;
@@ -187,12 +195,15 @@ async function createRevisionFromUpload({
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
   departmentId: string;
   memberId: string;
+  artifactRegistry?: PrePlanArtifactRegistry;
 }) {
+  void supabase;
   const sanitizedFileName = upload.fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
   const storagePath = `${departmentId}/pre-plans/${Date.now()}-${sanitizedFileName}`;
   const binary = Buffer.from(upload.base64Data, "base64");
+  const admin = createSupabaseAdminClient();
 
-  const { error: uploadError } = await supabase.storage
+  const { error: uploadError } = await admin.storage
     .from("department-documents")
     .upload(storagePath, binary, {
       contentType: upload.mimeType,
@@ -202,10 +213,11 @@ async function createRevisionFromUpload({
   if (uploadError) {
     throw new Error(uploadError.message || "Unable to upload file.");
   }
+  artifactRegistry?.storagePaths.push(storagePath);
 
   const effectiveDate = new Date().toISOString().slice(0, 10);
 
-  const { data: documentRecord, error: documentInsertError } = await supabase
+  const { data: documentRecord, error: documentInsertError } = await admin
     .from("documents")
     .insert({
       department_id: departmentId,
@@ -223,10 +235,12 @@ async function createRevisionFromUpload({
     .single();
 
   if (documentInsertError || !documentRecord) {
+    await admin.storage.from("department-documents").remove([storagePath]);
     throw new Error(documentInsertError?.message || "Unable to create document record.");
   }
+  artifactRegistry?.documentIds.push(documentRecord.id);
 
-  const { data: revisionRecord, error: revisionInsertError } = await supabase
+  const { data: revisionRecord, error: revisionInsertError } = await admin
     .from("document_revisions")
     .insert({
       department_id: departmentId,
@@ -247,15 +261,21 @@ async function createRevisionFromUpload({
     .single();
 
   if (revisionInsertError || !revisionRecord) {
+    await admin.from("documents").delete().eq("id", documentRecord.id).eq("department_id", departmentId);
+    await admin.storage.from("department-documents").remove([storagePath]);
     throw new Error(revisionInsertError?.message || "Unable to create document revision.");
   }
+  artifactRegistry?.revisionIds.push(revisionRecord.id);
 
-  const { error: attachRevisionError } = await supabase
+  const { error: attachRevisionError } = await admin
     .from("documents")
     .update({ current_revision_id: revisionRecord.id })
     .eq("id", documentRecord.id);
 
   if (attachRevisionError) {
+    await admin.from("document_revisions").delete().eq("id", revisionRecord.id).eq("department_id", departmentId);
+    await admin.from("documents").delete().eq("id", documentRecord.id).eq("department_id", departmentId);
+    await admin.storage.from("department-documents").remove([storagePath]);
     throw new Error(attachRevisionError.message || "Unable to attach document revision.");
   }
 
@@ -362,6 +382,13 @@ function parseDocumentReferences(value: unknown): DocumentReferenceInput[] {
 }
 
 export async function POST(request: Request) {
+  let createdPrePlanId: string | null = null;
+  const artifactRegistry: PrePlanArtifactRegistry = {
+    documentIds: [],
+    revisionIds: [],
+    storagePaths: [],
+  };
+
   try {
     const payload = (await request.json()) as CreatePrePlanPayload;
     const supabase = await createSupabaseServerClient();
@@ -387,20 +414,15 @@ export async function POST(request: Request) {
         upload: sitePlanUpload,
         title: `${businessName || "Pre-Plan"} Site Plan`,
         category: "Department Documents",
-        supabase,
         departmentId: currentMember.departmentId,
+          supabase,
         memberId: currentMember.id,
+        artifactRegistry,
       })
       : normalizeOptionalString(payload.sitePlanDocumentRevisionId);
 
     if (!businessName || !address || !city || !state || !zip) {
-      return jsonResponse(
-        {
-          ok: false,
-          error: "Business name, address, city, state, and ZIP are required.",
-        },
-        400,
-      );
+      throw new Error("Business name, address, city, state, and ZIP are required.");
     }
 
     const { data, error } = await supabase
@@ -456,10 +478,11 @@ export async function POST(request: Request) {
       .single();
 
     if (error || !data?.id) {
-      return jsonResponse({ ok: false, error: error?.message || "Unable to create pre-plan." }, 400);
+      throw new Error(error?.message || "Unable to create pre-plan.");
     }
 
     const prePlanId = data.id;
+    createdPrePlanId = prePlanId;
 
     const hydrantRows = [] as Array<Record<string, unknown>>;
     for (const row of hydrants) {
@@ -473,9 +496,10 @@ export async function POST(request: Request) {
           upload: row.photoUpload,
           title: `${businessName || "Pre-Plan"} Hydrant Photo`,
           category: "Department Documents",
-          supabase,
           departmentId: currentMember.departmentId,
+            supabase,
           memberId: currentMember.id,
+          artifactRegistry,
         })
         : row.photoDocumentRevisionId;
 
@@ -497,7 +521,7 @@ export async function POST(request: Request) {
         .insert(hydrantRows);
 
       if (hydrantError) {
-        return jsonResponse({ ok: false, error: hydrantError.message || "Unable to save hydrants." }, 400);
+        throw new Error(hydrantError.message || "Unable to save hydrants.");
       }
     }
 
@@ -512,9 +536,10 @@ export async function POST(request: Request) {
           upload: row.supportingDocumentUpload,
           title: `${businessName || "Pre-Plan"} Hazard Support`,
           category: "Department Documents",
-          supabase,
           departmentId: currentMember.departmentId,
+            supabase,
           memberId: currentMember.id,
+          artifactRegistry,
         })
         : (row.sdsDocumentRevisionId || row.attachmentDocumentRevisionId);
 
@@ -538,7 +563,7 @@ export async function POST(request: Request) {
         .insert(resolvedHazardRows);
 
       if (hazardError) {
-        return jsonResponse({ ok: false, error: hazardError.message || "Unable to save hazards." }, 400);
+        throw new Error(hazardError.message || "Unable to save hazards.");
       }
     }
 
@@ -553,9 +578,10 @@ export async function POST(request: Request) {
           upload: row.photoUpload,
           title: `${businessName || "Pre-Plan"} Photo`,
           category: "Department Documents",
-          supabase,
           departmentId: currentMember.departmentId,
+            supabase,
           memberId: currentMember.id,
+          artifactRegistry,
         })
         : row.documentRevisionId;
 
@@ -585,6 +611,7 @@ export async function POST(request: Request) {
           supabase,
           departmentId: currentMember.departmentId,
           memberId: currentMember.id,
+          artifactRegistry,
         })
         : row.documentRevisionId;
 
@@ -607,13 +634,32 @@ export async function POST(request: Request) {
         .insert(linkRows);
 
       if (linkError) {
-        return jsonResponse({ ok: false, error: linkError.message || "Unable to save reference materials." }, 400);
+        throw new Error(linkError.message || "Unable to save reference materials.");
       }
     }
 
     return jsonResponse({ ok: true, prePlanId: data.id });
   } catch (error) {
+    const admin = createSupabaseAdminClient();
+    if (createdPrePlanId) {
+      await admin.from("pre_plan_document_links").delete().eq("pre_plan_id", createdPrePlanId);
+      await admin.from("pre_plan_hazards").delete().eq("pre_plan_id", createdPrePlanId);
+      await admin.from("pre_plan_hydrants").delete().eq("pre_plan_id", createdPrePlanId);
+    }
+    if (artifactRegistry.revisionIds.length > 0) {
+      await admin.from("document_revisions").delete().in("id", artifactRegistry.revisionIds);
+    }
+    if (artifactRegistry.documentIds.length > 0) {
+      await admin.from("documents").delete().in("id", artifactRegistry.documentIds);
+    }
+    if (artifactRegistry.storagePaths.length > 0) {
+      await admin.storage.from("department-documents").remove(artifactRegistry.storagePaths);
+    }
+    if (createdPrePlanId) {
+      await admin.from("pre_plans").delete().eq("id", createdPrePlanId);
+    }
+
     const message = error instanceof Error ? error.message : "Unable to create pre-plan.";
-    return jsonResponse({ ok: false, error: message }, 400);
+    return jsonResponse({ ok: false, error: `Pre-plan was not saved: ${message}` }, 400);
   }
 }

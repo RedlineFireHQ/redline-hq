@@ -1,14 +1,15 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import RopeFormModal, { type RopeFormValues } from "@/components/inventory/RopeFormModal";
-import RopeInspectionModal, {
-  type RopeInspectionFormValues,
-  type RopeInspectionMemberOption,
-} from "@/components/inventory/RopeInspectionModal";
+import RopeTestingSessionModal, {
+  type RopeTestingItem,
+  type RopeTestingSessionValues,
+} from "@/components/inventory/RopeTestingSessionModal";
 import type { RopeApparatusOption } from "@/components/inventory/RopeFormModal";
+import { supabase } from "@/lib/supabase";
 
 export type RopeRow = {
   id: string;
@@ -23,7 +24,7 @@ export type RopeRow = {
   apparatus_id: string | null;
   apparatus_name: string | null;
   other_location: string | null;
-  status: "Active" | "Inactive";
+  status: "Active" | "Inactive" | "Out of Service";
   notes: string | null;
   photo_path: string | null;
   created_at: string;
@@ -64,18 +65,20 @@ type RopeDeficienciesResponse = {
 };
 
 type WorkspaceProps = {
+  departmentId: string | null;
   departmentName: string | null;
   canManageRope: boolean;
   initialRows: RopeRow[];
   apparatusOptions: RopeApparatusOption[];
-  inspectionMembers: RopeInspectionMemberOption[];
   currentMemberId: string;
   currentMemberName: string;
   initialError?: string | null;
 };
 
-type StatusFilter = "All" | "Active" | "Inactive";
+type StatusFilter = "All" | "Active" | "Inactive" | "Out of Service";
 type TypeFilter = "All" | "Life Safety" | "Utility";
+
+const ROPE_TESTING_RESUME_STORAGE_KEY = "rope-testing-resume";
 
 function compareNames(left: string | null | undefined, right: string | null | undefined) {
   const leftValue = typeof left === "string" ? left.trim() : "";
@@ -130,6 +133,10 @@ function statusBadgeClasses(status: string) {
     return "border-green-700/40 bg-green-900/20 text-green-300";
   }
 
+  if (status === "Out of Service") {
+    return "border-red-700/40 bg-red-900/20 text-red-300";
+  }
+
   return "border-neutral-600/40 bg-neutral-900 text-neutral-300";
 }
 
@@ -161,11 +168,6 @@ function normalizeResultLabel(value: string | null | undefined) {
   }
 
   return value ?? "-";
-}
-
-function isFailingResult(value: string | null | undefined) {
-  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
-  return normalized === "fail";
 }
 
 function formatLocation(row: RopeRow) {
@@ -231,7 +233,7 @@ function toFormValues(row: RopeRow): Omit<RopeFormValues, "photoFile" | "removeP
     locationType: row.location_type,
     apparatusId: row.apparatus_id ?? "",
     otherLocation: row.other_location ?? "",
-    status: row.status,
+    status: row.status === "Inactive" ? "Inactive" : row.status === "Out of Service" ? "Out of Service" : "Active",
     notes: row.notes ?? "",
   };
 }
@@ -252,21 +254,24 @@ async function fileToUploadPayload(file: File) {
 }
 
 export default function RopeWorkspace({
+  departmentId,
   departmentName,
   canManageRope,
   initialRows,
   apparatusOptions,
-  inspectionMembers,
   currentMemberId,
   currentMemberName,
   initialError = null,
 }: WorkspaceProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const resumeTestingSummary = searchParams.get("resumeTestingSummary") === "1";
   const [rows, setRows] = useState<RopeRow[]>(initialRows);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("All");
   const [toastMessage, setToastMessage] = useState<string | null>(initialError);
+  const [testerName, setTesterName] = useState(currentMemberName);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<RopeRow | null>(null);
   const [selectedPhotoUrl, setSelectedPhotoUrl] = useState<string | null>(null);
@@ -278,8 +283,80 @@ export default function RopeWorkspace({
   const [formMode, setFormMode] = useState<"add" | "edit">("add");
   const [isFormSaving, setIsFormSaving] = useState(false);
   const [formInstanceKey, setFormInstanceKey] = useState(0);
-  const [isInspectionOpen, setIsInspectionOpen] = useState(false);
-  const [isInspectionSaving, setIsInspectionSaving] = useState(false);
+  const [isTestingModalOpen, setIsTestingModalOpen] = useState(false);
+  const [resumeTestingValues, setResumeTestingValues] = useState<RopeTestingSessionValues | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadTesterName = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      const email = user?.email?.trim();
+      if (!email || !isMounted) {
+        return;
+      }
+
+      const { data } = await supabase
+        .from("members")
+        .select("first_name, last_name")
+        .eq("email", email)
+        .maybeSingle();
+
+      if (!isMounted) {
+        return;
+      }
+
+      const firstName = typeof data?.first_name === "string" ? data.first_name.trim() : "";
+      const lastName = typeof data?.last_name === "string" ? data.last_name.trim() : "";
+      const fullName = `${firstName} ${lastName}`.trim();
+      setTesterName(fullName || email || currentMemberName || "");
+    };
+
+    void loadTesterName();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentMemberName]);
+
+  useEffect(() => {
+    if (!resumeTestingSummary || isTestingModalOpen) {
+      return;
+    }
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const raw = window.sessionStorage.getItem(ROPE_TESTING_RESUME_STORAGE_KEY);
+    if (!raw) {
+      router.replace("/inventory/rope");
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as RopeTestingSessionValues;
+      if (
+        typeof parsed.testingDate === "string" &&
+        typeof parsed.tester === "string" &&
+        parsed.ropeStatuses &&
+        typeof parsed.ropeStatuses === "object"
+      ) {
+        queueMicrotask(() => {
+          setResumeTestingValues(parsed);
+          setIsTestingModalOpen(true);
+        });
+      }
+    } catch {
+      // Ignore malformed resume payload.
+    } finally {
+      window.sessionStorage.removeItem(ROPE_TESTING_RESUME_STORAGE_KEY);
+      router.replace("/inventory/rope");
+    }
+  }, [isTestingModalOpen, resumeTestingSummary, router]);
 
   const filteredRows = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -323,35 +400,10 @@ export default function RopeWorkspace({
     [selectedDeficiencies],
   );
 
-  const readinessSummary = useMemo(() => {
-    const activeRows = rows.filter((row) => row.status === "Active");
-    if (activeRows.length === 0) {
-      return null;
-    }
-
-    let readyCount = 0;
-    for (const row of activeRows) {
-      const openDeficienciesForRow = row.id === selectedItemId
-        ? openDeficiencyCount
-        : Math.max(0, Number(row.open_deficiency_count ?? 0));
-
-      if (openDeficienciesForRow > 0) {
-        continue;
-      }
-
-      if (isFailingResult(row.last_inspection_result)) {
-        continue;
-      }
-
-      readyCount += 1;
-    }
-
-    const percentage = (readyCount / activeRows.length) * 100;
-    return {
-      activeRopeCount: activeRows.length,
-      percentage,
-    };
-  }, [openDeficiencyCount, rows, selectedItemId]);
+  const outOfServiceCount = useMemo(
+    () => rows.filter((row) => row.status === "Out of Service").length,
+    [rows],
+  );
 
   const openDeficiencies = useMemo(
     () => selectedDeficiencies.filter((row) => isOpenDeficiency(row.status_name)),
@@ -607,84 +659,225 @@ export default function RopeWorkspace({
     router.push(`/deficiencies/report?${params.toString()}`);
   };
 
-  const openInspectionForm = () => {
-    if (!selectedItem) {
-      return;
-    }
-
-    setIsInspectionOpen(true);
+  const openTestingSession = () => {
+    setResumeTestingValues(null);
+    setIsTestingModalOpen(true);
   };
 
-  const closeInspectionForm = () => {
-    if (!isInspectionSaving) {
-      setIsInspectionOpen(false);
+  const testingRows = useMemo(
+    () =>
+      rows
+        .filter((row) => Boolean(row.id))
+        .map((row) => ({
+          id: row.id,
+          ropeIdentifier: row.rope_identifier,
+          ropeName: row.rope_name,
+          ropeType: row.rope_type,
+          length: `${row.length_ft ?? "-"} ft`,
+          serialNumber: row.serial_number,
+          location: formatLocation(row),
+          hasActiveDeficiency: (row.open_deficiency_count ?? 0) > 0,
+        })),
+    [rows],
+  );
+
+  const hasActiveDeficiencyForRope = async (ropeId: string): Promise<boolean | null> => {
+    if (!ropeId) {
+      return false;
     }
+
+    const { data: deficiencyRows, error: deficiencyRowsError } = await supabase
+      .from("deficiencies")
+      .select("id, status_info:deficiency_statuses!fk_deficiencies_status(active)")
+      .eq("rope_item_id", ropeId);
+
+    if (deficiencyRowsError) {
+      setToastMessage(deficiencyRowsError.message || "Unable to verify linked deficiencies for this rope.");
+      return null;
+    }
+
+    return (deficiencyRows ?? []).some((record) => {
+      const statusInfoRecord = Array.isArray(record.status_info)
+        ? record.status_info[0]
+        : record.status_info;
+
+      return statusInfoRecord?.active === true;
+    });
   };
 
-  const saveInspection = async (values: RopeInspectionFormValues) => {
-    if (!selectedItem || isInspectionSaving) {
-      return;
-    }
-
-    setIsInspectionSaving(true);
-
+  const saveTestingSession = async (
+    values: RopeTestingSessionValues,
+    options?: {
+      closeModalOnSuccess?: boolean;
+      allowFailedRopesWithoutDeficiencies?: boolean;
+    },
+  ) => {
     try {
-      const response = await fetch(`/api/rope/${selectedItem.id}/inspections`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify(values),
-      });
-
-      const body = (await response.json().catch(() => ({}))) as {
-        error?: unknown;
-        inspection?: { id?: string | null } | null;
-      };
-
-      if (!response.ok) {
-        setToastMessage(normalizeApiError(body, "Unable to save inspection."));
-        return;
+      if (!currentMemberId) {
+        setToastMessage("Unable to determine inspector identity. Please refresh and try again.");
+        return false;
       }
 
-      const inspectionId = typeof body.inspection === "object" && body.inspection && "id" in body.inspection ? body.inspection.id ?? null : null;
-      const primaryInspectorName = inspectionMembers.find((member) => member.id === values.primaryInspectorMemberId)?.displayName ?? currentMemberName;
-      const participantNames = values.participantMemberIds
-        .map((memberId) => inspectionMembers.find((member) => member.id === memberId)?.displayName)
-        .filter((name): name is string => typeof name === "string" && name.length > 0);
+      const targetRows = rows.filter((row) => {
+        const ropeStatus = values.ropeStatuses[row.id] ?? "untested";
+        return ropeStatus === "passed" || ropeStatus === "failed";
+      });
 
-      setSelectedInspections((current) => [
-        {
-          id: typeof inspectionId === "string" && inspectionId.length > 0 ? inspectionId : `${selectedItem.id}-${values.inspectionDate}-${Date.now()}`,
-          inspection_date: values.inspectionDate,
-          result: values.result.toLowerCase(),
-          notes: values.notes.trim() || null,
-          primary_inspector_name: primaryInspectorName,
-          participant_names: participantNames,
-        },
-        ...current.filter((inspection) => inspection.id !== inspectionId),
-      ]);
+      if (targetRows.length === 0) {
+        setToastMessage("Mark at least one rope as Passed or Failed before saving.");
+        return false;
+      }
+
+      if (!(options?.allowFailedRopesWithoutDeficiencies ?? false)) {
+        const failedRows = targetRows.filter((row) => values.ropeStatuses[row.id] === "failed");
+        for (const failedRow of failedRows) {
+          const hasActiveDeficiency = await hasActiveDeficiencyForRope(failedRow.id);
+          if (hasActiveDeficiency !== true) {
+            setToastMessage(
+              "Failed ropes require deficiencies. Use Create Deficiencies from the summary to continue.",
+            );
+            return false;
+          }
+        }
+      }
+
+      if (!departmentId) {
+        setToastMessage("Unable to determine the active department for this Rope inspection.");
+        return false;
+      }
+
+      const testerLabel = values.tester.trim() || testerName || "Unknown Inspector";
+      const { data: sessionInsertData, error: sessionInsertError } = await supabase
+        .from("rope_testing_sessions")
+        .insert({
+          department_id: departmentId,
+          test_date: values.testingDate,
+          tester: testerLabel,
+        })
+        .select("id")
+        .single();
+
+      if (sessionInsertError || !sessionInsertData?.id) {
+        setToastMessage(sessionInsertError?.message || "Unable to save inspection session history.");
+        return false;
+      }
+
+      const testingResultsPayload = targetRows.map((row) => ({
+        testing_session_id: sessionInsertData.id,
+        department_id: departmentId,
+        rope_item_id: row.id,
+        rope_identifier: row.rope_identifier,
+        test_date: values.testingDate,
+        tester: testerLabel,
+        result: values.ropeStatuses[row.id] === "failed" ? "fail" : "pass",
+      }));
+
+      const { error: resultsInsertError } = await supabase
+        .from("rope_testing_results")
+        .insert(testingResultsPayload);
+
+      if (resultsInsertError) {
+        setToastMessage(resultsInsertError.message || "Unable to save rope inspection result history.");
+        return false;
+      }
+
+      const { data: insertedResults, error: insertedResultsError } = await supabase
+        .from("rope_testing_results")
+        .select("rope_item_id, result, tester, testing_session_id")
+        .eq("testing_session_id", sessionInsertData.id);
+
+      if (insertedResultsError) {
+        setToastMessage(insertedResultsError.message || "Unable to verify saved rope inspection results.");
+        return false;
+      }
+
+      if ((insertedResults ?? []).length !== testingResultsPayload.length) {
+        setToastMessage("Saved rope inspection result count does not match inspected rope count.");
+        return false;
+      }
+
+      const inspectionsPayload = targetRows.map((row) => ({
+        department_id: departmentId,
+        rope_item_id: row.id,
+        inspection_date: values.testingDate,
+        primary_inspector_member_id: currentMemberId,
+        result: values.ropeStatuses[row.id] === "failed" ? "fail" : "pass",
+      }));
+
+      const { error: inspectionsInsertError } = await supabase
+        .from("rope_inspections")
+        .insert(inspectionsPayload);
+
+      if (inspectionsInsertError) {
+        setToastMessage(inspectionsInsertError.message || "Unable to save rope inspection records.");
+        return false;
+      }
 
       setRows((current) =>
-        current.map((row) =>
-          row.id === selectedItem.id
-            ? {
-                ...row,
-                last_inspection_date: values.inspectionDate,
-                last_inspection_result: values.result.toLowerCase(),
-              }
-            : row,
-        ),
+        current.map((row) => {
+          const currentStatus = values.ropeStatuses[row.id];
+          if (currentStatus !== "passed" && currentStatus !== "failed") {
+            return row;
+          }
+
+          return {
+            ...row,
+            last_inspection_date: values.testingDate,
+            last_inspection_result: currentStatus,
+          };
+        }),
       );
 
-      setToastMessage("Inspection saved.");
-      setIsInspectionOpen(false);
-      await loadDetail(selectedItem.id);
+      if (selectedItemId) {
+        await loadDetail(selectedItemId);
+      }
+      router.refresh();
+
+      if (options?.closeModalOnSuccess ?? true) {
+        setIsTestingModalOpen(false);
+      }
+
+      setToastMessage(`Successfully inspected ${targetRows.length} ropes.`);
+      return true;
     } catch {
-      setToastMessage("Unable to save inspection.");
-    } finally {
-      setIsInspectionSaving(false);
+      setToastMessage("Unable to save inspection session.");
+      return false;
     }
+  };
+
+  const createDeficienciesForFailedRopes = async (
+    failedRopes: RopeTestingItem[],
+    values: RopeTestingSessionValues,
+  ) => {
+    if (failedRopes.length === 0) {
+      return false;
+    }
+
+    const saved = await saveTestingSession(values, {
+      closeModalOnSuccess: false,
+      allowFailedRopesWithoutDeficiencies: true,
+    });
+
+    if (!saved) {
+      return false;
+    }
+
+    const params = new URLSearchParams();
+    params.set("returnTo", "/inventory/rope?resumeTestingSummary=1");
+    params.set("inventoryCategory", "rope");
+    params.set("apparatusId", "station-supply");
+    params.set("failedRopeIds", failedRopes.map((rope) => rope.id).join(","));
+    params.set("failedIndex", "0");
+    params.set("inventoryItemId", failedRopes[0].id);
+    params.set("inventoryItemLabel", failedRopes[0].ropeIdentifier || failedRopes[0].ropeName);
+
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(ROPE_TESTING_RESUME_STORAGE_KEY, JSON.stringify(values));
+    }
+
+    setIsTestingModalOpen(false);
+    router.push(`/deficiencies/report?${params.toString()}`);
+    return true;
   };
 
   return (
@@ -700,32 +893,61 @@ export default function RopeWorkspace({
         </div>
       ) : null}
 
-      <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">Inventory</p>
-        <h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">Rope</h1>
-        <p className="mt-3 max-w-2xl text-lg text-neutral-400">Life safety and utility rope inventory with inspection and deficiency visibility.</p>
-        <p className="mt-1 text-sm text-neutral-500">{departmentName ? `${departmentName} Rope Management` : "Rope Management"}</p>
-      </div>
+      <section className="rounded-2xl border border-red-900 bg-[#242424] p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-red-500">Inventory Module</p>
+            <h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">Rope</h1>
+            <p className="mt-2 max-w-3xl text-sm text-neutral-400">Life safety and utility rope inventory with inspection and deficiency visibility.</p>
+            <p className="mt-1 text-sm text-neutral-500">{departmentName ? `${departmentName} Rope Management` : "Rope Management"}</p>
+          </div>
 
-      <section className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-5">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-500">Total Rope</p>
-            <p className="mt-2 text-2xl font-black text-white">{rows.length}</p>
-          </div>
-          <div className="rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-500">Life Safety</p>
-            <p className="mt-2 text-2xl font-black text-red-300">{rows.filter((row) => row.rope_type === "Life Safety").length}</p>
-          </div>
-          <div className="rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-500">Utility</p>
-            <p className="mt-2 text-2xl font-black text-amber-300">{rows.filter((row) => row.rope_type === "Utility").length}</p>
-          </div>
-          <div className="rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3">
-            <p className="text-[11px] uppercase tracking-[0.18em] text-neutral-500">Rope Readiness</p>
-            <p className="mt-2 text-2xl font-black text-white">
-              {readinessSummary ? `${Math.round(readinessSummary.percentage)}%` : "NOT RATED"}
-            </p>
+          <div className="flex w-full items-center justify-end gap-2 lg:w-auto lg:shrink-0">
+            <div className="flex items-start gap-2">
+              <div className="flex flex-col gap-2">
+                {canManageRope ? (
+                  <button type="button" onClick={openAddForm} className="inline-flex rounded-lg border border-red-500/40 bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700">
+                    Add Rope
+                  </button>
+                ) : (
+                  <button type="button" disabled className="inline-flex rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-xs font-semibold text-neutral-500">
+                    Add Rope
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={openTestingSession}
+                  className="inline-flex rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+                >
+                  Rope Inspection
+                </button>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={launchDeficiencyReport}
+                  disabled={!selectedItem}
+                  className="inline-flex rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Report Deficiency
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => router.push("/inventory/rope/inspection-history")}
+                  className="inline-flex rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+                >
+                  Rope Inspection History
+                </button>
+              </div>
+            </div>
+
+            <div className="w-[220px] shrink-0 rounded-xl border border-red-700/30 bg-red-950/20 px-4 py-3 text-left">
+              <p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Out of Service</p>
+              <p className="mt-2 text-2xl font-black text-white">{outOfServiceCount}</p>
+            </div>
           </div>
         </div>
       </section>
@@ -744,11 +966,12 @@ export default function RopeWorkspace({
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:min-w-[520px]">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:min-w-[420px]">
             <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)} className="rounded-xl border border-white/10 bg-[#1b1b1b] px-3 py-3 text-sm text-neutral-200 focus:border-red-500/50 focus:outline-none">
               <option value="All">All Statuses</option>
               <option value="Active">Active</option>
               <option value="Inactive">Inactive</option>
+              <option value="Out of Service">Out of Service</option>
             </select>
 
             <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as TypeFilter)} className="rounded-xl border border-white/10 bg-[#1b1b1b] px-3 py-3 text-sm text-neutral-200 focus:border-red-500/50 focus:outline-none">
@@ -756,28 +979,18 @@ export default function RopeWorkspace({
               <option value="Life Safety">Life Safety</option>
               <option value="Utility">Utility</option>
             </select>
-
-            {canManageRope ? (
-              <button type="button" onClick={openAddForm} className="rounded-xl border border-red-500/40 bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-700">
-                Add Rope
-              </button>
-            ) : (
-              <button type="button" disabled className="rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3 text-sm font-semibold text-neutral-500">
-                View Only
-              </button>
-            )}
           </div>
         </div>
       </section>
 
       <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_390px] lg:items-start">
         <div className="overflow-hidden rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-0">
-          <div className="max-h-[56vh] overflow-auto">
+          <div className="h-[755.5px] overflow-x-auto overflow-y-auto">
             <table className="min-w-full divide-y divide-white/5 text-left">
               <thead className="sticky top-0 z-10 bg-[#242424] text-xs uppercase tracking-[0.14em] text-neutral-500">
                 <tr>
                   <th className="px-4 py-3 font-semibold">Rope</th>
-                  <th className="px-4 py-3 font-semibold">Identifier</th>
+                  <th className="px-4 py-3 font-semibold">Asset ID</th>
                   <th className="px-4 py-3 font-semibold">Type</th>
                   <th className="px-4 py-3 font-semibold">Status</th>
                 </tr>
@@ -938,11 +1151,6 @@ export default function RopeWorkspace({
                     <p className="text-[11px] uppercase tracking-[0.12em] text-neutral-500">Inspection History</p>
                     <p className="mt-1 text-sm font-semibold text-white">{selectedInspections.length} Record{selectedInspections.length === 1 ? "" : "s"}</p>
                   </div>
-                  {selectedItem && currentMemberId ? (
-                    <button type="button" onClick={openInspectionForm} className="rounded-lg border border-red-500/40 bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700">
-                      New Inspection
-                    </button>
-                  ) : null}
                 </div>
 
                 {isRelatedLoading ? (
@@ -994,16 +1202,19 @@ export default function RopeWorkspace({
         />
       ) : null}
 
-      {isInspectionOpen && selectedItem ? (
-        <RopeInspectionModal
-          isOpen={isInspectionOpen}
-          ropeName={selectedItem.rope_name}
-          currentMemberId={currentMemberId}
-          currentMemberName={currentMemberName}
-          memberOptions={inspectionMembers}
-          isSaving={isInspectionSaving}
-          onClose={closeInspectionForm}
-          onSave={saveInspection}
+      {isTestingModalOpen ? (
+        <RopeTestingSessionModal
+          isOpen={isTestingModalOpen}
+          defaultTester={testerName || currentMemberName || ""}
+          departmentName={departmentName ?? "Department"}
+          resumeValues={resumeTestingValues}
+          ropes={testingRows}
+          onClose={() => {
+            setIsTestingModalOpen(false);
+            setResumeTestingValues(null);
+          }}
+          onSave={saveTestingSession}
+          onCreateDeficiencies={createDeficienciesForFailedRopes}
         />
       ) : null}
     </div>

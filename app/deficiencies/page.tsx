@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getActiveApparatusOptions } from "@/lib/database";
@@ -646,7 +647,7 @@ function getPriorityBadgeClasses(priority: string) {
 	return "bg-zinc-500/20 text-zinc-200";
 }
 
-export default function DeficienciesPage() {
+function DeficienciesPageContent() {
 	const router = useRouter();
 	const searchParams = useSearchParams();
 	const returnToParam = searchParams.get("returnTo");
@@ -1576,5 +1577,13 @@ export default function DeficienciesPage() {
 				) : null}
 			</main>
 		</PageLayout>
+	);
+}
+
+export default function DeficienciesPage() {
+	return (
+		<Suspense>
+			<DeficienciesPageContent />
+		</Suspense>
 	);
 }

@@ -103,8 +103,9 @@ export default function AddDocumentPage() {
         data: { user },
       } = await supabase.auth.getUser();
 
+      const authUserId = user?.id;
       const email = user?.email?.trim();
-      if (!email) {
+      if (!authUserId && !email) {
         if (isMounted) {
           setCurrentMember(null);
           setIsLoadingMember(false);
@@ -112,11 +113,30 @@ export default function AddDocumentPage() {
         return;
       }
 
-      const { data, error } = await supabase
-        .from("members")
-        .select("id, department_id, role")
-        .eq("email", email)
-        .maybeSingle();
+      // Roster email can differ from the auth login email, so resolve by
+      // auth_user_id first (matches getCurrentMember()) before falling back.
+      let data: Record<string, unknown> | null = null;
+      let error: { message?: string } | null = null;
+
+      if (authUserId) {
+        const authUserLookup = await supabase
+          .from("members")
+          .select("id, department_id, role")
+          .eq("auth_user_id", authUserId)
+          .maybeSingle();
+        data = authUserLookup.data;
+        error = authUserLookup.error;
+      }
+
+      if (!data && email) {
+        const emailLookup = await supabase
+          .from("members")
+          .select("id, department_id, role")
+          .eq("email", email)
+          .maybeSingle();
+        data = emailLookup.data;
+        error = emailLookup.error;
+      }
 
       if (!isMounted) {
         return;
@@ -356,7 +376,7 @@ export default function AddDocumentPage() {
       const title = formState.title.trim() || extractedMetadata.title || formState.file.name;
       const effectiveDate = formState.effectiveDate || extractedMetadata.effectiveDate || new Date().toISOString().slice(0, 10);
       const sanitizedFileName = formState.file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-      const storagePath = `${currentMember.departmentId}/${categorySlug}/${Date.now()}-${sanitizedFileName}`;
+      const storagePath = `${currentMember.departmentId}/library/${Date.now()}-${sanitizedFileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from("department-documents")

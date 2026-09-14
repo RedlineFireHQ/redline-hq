@@ -10,12 +10,14 @@ import GroundLadderAssignmentModal, { GroundLadderAssignmentValues } from "@/com
 import type {
 	ApparatusOption,
 	GroundLadderAssignmentRecord,
-	GroundLadderMaintenanceItemRecord,
-	GroundLadderMaintenanceRecord,
-	GroundLadderMaintenanceSettingsRecord,
 	GroundLadderRecord,
 	GroundLadderServiceTestRecord,
 } from "@/app/inventory/ground-ladders/data";
+import {
+	buildGroundLadderInspectionNotes,
+	getGroundLadderInspectionDateFromNotes,
+	parseGroundLadderInspectionHistory,
+} from "@/lib/inventory/ground-ladder-inspection";
 
 const STATION_SUPPLY_OPTION = {
 	id: "station-supply",
@@ -23,7 +25,7 @@ const STATION_SUPPLY_OPTION = {
 };
 
 const STATUS_FILTERS = ["All", "In Service", "Unassigned", "Out of Service", "Retired"];
-const DETAIL_TABS = ["Overview", "Assignment", "Service Testing", "Maintenance", "History"] as const;
+const DETAIL_TABS = ["Overview", "Assignment", "Service Testing", "History"] as const;
 
 type DetailTab = (typeof DETAIL_TABS)[number];
 
@@ -51,7 +53,8 @@ type GroundLadderServiceTestFormValues = {
 	notes: string;
 };
 
-type GroundLadderInspectionResult = "ready" | "ready-with-deficiencies" | "out-of-service";
+type GroundLadderInspectionResult = "ready" | "out-of-service";
+type GroundLadderInspectionChecklistStatus = "pass" | "fail" | "not_applicable";
 
 type GroundLadderDeficiencyHistoryRecord = {
 	id: string;
@@ -64,16 +67,25 @@ type GroundLadderDeficiencyHistoryRecord = {
 };
 
 const GROUND_LADDER_PROCEDURE_ITEMS = [
-	"Beams & Rungs",
-	"Welds & Rivets",
-	"Butt Spurs",
-	"Pawls / Dogs",
-	"Roof Hooks",
-	"Pulleys & Halyards",
-	"Slide Guides",
-	"Heat Sensor Labels",
-	"Warning/Data Plates",
-	"Cleanliness",
+	"Inspect beams and rails for damage, rust, or heat exposure",
+	"Verify rungs are secure, straight, and free of excessive wear",
+	"Check pawls, dogs, and locking components for proper operation",
+	"Inspect halyard, pulley, and guide systems for wear or damage",
+	"Confirm heat sensor labels and warning plates are present and legible",
+	"Evaluate butt spurs, feet, and contact surfaces for condition",
+	"Verify ladder clean, lubricated, and ready for safe deployment",
+];
+
+const GROUND_LADDER_INSPECTION_ITEMS: Array<{ key: string; label: string; allowNotApplicable?: boolean }> = [
+	{ key: "beams-and-rails", label: "Beams & Rails" },
+	{ key: "rungs", label: "Rungs" },
+	{ key: "pawls-dogs", label: "Pawls / Dogs" },
+	{ key: "halyard-pulley", label: "Halyard & Pulley" },
+	{ key: "heat-sensors", label: "Heat Sensors" },
+	{ key: "butt-spurs-feet", label: "Butt Spurs & Feet" },
+	{ key: "guides-stops", label: "Guides & Stops" },
+	{ key: "roof-hooks", label: "Roof Hooks / Folding Hooks", allowNotApplicable: true },
+	{ key: "cleanliness", label: "Cleanliness" },
 ];
 
 function toTitleCase(value: string) {
@@ -288,23 +300,6 @@ function getServiceTestStatus(latestTest: GroundLadderServiceTestRecord | null |
 	return { label: "Current", tone: "green" as const };
 }
 
-function getMaintenanceStatus(latestMaintenance: GroundLadderMaintenanceRecord | null | undefined) {
-	if (!latestMaintenance) {
-		return { label: "No Maintenance", tone: "amber" as const };
-	}
-
-	const comparison = compareWithToday(latestMaintenance.next_maintenance_due);
-	if (comparison === "past") {
-		return { label: "Overdue", tone: "red" as const };
-	}
-
-	if (comparison === "today") {
-		return { label: "Due Today", tone: "amber" as const };
-	}
-
-	return { label: "Current", tone: "green" as const };
-}
-
 function getLadderTypeOptions() {
 	return ["Folding / Attic", "Roof", "Extension"];
 }
@@ -347,24 +342,6 @@ function addOneYearToIsoDate(value: string) {
 	return parsed.toISOString().split("T")[0];
 }
 
-function addMonthsToIsoDate(dateValue: string, months: number) {
-	const baseDate = new Date(`${dateValue}T00:00:00`);
-	if (Number.isNaN(baseDate.getTime())) {
-		return null;
-	}
-
-	const year = baseDate.getUTCFullYear();
-	const month = baseDate.getUTCMonth();
-	const day = baseDate.getUTCDate();
-	const targetDate = new Date(Date.UTC(year, month + months, day));
-
-	if (targetDate.getUTCDate() !== day) {
-		targetDate.setUTCDate(0);
-	}
-
-	return targetDate.toISOString().slice(0, 10);
-}
-
 function toGroundLadderFormValues(row: GroundLadderRecord): GroundLadderFormValues {
 	const ladderType = row.ladder_type || "Folding / Attic";
 	const lengthOptions = getLengthOptions(ladderType);
@@ -405,14 +382,6 @@ function getServiceTestTesterLabel(record: GroundLadderServiceTestRecord, member
 	return record.external_tester_name || record.company_name || "Unknown";
 }
 
-function getMaintenancePerformerLabel(record: GroundLadderMaintenanceRecord, memberLookup: Map<string, string>) {
-	if (record.performed_by_member_id) {
-		return memberLookup.get(record.performed_by_member_id) || record.performed_by_member_id;
-	}
-
-	return record.performed_by_name || "Unknown";
-}
-
 function buildDeficiencyHref(
 	ladder: GroundLadderRecord,
 	assignment: GroundLadderAssignmentRecord | null | undefined,
@@ -439,9 +408,6 @@ interface GroundLadderWorkspaceProps {
 	initialRows: GroundLadderRecord[];
 	initialAssignments: GroundLadderAssignmentRecord[];
 	initialServiceTests: GroundLadderServiceTestRecord[];
-	initialMaintenanceSettings: GroundLadderMaintenanceSettingsRecord | null;
-	initialMaintenanceRecords: GroundLadderMaintenanceRecord[];
-	initialMaintenanceItems: GroundLadderMaintenanceItemRecord[];
 	apparatusOptions: ApparatusOption[];
 	selectedLadderNumber?: string | null;
 	canDeleteLadder: boolean;
@@ -453,9 +419,6 @@ export default function GroundLadderWorkspace({
 	initialRows,
 	initialAssignments,
 	initialServiceTests,
-	initialMaintenanceSettings,
-	initialMaintenanceRecords,
-	initialMaintenanceItems,
 	apparatusOptions,
 	selectedLadderNumber = null,
 	canDeleteLadder,
@@ -464,9 +427,6 @@ export default function GroundLadderWorkspace({
 	const [rows, setRows] = useState<GroundLadderRecord[]>(initialRows);
 	const [assignments, setAssignments] = useState<GroundLadderAssignmentRecord[]>(initialAssignments);
 	const [serviceTests, setServiceTests] = useState<GroundLadderServiceTestRecord[]>(initialServiceTests);
-	const [maintenanceSettings, setMaintenanceSettings] = useState<GroundLadderMaintenanceSettingsRecord | null>(initialMaintenanceSettings);
-	const [maintenanceRecords, setMaintenanceRecords] = useState<GroundLadderMaintenanceRecord[]>(initialMaintenanceRecords);
-	const [maintenanceItems, setMaintenanceItems] = useState<GroundLadderMaintenanceItemRecord[]>(initialMaintenanceItems);
 	const [searchTerm, setSearchTerm] = useState("");
 	const [statusFilter, setStatusFilter] = useState("All");
 	const [isFormOpen, setIsFormOpen] = useState(false);
@@ -484,7 +444,12 @@ export default function GroundLadderWorkspace({
 	const [isInspectionOpen, setIsInspectionOpen] = useState(false);
 	const [inspectionLadder, setInspectionLadder] = useState<GroundLadderRecord | null>(null);
 	const [inspectionResult, setInspectionResult] = useState<GroundLadderInspectionResult | null>(null);
+	const [inspectionChecklist, setInspectionChecklist] = useState<Record<string, GroundLadderInspectionChecklistStatus>>({});
+	const [inspectionChecklistOpen, setInspectionChecklistOpen] = useState(false);
+	const [inspectionChecklistRequired, setInspectionChecklistRequired] = useState(false);
+	const [inspectionHelpers, setInspectionHelpers] = useState<Array<{ memberId: string; name: string }>>([]);
 	const [inspectionCertified, setInspectionCertified] = useState(false);
+	const [showInspectionConfirmation, setShowInspectionConfirmation] = useState(false);
 	const [inspectionNotes, setInspectionNotes] = useState("");
 	const [inspectionErrorMessage, setInspectionErrorMessage] = useState<string | null>(null);
 	const [isSavingInspection, setIsSavingInspection] = useState(false);
@@ -496,35 +461,6 @@ export default function GroundLadderWorkspace({
 	const [activeDeficiencyByLadderId, setActiveDeficiencyByLadderId] = useState<Record<string, boolean>>({});
 	const [memberDirectory, setMemberDirectory] = useState<MemberRecord[]>([]);
 	const [deficiencyHistoryByLadderId, setDeficiencyHistoryByLadderId] = useState<Record<string, GroundLadderDeficiencyHistoryRecord[]>>({});
-
-	useEffect(() => {
-		setRows(initialRows);
-	}, [initialRows]);
-
-	useEffect(() => {
-		setAssignments(initialAssignments);
-	}, [initialAssignments]);
-
-	useEffect(() => {
-		setServiceTests(initialServiceTests);
-	}, [initialServiceTests]);
-
-	useEffect(() => {
-		setMaintenanceSettings(initialMaintenanceSettings);
-	}, [initialMaintenanceSettings]);
-
-	useEffect(() => {
-		setMaintenanceRecords(initialMaintenanceRecords);
-	}, [initialMaintenanceRecords]);
-
-	useEffect(() => {
-		setMaintenanceItems(initialMaintenanceItems);
-	}, [initialMaintenanceItems]);
-
-	useEffect(() => {
-		setSelectedDetailLadder(selectedLadderNumber ? normalizeLadderNumber(selectedLadderNumber) : null);
-		setSelectedTab("Overview");
-	}, [selectedLadderNumber]);
 
 	useEffect(() => {
 		if (!toastMessage) {
@@ -756,29 +692,6 @@ export default function GroundLadderWorkspace({
 		return nextMap;
 	}, [serviceTests]);
 
-	const latestMaintenanceByLadderId = useMemo(() => {
-		const nextMap = new Map<string, GroundLadderMaintenanceRecord>();
-		for (const record of [...maintenanceRecords].sort((left, right) => compareByDateDesc(left.maintenance_date, right.maintenance_date))) {
-			if (!nextMap.has(record.ground_ladder_id)) {
-				nextMap.set(record.ground_ladder_id, record);
-			}
-		}
-		return nextMap;
-	}, [maintenanceRecords]);
-
-	const maintenanceItemsByMaintenanceId = useMemo(() => {
-		const nextMap = new Map<string, GroundLadderMaintenanceItemRecord[]>();
-		for (const item of maintenanceItems) {
-			const bucket = nextMap.get(item.maintenance_id) ?? [];
-			bucket.push(item);
-			nextMap.set(item.maintenance_id, bucket);
-		}
-		for (const bucket of nextMap.values()) {
-			bucket.sort((left, right) => left.check_order - right.check_order);
-		}
-		return nextMap;
-	}, [maintenanceItems]);
-
 	const selectedLadder = useMemo(() => {
 		if (!selectedDetailLadder) {
 			return null;
@@ -805,9 +718,8 @@ export default function GroundLadderWorkspace({
 		return sortedRows.map((row) => {
 			const assignment = activeAssignmentByLadderId.get(row.id) ?? null;
 			const serviceTest = latestServiceTestByLadderId.get(row.id) ?? null;
-			const maintenance = latestMaintenanceByLadderId.get(row.id) ?? null;
+			const lastInspectionDate = getGroundLadderInspectionDateFromNotes(row.notes) ?? null;
 			const serviceTestStatus = getServiceTestStatus(serviceTest);
-			const maintenanceStatus = getMaintenanceStatus(maintenance);
 			const status = normalizeStatus(row.status);
 			const hasActiveDeficiency = activeDeficiencyByLadderId[row.id] === true;
 			const displayStatus =
@@ -822,9 +734,9 @@ export default function GroundLadderWorkspace({
 				readinessTone = "neutral";
 			} else if (displayStatus === "Out of Service") {
 				readinessTone = "red";
-			} else if (serviceTestStatus.tone === "red" || maintenanceStatus.tone === "red") {
+			} else if (serviceTestStatus.tone === "red") {
 				readinessTone = "red";
-			} else if (displayStatus === "Unassigned" || serviceTestStatus.tone === "amber" || maintenanceStatus.tone === "amber") {
+			} else if (displayStatus === "Unassigned" || serviceTestStatus.tone === "amber") {
 				readinessTone = "amber";
 			}
 
@@ -835,14 +747,13 @@ export default function GroundLadderWorkspace({
 				hasActiveDeficiency,
 				assignmentLabel: getAssignmentLabel(assignment, apparatusLookup),
 				serviceTestStatus,
-				maintenanceStatus,
+				lastInspectionDate,
 				assignment,
 				serviceTest,
-				maintenance,
 				readinessTone,
 			};
 		});
-	}, [activeAssignmentByLadderId, activeDeficiencyByLadderId, apparatusLookup, latestMaintenanceByLadderId, latestServiceTestByLadderId, sortedRows]);
+	}, [activeAssignmentByLadderId, activeDeficiencyByLadderId, apparatusLookup, latestServiceTestByLadderId, sortedRows]);
 
 	const filteredRows = useMemo(() => {
 		const search = searchTerm.trim().toLowerCase();
@@ -879,7 +790,6 @@ export default function GroundLadderWorkspace({
 		let unassigned = 0;
 		let outOfService = 0;
 		let serviceDue = 0;
-		let maintenanceDue = 0;
 		let activeDeficiencies = 0;
 
 		for (const row of derivedRows) {
@@ -894,9 +804,6 @@ export default function GroundLadderWorkspace({
 			}
 			if (row.serviceTestStatus.label === "Overdue" || row.serviceTestStatus.label === "Due Today") {
 				serviceDue += 1;
-			}
-			if (row.maintenanceStatus.label === "Overdue" || row.maintenanceStatus.label === "Due Today") {
-				maintenanceDue += 1;
 			}
 			if (row.hasActiveDeficiency) {
 				activeDeficiencies += 1;
@@ -914,7 +821,6 @@ export default function GroundLadderWorkspace({
 			unassigned,
 			outOfService,
 			serviceDue,
-			maintenanceDue,
 			activeDeficiencies,
 			readinessScore,
 		};
@@ -927,7 +833,6 @@ export default function GroundLadderWorkspace({
 			: null) ?? null);
 	const detailAssignment = detailLadder ? activeAssignmentByLadderId.get(detailLadder.id) ?? null : null;
 	const detailServiceTests = detailLadder ? serviceTests.filter((record) => record.ground_ladder_id === detailLadder.id) : [];
-	const detailMaintenanceRecords = detailLadder ? maintenanceRecords.filter((record) => record.ground_ladder_id === detailLadder.id) : [];
 	const detailDeficiencies = detailLadder ? deficiencyHistoryByLadderId[detailLadder.id] ?? [] : [];
 	const detailTimeline = useMemo(() => {
 		if (!detailLadder) {
@@ -967,14 +872,6 @@ export default function GroundLadderWorkspace({
 			statusTone: record.result.toLowerCase() === "pass" ? ("green" as const) : ("red" as const),
 		}));
 
-		const ladderMaintenance = detailMaintenanceRecords.map((record) => ({
-			type: "Maintenance",
-			label: `Maintenance ${record.result}`,
-			description: record.notes || "Maintenance entry",
-			occurredAt: record.maintenance_date,
-			statusTone: record.result.toLowerCase() === "pass" ? ("green" as const) : ("red" as const),
-		}));
-
 		const ladderDeficiencies = detailDeficiencies.flatMap((record) => {
 			const events: LadderEvent[] = [];
 			const deficiencyTitle = record.title?.trim() || "Deficiency";
@@ -1003,8 +900,8 @@ export default function GroundLadderWorkspace({
 			return events;
 		});
 
-		return [...ladderAssignments, ...ladderTests, ...ladderMaintenance, ...ladderDeficiencies].sort((left, right) => compareByDateDesc(left.occurredAt, right.occurredAt));
-	}, [apparatusLookup, assignments, detailDeficiencies, detailLadder, detailMaintenanceRecords, detailServiceTests]);
+		return [...ladderAssignments, ...ladderTests, ...ladderDeficiencies].sort((left, right) => compareByDateDesc(left.occurredAt, right.occurredAt));
+	}, [apparatusLookup, assignments, detailDeficiencies, detailLadder, detailServiceTests]);
 
 	useEffect(() => {
 		if (!detailLadder) {
@@ -1042,22 +939,49 @@ export default function GroundLadderWorkspace({
 		setIsServiceTestOpen(true);
 	}
 
-	function openInspectionModal(ladder: GroundLadderRecord) {
-		setInspectionLadder(ladder);
+	async function openInspectionModal(ladder?: GroundLadderRecord | null) {
+		setInspectionLadder(ladder ?? null);
 		setInspectionResult(null);
+		setInspectionChecklist({});
+		setInspectionChecklistOpen(false);
+		setInspectionChecklistRequired(false);
+		setInspectionHelpers([]);
 		setInspectionCertified(false);
+		setShowInspectionConfirmation(false);
 		setInspectionNotes("");
 		setInspectionErrorMessage(null);
 		setIsInspectionOpen(true);
+
+		if (!departmentId) {
+			return;
+		}
+
+		const { data } = await supabase
+			.from("ground_ladder_inspection_settings")
+			.select("require_checklist")
+			.eq("department_id", departmentId)
+			.maybeSingle();
+
+		setInspectionChecklistRequired(data?.require_checklist === true);
 	}
 
 	function closeInspectionModal() {
 		setIsInspectionOpen(false);
 		setInspectionLadder(null);
 		setInspectionResult(null);
+		setInspectionChecklist({});
+		setInspectionChecklistOpen(false);
+		setInspectionChecklistRequired(false);
+		setInspectionHelpers([]);
 		setInspectionCertified(false);
+		setShowInspectionConfirmation(false);
 		setInspectionNotes("");
 		setInspectionErrorMessage(null);
+	}
+
+	function openInspectionCompletionDialog() {
+		setInspectionErrorMessage(null);
+		setShowInspectionConfirmation(true);
 	}
 
 	function openProceduresModal() {
@@ -1134,10 +1058,7 @@ export default function GroundLadderWorkspace({
 				}
 
 				const today = getTodayDate();
-				const defaultServiceIntervalMonths = 12;
 				const serviceDueDate = addOneYearToIsoDate(today) ?? today;
-				const maintenanceIntervalMonths = maintenanceSettings?.maintenance_interval_months ?? defaultServiceIntervalMonths;
-				const maintenanceDueDate = addMonthsToIsoDate(today, maintenanceIntervalMonths) ?? today;
 
 				const assignmentType = values.status === "In Service" ? values.assignmentType : "Unassigned";
 				if (values.status === "In Service" && assignmentType !== "Unassigned") {
@@ -1177,21 +1098,6 @@ export default function GroundLadderWorkspace({
 					throw serviceTestError;
 				}
 
-				const { error: maintenanceError } = await supabase.from("ground_ladder_maintenance").insert({
-					department_id: departmentId,
-					ground_ladder_id: insertedLadder.id,
-					maintenance_date: today,
-					performed_by_member_id: currentMemberId,
-					performed_by_name: currentMemberId ? null : "Department Initial Setup",
-					result: "Pass",
-					notes: "Initial ladder setup",
-					next_maintenance_due: maintenanceDueDate,
-					maintenance_interval_months: maintenanceIntervalMonths,
-				});
-
-				if (maintenanceError) {
-					throw maintenanceError;
-				}
 			}
 
 			setToastMessage(editLadder ? "Ground ladder updated." : "Ground ladder created.");
@@ -1402,14 +1308,16 @@ export default function GroundLadderWorkspace({
 			return;
 		}
 
-		if (!inspectionCertified) {
-			setInspectionErrorMessage("Certification is required before completion.");
+		setInspectionCertified(true);
+
+		const checklistSubmissionAllowed = !inspectionChecklistRequired || GROUND_LADDER_INSPECTION_ITEMS.every((item) => inspectionChecklist[item.key] !== undefined);
+		if (inspectionChecklistRequired && !checklistSubmissionAllowed) {
+			setInspectionErrorMessage("Complete all required inspection checklist items before completing this inspection.");
 			return;
 		}
 
-		const requiresDeficiency = inspectionResult === "ready-with-deficiencies" || inspectionResult === "out-of-service";
-		if (requiresDeficiency && activeDeficiencyByLadderId[inspectionLadder.id] !== true) {
-			setInspectionErrorMessage("Report at least one deficiency before completing this inspection result.");
+		if (inspectionResult === "out-of-service" && activeDeficiencyByLadderId[inspectionLadder.id] !== true) {
+			setInspectionErrorMessage("Report at least one deficiency before placing this ladder out of service.");
 			return;
 		}
 
@@ -1426,11 +1334,21 @@ export default function GroundLadderWorkspace({
 		setIsSavingInspection(true);
 		setInspectionErrorMessage(null);
 
-		const nextNotes = inspectionNotes.trim()
-			? [inspectionLadder.notes?.trim(), `Inspection (${new Date().toLocaleString("en-US")}): ${inspectionResult}. ${inspectionNotes.trim()}`]
-				.filter(Boolean)
-				.join("\n\n")
-			: inspectionLadder.notes;
+		const helperSummary = inspectionHelpers.length > 0
+			? `Inspection helpers: ${inspectionHelpers.map((helper) => helper.name).join(", ")}.`
+			: "";
+		const checklistSummary = Object.keys(inspectionChecklist).length > 0
+			? `Checklist review: ${Object.entries(inspectionChecklist)
+				.map(([itemId, status]) => `${itemId}:${status}`)
+				.join("; ")}.`
+			: "";
+		const nextNotes = buildGroundLadderInspectionNotes({
+			existingNotes: inspectionLadder.notes,
+			helperSummary,
+			checklistSummary,
+			inspectionNotes,
+			result: inspectionResult,
+		});
 
 		const { error } = await supabase
 			.from("ground_ladders")
@@ -1572,9 +1490,16 @@ export default function GroundLadderWorkspace({
 		if (options?.routeToDeficiencyReport && failedRowsMissingDeficiency.length > 0) {
 			const firstFailed = failedRowsMissingDeficiency[0];
 			const firstFailedAssignment = activeAssignmentByLadderId.get(firstFailed.id) ?? null;
-			const deficiencyHref = buildDeficiencyHref(firstFailed, firstFailedAssignment, "/inventory/ground-ladders");
-			setToastMessage(`Session saved. Report the failed ladder deficiency for ${firstFailed.ladder_number}.`);
-			router.push(deficiencyHref);
+			const params = new URLSearchParams();
+			params.set("returnTo", "/inventory/ground-ladders");
+			params.set("inventoryCategory", "ground-ladders");
+			params.set("inventoryItemId", firstFailed.id);
+			params.set("inventoryItemLabel", firstFailed.ladder_number);
+			params.set("apparatusId", firstFailedAssignment?.assignment_type === "Apparatus" && firstFailedAssignment.apparatus_id ? firstFailedAssignment.apparatus_id : STATION_SUPPLY_OPTION.id);
+			params.set("failedLadderIds", failedRowsMissingDeficiency.map((row) => row.id).join(","));
+			params.set("failedIndex", "0");
+			setToastMessage(`Session saved. Reporting ${failedRowsMissingDeficiency.length} failed ladder deficiency${failedRowsMissingDeficiency.length === 1 ? "" : "ies"}.`);
+			router.push(`/deficiencies/report?${params.toString()}`);
 			return true;
 		}
 
@@ -1599,13 +1524,6 @@ export default function GroundLadderWorkspace({
 		void handleSaveGroundLadderServiceTestSession(values, { routeToDeficiencyReport: true });
 	};
 
-	const topSummaryCards = [
-		{ label: "Total Active Ladders", value: metrics.totalActive, tone: "ready" as const, filter: "All" },
-		{ label: "In Service", value: metrics.inService, tone: "ready" as const, filter: "In Service" },
-		{ label: "Out of Service", value: metrics.outOfService, tone: "out-of-service" as const, filter: "Out of Service" },
-		{ label: "Retired", value: metrics.total - metrics.totalActive, tone: "retired" as const, filter: "Retired" },
-	];
-
 	const currentAssignments = useMemo(() => {
 		return filteredRows.map((row) => ({
 			...row,
@@ -1616,18 +1534,12 @@ export default function GroundLadderWorkspace({
 
 	if (detailLadder) {
 		const detailServiceStatus = getServiceTestStatus(latestServiceTestByLadderId.get(detailLadder.id));
-		const detailMaintenanceStatus = getMaintenanceStatus(latestMaintenanceByLadderId.get(detailLadder.id));
-		const latestMaintenance = latestMaintenanceByLadderId.get(detailLadder.id) ?? null;
 		const detailService = latestServiceTestByLadderId.get(detailLadder.id) ?? null;
+		const detailLatestInspectionDate = getGroundLadderInspectionDateFromNotes(detailLadder.notes) ?? null;
+		const detailInspectionHistory = parseGroundLadderInspectionHistory(detailLadder.notes);
 		const detailAssignmentLabel = getAssignmentLabel(detailAssignment, apparatusLookup);
 		const detailReturnTo = `/inventory/ground-ladders/${encodeURIComponent(detailLadder.ladder_number)}`;
 		const detailDeficiencyHref = buildDeficiencyHref(detailLadder, detailAssignment, detailReturnTo);
-		const maintenanceParams = new URLSearchParams();
-		if (detailAssignment?.assignment_type === "Apparatus" && detailAssignment.apparatus_id) {
-			maintenanceParams.set("apparatusId", detailAssignment.apparatus_id);
-		}
-		maintenanceParams.set("returnTo", detailReturnTo);
-		const maintenanceHref = `/maintenance/perform?${maintenanceParams.toString()}`;
 
 		return (
 			<div className="space-y-6">
@@ -1682,11 +1594,20 @@ export default function GroundLadderWorkspace({
 						</div>
 					</div>
 
-					<div className="grid gap-3 md:grid-cols-4">
+					<div className="grid gap-3 md:grid-cols-3">
 						<SummaryCard label="Current Assignment" value={detailAssignmentLabel} tone={detailAssignment?.assignment_type === "Apparatus" ? "green" : detailAssignment?.assignment_type === "Station" ? "amber" : "neutral"} />
-						<SummaryCard label="Service Test" value={detailServiceStatus.label} tone={detailServiceStatus.tone} subValue={detailService?.next_test_due_date ? `Due ${formatDate(detailService.next_test_due_date)}` : "No test on file"} />
-						<SummaryCard label="Maintenance" value={detailMaintenanceStatus.label} tone={detailMaintenanceStatus.tone} subValue={latestMaintenance?.next_maintenance_due ? `Due ${formatDate(latestMaintenance.next_maintenance_due)}` : "No maintenance on file"} />
-						<SummaryCard label="Deficiency" value={activeDeficiencyByLadderId[detailLadder.id] ? "Active Deficiency" : "No Active Deficiency"} tone={activeDeficiencyByLadderId[detailLadder.id] ? "red" : "green"} />
+						<SummaryCard
+							label="Service Testing"
+							value={detailService?.next_test_due_date ? formatDate(detailService.next_test_due_date) : "No service test on file"}
+							tone={detailServiceStatus.tone}
+							subValue={detailServiceStatus.label}
+						/>
+						<SummaryCard
+							label="Ladder Inspection"
+							value={detailLatestInspectionDate ? formatDate(detailLatestInspectionDate) : "Never"}
+							tone={detailLatestInspectionDate ? "green" : "amber"}
+							subValue={detailLatestInspectionDate ? "Most recent completed inspection" : "No completed inspection yet"}
+						/>
 					</div>
 
 					<section className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-6">
@@ -1730,6 +1651,25 @@ export default function GroundLadderWorkspace({
 					</section>
 
 					<section className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-6">
+						<p className="text-xs uppercase tracking-[0.24em] text-neutral-500">Inspection Records</p>
+						<h2 className="mt-2 text-2xl font-black tracking-tight text-white">Inspection History</h2>
+						{detailInspectionHistory.length > 0 ? (
+							<DataTable
+								columns={["Date", "Result", "Notes"]}
+								rows={detailInspectionHistory.map((entry) => [
+									formatDate(entry.date),
+									entry.result,
+									entry.details || "-",
+								])}
+							/>
+						) : (
+							<div className="mt-4 rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-4 text-sm text-neutral-400">
+								No inspection history recorded for this ladder yet.
+							</div>
+						)}
+					</section>
+
+					<section className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-6">
 						<p className="text-xs uppercase tracking-[0.24em] text-neutral-500">Associated Deficiency Records</p>
 						<h2 className="mt-2 text-2xl font-black tracking-tight text-white">Deficiencies</h2>
 						<div className="mt-4 mb-4 flex justify-end">
@@ -1749,50 +1689,6 @@ export default function GroundLadderWorkspace({
 									entry.status_active === true ? "Open" : "Resolved",
 									entry.title || "Untitled deficiency",
 									entry.status_name || "-",
-								])}
-						/>
-					</section>
-
-					<section className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-6">
-						<p className="text-xs uppercase tracking-[0.24em] text-neutral-500">Operational Activity</p>
-						<h2 className="mt-2 text-2xl font-black tracking-tight text-white">Maintenance</h2>
-						<div className="mt-4 mb-4 flex flex-wrap items-center gap-2">
-							<button
-								type="button"
-								onClick={() => openAssignmentModal(detailLadder)}
-								className="inline-flex rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
-							>
-								Assignment
-							</button>
-							<button
-								type="button"
-								onClick={() => openEditModal(detailLadder)}
-								className="inline-flex rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
-							>
-								Edit Ladder
-							</button>
-							<Link
-								href={maintenanceHref}
-								className="inline-flex rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
-							>
-								Perform Maintenance
-							</Link>
-						</div>
-						<div className="grid gap-4 md:grid-cols-3">
-							<DetailField label="Latest Maintenance" value={latestMaintenance ? formatDate(latestMaintenance.maintenance_date) : "-"} />
-							<DetailField label="Next Maintenance Due" value={latestMaintenance ? formatDate(latestMaintenance.next_maintenance_due) : "-"} />
-							<DetailField label="Maintenance Status" value={detailMaintenanceStatus.label} />
-						</div>
-						<DataTable
-							columns={["Maintenance Date", "Performed By", "Result", "Next Due", "Notes"]}
-							rows={detailMaintenanceRecords
-								.sort((left, right) => compareByDateDesc(left.maintenance_date, right.maintenance_date))
-								.map((record) => [
-									formatDate(record.maintenance_date),
-									getMaintenancePerformerLabel(record, memberLookup),
-									record.result,
-									formatDate(record.next_maintenance_due),
-									record.notes || "-",
 								])}
 						/>
 					</section>
@@ -1876,14 +1772,50 @@ export default function GroundLadderWorkspace({
 
 				<GroundLadderInspectionModal
 					isOpen={isInspectionOpen}
-					ladderNumber={inspectionLadder?.ladder_number || ""}
+					ladders={rows}
+					selectedLadder={inspectionLadder}
 					result={inspectionResult}
 					notes={inspectionNotes}
+					checklistState={inspectionChecklist}
+					checklistOpen={inspectionChecklistOpen}
+					checklistRequired={inspectionChecklistRequired}
+					helperParticipants={inspectionHelpers}
+					availableHelpers={memberDirectory
+						.filter((member) => member.id !== currentMemberId)
+						.map((member) => ({
+							memberId: member.id,
+							name: `${member.first_name ?? ""} ${member.last_name ?? ""}`.trim() || member.id,
+						}))
+						.filter((member) => !inspectionHelpers.some((helper) => helper.memberId === member.memberId))}
 					isCertified={inspectionCertified}
 					hasActiveDeficiency={inspectionLadder ? activeDeficiencyByLadderId[inspectionLadder.id] === true : false}
 					isSaving={isSavingInspection}
 					errorMessage={inspectionErrorMessage}
+					onSelectLadder={(ladder) => {
+						setInspectionLadder(ladder);
+						setInspectionErrorMessage(null);
+					}}
 					onResultChange={setInspectionResult}
+					onChecklistToggle={() => setInspectionChecklistOpen((current) => !current)}
+					onChecklistStatusChange={(itemId, status) => {
+						setInspectionChecklist((current) => ({ ...current, [itemId]: status }));
+					}}
+					onHelperAdd={(memberId) => {
+						const member = memberDirectory.find((entry) => entry.id === memberId);
+						if (!member) {
+							return;
+						}
+						setInspectionHelpers((current) => [
+							...current,
+							{
+								memberId: member.id,
+								name: `${member.first_name ?? ""} ${member.last_name ?? ""}`.trim() || member.id,
+							},
+						]);
+					}}
+					onHelperRemove={(memberId) => {
+						setInspectionHelpers((current) => current.filter((helper) => helper.memberId !== memberId));
+					}}
 					onNotesChange={setInspectionNotes}
 					onCertifiedChange={setInspectionCertified}
 					onClose={closeInspectionModal}
@@ -1927,85 +1859,54 @@ export default function GroundLadderWorkspace({
 			</div>
 		) : null}
 
-			<div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-				<div>
-					<p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">Inventory</p>
-					<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">Ground Ladders</h1>
-					<p className="mt-3 max-w-2xl text-lg text-neutral-400">
-						Manage department ground ladder inventory.
-					</p>
-					{departmentName ? (
-						<p className="mt-2 text-sm text-neutral-500">Department: {departmentName}</p>
-					) : null}
-				</div>
+			<div className="rounded-2xl border border-red-900 bg-[#242424] p-5 lg:col-span-2">
+				<div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+					<div className="min-w-0 flex-1">
+						<p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">Inventory</p>
+						<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">Ground Ladders</h1>
+						<p className="mt-3 max-w-2xl text-lg text-neutral-400">
+							Manage department ground ladder inventory.
+						</p>
+					</div>
 
-				<div className="flex flex-wrap items-center gap-2">
-					<button
-						type="button"
-						onClick={openAddModal}
-						className="inline-flex rounded-lg border border-red-500/40 bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-700"
-					>
-						<Plus className="h-4 w-4" />
-						Add Ladder
-					</button>
-					<button
-						type="button"
-						onClick={() => setIsCategoryServiceTestOpen(true)}
-						className="inline-flex rounded-lg border border-white/15 bg-neutral-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-neutral-800"
-					>
-						Service Testing
-					</button>
-					<Link
-						href="/maintenance"
-						className="inline-flex rounded-lg border border-white/15 bg-neutral-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-neutral-800"
-					>
-						Maintenance
-					</Link>
-					<Link
-						href="/deficiencies/report"
-						className="inline-flex rounded-lg border border-white/15 bg-neutral-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-neutral-800"
-					>
-						Report Deficiency
-					</Link>
+					<div className="flex flex-wrap items-center gap-2">
+						<button
+							type="button"
+							onClick={openAddModal}
+							className="inline-flex rounded-lg border border-red-500/40 bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-700"
+						>
+							<Plus className="h-4 w-4" />
+							Add Ladder
+						</button>
+						<button
+							type="button"
+							onClick={() => setIsCategoryServiceTestOpen(true)}
+							className="inline-flex rounded-lg border border-white/15 bg-neutral-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-neutral-800"
+						>
+							Service Testing
+						</button>
+						<button
+							type="button"
+							onClick={() => openInspectionModal()}
+							className="inline-flex rounded-lg border border-red-500/40 bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-700"
+						>
+							Ladder Inspection
+						</button>
+						<Link
+							href="/deficiencies/report"
+							className="inline-flex rounded-lg border border-white/15 bg-neutral-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-neutral-800"
+						>
+							Report Deficiency
+						</Link>
+
+						<div className="rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3">
+							<p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-neutral-500">Out of Service</p>
+							<p className="mt-1 text-2xl font-[700] leading-none tracking-[-0.06em] text-white">{metrics.outOfService}</p>
+						</div>
+					</div>
 				</div>
 			</div>
 
-			<section className="rounded-2xl border border-red-900 bg-[#242424] p-5 lg:col-span-2">
-				<div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-					<div className="min-w-0 flex-1">
-						<h2 className="text-2xl font-bold text-white">Ladder Readiness</h2>
-						<p className="mt-2 max-w-3xl text-sm text-neutral-400">Readiness is based on active ladders that are in service, current on testing/maintenance, and free of active deficiencies.</p>
-
-						<div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-							{topSummaryCards.map((card) => {
-								const active = statusFilter === card.filter;
-								return (
-									<button
-										key={card.label}
-										type="button"
-										onClick={() => setStatusFilter(card.filter)}
-										className={summaryCardClasses(active, card.tone)}
-									>
-										<p className="text-xs uppercase tracking-[0.22em] text-neutral-500">{card.label}</p>
-										<p className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">{card.value}</p>
-									</button>
-								);
-							})}
-						</div>
-					</div>
-
-					<div className="w-full max-w-[220px] rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3">
-						<p className="text-xs uppercase tracking-[0.24em] text-neutral-500">Ground Ladder Readiness</p>
-						<p className="mt-1 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">{metrics.readinessScore}%</p>
-						<p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-red-400">{metrics.inService} In Service / {metrics.totalActive} Active</p>
-						<p className="mt-3 text-sm text-neutral-400">Retired ladders are excluded from active readiness.</p>
-
-						<div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-neutral-800">
-							<div className="h-full rounded-full bg-red-500 transition-all" style={{ width: `${Math.max(0, Math.min(100, metrics.readinessScore))}%` }} />
-						</div>
-					</div>
-				</div>
-			</section>
 
 			<section className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-5">
 				<div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
@@ -2041,7 +1942,7 @@ export default function GroundLadderWorkspace({
 					<table className="min-w-full border-separate border-spacing-0 text-left">
 						<thead>
 							<tr>
-								{["Ladder #", "Type", "Size", "Manufacturer / Model", "Assignment", "Status", "Service Test", "Maintenance", "Actions"].map((column) => (
+								{["Ladder #", "Type", "Size", "Assignment", "Status", "Service Test", "Last Inspection", "Actions"].map((column) => (
 									<th
 										key={column}
 										scope="col"
@@ -2075,10 +1976,6 @@ export default function GroundLadderWorkspace({
 											</td>
 											<td className="border-b border-white/5 px-4 py-4 text-sm text-neutral-200">{row.ladder_type || "-"}</td>
 											<td className="border-b border-white/5 px-4 py-4 text-sm text-neutral-200">{formatLength(row.ladder_length_ft)}</td>
-											<td className="border-b border-white/5 px-4 py-4 text-sm text-neutral-200">
-												<div className="font-medium text-white">{row.manufacturer || "-"}</div>
-												<div className="text-xs text-neutral-500">{row.model || "-"}</div>
-											</td>
 											<td className="border-b border-white/5 px-4 py-4 text-sm text-neutral-200">{row.assignmentLabel}</td>
 											<td className="border-b border-white/5 px-4 py-4 text-sm text-neutral-200">
 												<span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${statusClasses(row.displayStatus)}`}>{row.displayStatus}</span>
@@ -2090,23 +1987,19 @@ export default function GroundLadderWorkspace({
 												</div>
 											</td>
 											<td className="border-b border-white/5 px-4 py-4 text-sm text-neutral-200">
-												<div className="font-medium text-white">{row.maintenanceStatus.label}</div>
-												<div className="text-xs text-neutral-500">
-													{row.maintenance ? `Due ${formatDate(row.maintenance.next_maintenance_due)}` : "No maintenance on file"}
-												</div>
+												<div className="font-medium text-white">{row.lastInspectionDate ? formatDate(row.lastInspectionDate) : "Never"}</div>
 											</td>
 											<td className="border-b border-white/5 px-4 py-4 text-sm text-neutral-200">
 												<div className="flex flex-wrap gap-2">
-                                                    <button type="button" onClick={() => openLadderDetail(ladder)} className="rounded-lg border border-red-500/40 bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700">Open</button>
-
-                                                </div>
+													<button type="button" onClick={() => openLadderDetail(ladder)} className="rounded-lg border border-red-500/40 bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700">Open</button>
+												</div>
 											</td>
 										</tr>
 									);
 								})
 							) : (
 								<tr>
-									<td colSpan={9} className="border-b border-white/5 px-4 py-10 text-center text-sm text-neutral-400">
+									<td colSpan={8} className="border-b border-white/5 px-4 py-10 text-center text-sm text-neutral-400">
 										{derivedRows.length === 0 ? "No ground ladders found. Add your first ladder to begin tracking readiness." : "No ground ladders match the current filters."}
 									</td>
 								</tr>
@@ -2192,14 +2085,50 @@ export default function GroundLadderWorkspace({
 
 			<GroundLadderInspectionModal
 				isOpen={isInspectionOpen}
-				ladderNumber={inspectionLadder?.ladder_number || ""}
+				ladders={rows}
+				selectedLadder={inspectionLadder}
 				result={inspectionResult}
 				notes={inspectionNotes}
+				checklistState={inspectionChecklist}
+				checklistOpen={inspectionChecklistOpen}
+				checklistRequired={inspectionChecklistRequired}
+				helperParticipants={inspectionHelpers}
+				availableHelpers={memberDirectory
+					.filter((member) => member.id !== currentMemberId)
+					.map((member) => ({
+						memberId: member.id,
+						name: `${member.first_name ?? ""} ${member.last_name ?? ""}`.trim() || member.id,
+					}))
+					.filter((member) => !inspectionHelpers.some((helper) => helper.memberId === member.memberId))}
 				isCertified={inspectionCertified}
 				hasActiveDeficiency={inspectionLadder ? activeDeficiencyByLadderId[inspectionLadder.id] === true : false}
 				isSaving={isSavingInspection}
 				errorMessage={inspectionErrorMessage}
+				onSelectLadder={(ladder) => {
+					setInspectionLadder(ladder);
+					setInspectionErrorMessage(null);
+				}}
 				onResultChange={setInspectionResult}
+				onChecklistToggle={() => setInspectionChecklistOpen((current) => !current)}
+				onChecklistStatusChange={(itemId, status) => {
+					setInspectionChecklist((current) => ({ ...current, [itemId]: status }));
+				}}
+				onHelperAdd={(memberId) => {
+					const member = memberDirectory.find((entry) => entry.id === memberId);
+					if (!member) {
+						return;
+					}
+					setInspectionHelpers((current) => [
+						...current,
+						{
+							memberId: member.id,
+							name: `${member.first_name ?? ""} ${member.last_name ?? ""}`.trim() || member.id,
+						},
+					]);
+				}}
+				onHelperRemove={(memberId) => {
+					setInspectionHelpers((current) => current.filter((helper) => helper.memberId !== memberId));
+				}}
 				onNotesChange={setInspectionNotes}
 				onCertifiedChange={setInspectionCertified}
 				onClose={closeInspectionModal}
@@ -2229,14 +2158,25 @@ export default function GroundLadderWorkspace({
 
 function GroundLadderInspectionModal({
 	isOpen,
-	ladderNumber,
+	ladders,
+	selectedLadder,
 	result,
 	notes,
+	checklistState,
+	checklistOpen,
+	checklistRequired,
+	helperParticipants,
+	availableHelpers,
 	isCertified,
 	hasActiveDeficiency,
 	isSaving,
 	errorMessage,
+	onSelectLadder,
 	onResultChange,
+	onChecklistToggle,
+	onChecklistStatusChange,
+	onHelperAdd,
+	onHelperRemove,
 	onNotesChange,
 	onCertifiedChange,
 	onClose,
@@ -2244,20 +2184,71 @@ function GroundLadderInspectionModal({
 	onReportDeficiency,
 }: {
 	isOpen: boolean;
-	ladderNumber: string;
+	ladders: GroundLadderRecord[];
+	selectedLadder: GroundLadderRecord | null;
 	result: GroundLadderInspectionResult | null;
 	notes: string;
+	checklistState: Record<string, GroundLadderInspectionChecklistStatus>;
+	checklistOpen: boolean;
+	checklistRequired: boolean;
+	helperParticipants: Array<{ memberId: string; name: string }>;
+	availableHelpers: Array<{ memberId: string; name: string }>;
 	isCertified: boolean;
 	hasActiveDeficiency: boolean;
 	isSaving: boolean;
 	errorMessage: string | null;
+	onSelectLadder: (ladder: GroundLadderRecord) => void;
 	onResultChange: (value: GroundLadderInspectionResult) => void;
+	onChecklistToggle: () => void;
+	onChecklistStatusChange: (itemId: string, status: GroundLadderInspectionChecklistStatus) => void;
+	onHelperAdd: (memberId: string) => void;
+	onHelperRemove: (memberId: string) => void;
 	onNotesChange: (value: string) => void;
 	onCertifiedChange: (value: boolean) => void;
 	onClose: () => void;
 	onComplete: () => void;
 	onReportDeficiency?: () => void;
 }) {
+	const [ladderPickerSearch, setLadderPickerSearch] = useState("");
+	const [helperSearch, setHelperSearch] = useState("");
+	const filteredLadders = useMemo(() => {
+		const query = ladderPickerSearch.trim().toLowerCase();
+		const sorted = [...ladders].sort((left, right) => {
+			const leftNumber = left.ladder_number ?? "";
+			const rightNumber = right.ladder_number ?? "";
+			return leftNumber.localeCompare(rightNumber, undefined, { numeric: true, sensitivity: "base" });
+		});
+
+		if (!query) {
+			return sorted;
+		}
+
+		return sorted.filter((ladder) => {
+			const searchableText = [
+				ladder.ladder_number,
+				ladder.ladder_type,
+				ladder.ladder_length_ft !== null && ladder.ladder_length_ft !== undefined ? `${ladder.ladder_length_ft} ft` : null,
+				ladder.manufacturer,
+				ladder.model,
+				ladder.serial_number,
+				ladder.status,
+			].filter(Boolean).join(" ").toLowerCase();
+
+			return searchableText.includes(query);
+		});
+	}, [ladderPickerSearch, ladders]);
+
+	const filteredAvailableHelpers = useMemo(() => {
+		const currentHelperIds = new Set(helperParticipants.map((helper) => helper.memberId));
+		const available = availableHelpers.filter((member) => !currentHelperIds.has(member.memberId));
+		const query = helperSearch.trim().toLowerCase();
+		if (!query) {
+			return available;
+		}
+		return available.filter((member) => member.name.toLowerCase().includes(query));
+	}, [availableHelpers, helperParticipants, helperSearch]);
+	const [showConfirmation, setShowConfirmation] = useState(false);
+
 	if (!isOpen) {
 		return null;
 	}
@@ -2265,119 +2256,271 @@ function GroundLadderInspectionModal({
 	const resultCards: Array<{ value: GroundLadderInspectionResult; label: string; description: string }> = [
 		{
 			value: "ready",
-			label: "Ready for Service",
-			description: "Ladder is operational and can remain available for assignment.",
-		},
-		{
-			value: "ready-with-deficiencies",
-			label: "Ready for Service with Deficiencies",
-			description: "Ladder can remain in service but deficiencies must be documented.",
+			label: "Ready for Duty",
+			description: "Ladder passed inspection and can return to service.",
 		},
 		{
 			value: "out-of-service",
 			label: "Out of Service",
-			description: "Ladder is not safe for use and must be removed from service.",
+			description: "The ladder is not safe for use and must be removed from service.",
 		},
 	];
 
-	const requiresDeficiency = result === "ready-with-deficiencies" || result === "out-of-service";
+	const checklistButtonClasses = (status: GroundLadderInspectionChecklistStatus | undefined) => {
+		if (status === "pass") {
+			return "border-emerald-500/35 bg-emerald-500/15 text-emerald-200";
+		}
+		if (status === "fail") {
+			return "border-amber-500/35 bg-amber-500/15 text-amber-100";
+		}
+		if (status === "not_applicable") {
+			return "border-sky-500/35 bg-sky-500/15 text-sky-100";
+		}
+		return "border-white/10 bg-[#1b1b1b] text-neutral-200";
+	};
+
+	const requiresDeficiency = result === "out-of-service";
+	const checklistCompletedCount = Object.values(checklistState).filter((status) => status === "pass" || status === "fail" || status === "not_applicable").length;
+	const checklistSubmissionAllowed = !checklistRequired || GROUND_LADDER_INSPECTION_ITEMS.every((item) => checklistState[item.key] !== undefined);
 
 	return (
 		<div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 px-4 py-6">
-			<div className="w-full max-w-2xl rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-6 shadow-[0_30px_90px_rgba(0,0,0,0.5)]">
-				<h3 className="text-xl font-black text-white">Inspect Ladder</h3>
-				<p className="mt-1 text-sm text-neutral-400">Ground Ladder {ladderNumber}</p>
+			<div className="max-h-[calc(100vh-3rem)] w-full max-w-4xl overflow-y-auto rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-6 shadow-[0_30px_90px_rgba(0,0,0,0.5)]">
+				<div className="flex items-start justify-between gap-4">
+					<div>
+						<h3 className="text-xl font-black text-white">Ground Ladder Inspection</h3>
+						<p className="mt-1 text-sm text-neutral-400">Complete a quick inspection using the same workflow as the apparatus check.</p>
+					</div>
+					<button type="button" onClick={onClose} className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800">Close</button>
+				</div>
+
+				{!selectedLadder ? (
+					<div className="mt-5 rounded-2xl border border-white/10 bg-[#1b1b1b] p-4">
+						<div className="flex items-center justify-between gap-3">
+							<div>
+								<p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Ladder</p>
+								<h4 className="mt-1 text-lg font-bold text-white">Which ladder are you inspecting?</h4>
+							</div>
+						</div>
+
+						<label htmlFor="ground-ladder-inspection-picker-search" className="mt-4 block">
+							<span className="sr-only">Search ladders</span>
+							<div className="relative">
+								<Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-500" />
+								<input
+									id="ground-ladder-inspection-picker-search"
+									type="text"
+									value={ladderPickerSearch}
+									onChange={(event) => setLadderPickerSearch(event.target.value)}
+									placeholder="Search ladders..."
+									className="w-full rounded-xl border border-white/10 bg-[#141414] py-3 pl-10 pr-4 text-base text-white placeholder:text-neutral-500 focus:border-red-500/50 focus:outline-none"
+								/>
+							</div>
+						</label>
+
+						<div className="mt-4 max-h-80 overflow-y-auto rounded-xl border border-white/10 bg-[#141414] p-2">
+							{filteredLadders.length === 0 ? (
+								<div className="rounded-xl border border-dashed border-white/10 px-4 py-6 text-center text-sm text-neutral-400">
+									No ladders match your search.
+								</div>
+							) : (
+								<div className="space-y-2">
+									{filteredLadders.map((ladder) => {
+										const secondaryInfo = [
+											ladder.ladder_type || "Ladder",
+											ladder.ladder_length_ft !== null && ladder.ladder_length_ft !== undefined ? `${ladder.ladder_length_ft} ft` : null,
+										].filter(Boolean).join(" • ");
+
+										return (
+											<button
+												key={ladder.id}
+												type="button"
+												onClick={() => {
+													setLadderPickerSearch("");
+													onSelectLadder(ladder);
+												}}
+												className="flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-4 text-left transition hover:border-red-500/40 hover:bg-[#1f1f1f] focus:outline-none focus:ring-2 focus:ring-red-500/60"
+											>
+												<div className="min-w-0 flex-1">
+													<p className="truncate text-base font-semibold text-white">{ladder.ladder_number}</p>
+													<p className="mt-1 text-sm text-neutral-400">{secondaryInfo || "Ground ladder"}</p>
+												</div>
+												<span className="rounded-full border border-white/10 bg-neutral-900 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-300">
+													Select
+												</span>
+											</button>
+										);
+									})}
+								</div>
+							)}
+						</div>
+					</div>
+				) : null}
+
+				{selectedLadder ? (
+					<div className="mt-5 space-y-4">
+						<div>
+							<p className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-400">Overall Result</p>
+							<div className="mt-3 grid gap-3 md:grid-cols-2">
+								{resultCards.map((option) => {
+									const isActive = result === option.value;
+									return (
+										<button
+											key={option.value}
+											type="button"
+											onClick={() => onResultChange(option.value)}
+											className={`rounded-xl border px-4 py-4 text-left transition ${
+												isActive
+													? "border-red-500/50 bg-red-600/20"
+													: "border-white/10 bg-[#1b1b1b] hover:border-red-500/30"
+											}`}
+										>
+											<p className="text-sm font-semibold text-white">{option.label}</p>
+											<p className="mt-2 text-xs text-neutral-300">{option.description}</p>
+										</button>
+									);
+								})}
+							</div>
+							{requiresDeficiency ? (
+								<div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-neutral-300">
+									<span>Out of Service requires a linked deficiency before completion.</span>
+									{!hasActiveDeficiency && onReportDeficiency ? (
+										<button type="button" onClick={onReportDeficiency} className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800">Report Deficiency</button>
+									) : null}
+								</div>
+							) : null}
+						</div>
+
+						<div className="rounded-xl border border-neutral-700 bg-[#1B1B1B] p-4">
+							<div className="flex flex-wrap items-center justify-between gap-3">
+								<div>
+									<h4 className="text-sm font-semibold uppercase tracking-[0.16em] text-neutral-300">Inspection Checklist</h4>
+									<p className="mt-1 text-sm text-neutral-400">{checklistCompletedCount}/{GROUND_LADDER_INSPECTION_ITEMS.length} completed</p>
+								</div>
+								<button type="button" onClick={onChecklistToggle} className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs font-semibold text-neutral-100 transition hover:bg-neutral-800">{checklistOpen ? "Hide Inspection Items" : "Review Inspection Items"}</button>
+							</div>
+							{checklistOpen ? (
+								<div className="mt-4 space-y-3">
+									{GROUND_LADDER_INSPECTION_ITEMS.map((item) => {
+										const status = checklistState[item.key];
+										const buttons = [
+											{ value: "pass", label: "PASS" },
+											{ value: "fail", label: "FAIL" },
+											...(item.allowNotApplicable ? [{ value: "not_applicable", label: "N/A" }] : []),
+										] as const;
+
+										return (
+											<div key={item.key} className="rounded-xl border border-white/10 bg-[#171717] p-3">
+												<div className="flex items-center justify-between gap-3">
+													<p className="text-sm font-semibold text-white">{item.label}</p>
+													<span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-neutral-300">
+														{status === "pass" ? "PASS" : status === "fail" ? "FAIL" : status === "not_applicable" ? "N/A" : "Not Marked"}
+													</span>
+												</div>
+												<div className="mt-3 grid gap-2 sm:grid-cols-3">
+													{buttons.map((button) => (
+														<button
+															type="button"
+															key={button.value}
+															onClick={() => onChecklistStatusChange(item.key, button.value as GroundLadderInspectionChecklistStatus)}
+															className={`rounded-lg border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] transition ${checklistButtonClasses(status === button.value ? (button.value as GroundLadderInspectionChecklistStatus) : undefined)}`}
+														>
+															{button.label}
+														</button>
+													))}
+												</div>
+											</div>
+										);
+									})}
+								</div>
+							) : null}
+						</div>
+
+						<div className="mt-4 rounded-xl border border-neutral-700 bg-[#1B1B1B] p-4">
+							<div className="flex items-center justify-between gap-3">
+								<div>
+									<p className="text-[11px] uppercase tracking-[0.18em] text-neutral-500">Participants</p>
+									<h4 className="mt-1 text-lg font-bold text-white">Inspection Helpers</h4>
+								</div>
+								<span className="rounded-full border border-white/10 bg-neutral-900 px-3 py-1 text-xs font-semibold text-neutral-300">{helperParticipants.length + 1} Total Participants</span>
+							</div>
+							<div className="mt-4 grid gap-4 lg:grid-cols-2">
+										<div className="rounded-xl border border-neutral-700 bg-[#151515] p-3">
+											<p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">Current Helpers</p>
+											{helperParticipants.length === 0 ? (
+												<p className="mt-2 text-sm text-neutral-400">No helpers added yet.</p>
+											) : (
+												<div className="mt-3 space-y-2">
+													{helperParticipants.map((helper) => (
+														<div key={helper.memberId} className="flex items-center justify-between rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2">
+															<p className="text-sm text-neutral-200">✓ {helper.name}</p>
+															<button type="button" onClick={() => onHelperRemove(helper.memberId)} className="rounded-md border border-neutral-600 px-2 py-1 text-xs font-semibold text-neutral-200 transition hover:bg-neutral-800">Remove</button>
+														</div>
+													))}
+												</div>
+											)}
+										</div>
+										<div className="rounded-xl border border-neutral-700 bg-[#151515] p-3">
+											<p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">Available Members</p>
+											<input
+												type="search"
+												value={helperSearch}
+												onChange={(event) => setHelperSearch(event.target.value)}
+												placeholder="Search members..."
+												className="mt-3 w-full rounded-lg border border-white/10 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-500 focus:border-red-500/50 focus:outline-none"
+											/>
+											{availableHelpers.length === 0 ? (
+												<p className="mt-3 text-sm text-neutral-400">All available members are already added.</p>
+											) : filteredAvailableHelpers.length === 0 ? (
+												<p className="mt-3 text-sm text-neutral-400">No members match that search.</p>
+											) : (
+												<div className="mt-3 max-h-52 space-y-2 overflow-y-auto pr-1">
+													{filteredAvailableHelpers.map((member) => (
+														<div key={member.memberId} className="flex items-center justify-between rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2">
+															<p className="text-sm text-neutral-200">{member.name}</p>
+															<button type="button" onClick={() => onHelperAdd(member.memberId)} className="rounded-md border border-neutral-600 px-2 py-1 text-xs font-semibold text-neutral-200 transition hover:bg-neutral-800">Add</button>
+														</div>
+													))}
+												</div>
+											)}
+										</div>
+									</div>
+								</div>
+
+								<div>
+									<label htmlFor="ground-ladder-inspection-notes" className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-400">Inspection Notes (Optional)</label>
+									<textarea
+										id="ground-ladder-inspection-notes"
+										value={notes}
+										onChange={(event) => onNotesChange(event.target.value)}
+										rows={4}
+										placeholder="Enter noteworthy observations from this inspection..."
+										className="mt-2 w-full rounded-xl border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white placeholder:text-neutral-500 focus:border-red-500/50 focus:outline-none"
+									/>
+								</div>
+					</div>
+				) : null}
 
 				{errorMessage ? (
 					<div className="mt-4 rounded-xl border border-red-500/30 bg-red-900/20 px-4 py-3 text-sm text-red-100">{errorMessage}</div>
 				) : null}
 
-				<div className="mt-5 space-y-4">
-					<div>
-						<p className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-400">Overall Result</p>
-						<div className="mt-3 grid gap-3 md:grid-cols-3">
-							{resultCards.map((option) => {
-								const isActive = result === option.value;
-								return (
-									<button
-										key={option.value}
-										type="button"
-										onClick={() => onResultChange(option.value)}
-										className={`rounded-xl border px-4 py-4 text-left transition ${
-											isActive
-												? "border-red-500/50 bg-red-600/20"
-												: "border-white/10 bg-[#1b1b1b] hover:border-red-500/30"
-										}`}
-									>
-										<p className="text-sm font-semibold text-white">{option.label}</p>
-										<p className="mt-2 text-xs text-neutral-300">{option.description}</p>
-									</button>
-								);
-							})}
-						</div>
-					</div>
-
-					<div className="rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-4">
-						<div className="flex items-center justify-between gap-3">
-							<p className="text-sm font-semibold text-white">Deficiency Requirement</p>
-							<span className={`rounded-full border px-3 py-1 text-xs font-semibold ${hasActiveDeficiency ? "border-red-500/30 bg-red-900/20 text-red-200" : "border-white/10 bg-neutral-900 text-neutral-300"}`}>
-								{hasActiveDeficiency ? "Deficiency on file" : "No active deficiency"}
-							</span>
-						</div>
-						<p className="mt-2 text-sm text-neutral-300">
-							Ready for Service with Deficiencies and Out of Service both require at least one linked deficiency.
-						</p>
-						{requiresDeficiency && !hasActiveDeficiency && onReportDeficiency ? (
-							<button
-								type="button"
-								onClick={onReportDeficiency}
-								className="mt-3 rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
-							>
-								Report Deficiency
-							</button>
-						) : null}
-					</div>
-
-					<div>
-						<label htmlFor="inspection-notes" className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-400">Inspection Notes (Optional)</label>
-						<textarea
-							id="inspection-notes"
-							value={notes}
-							onChange={(event) => onNotesChange(event.target.value)}
-							rows={4}
-							placeholder="Enter noteworthy observations from this inspection..."
-							className="mt-2 w-full rounded-xl border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white placeholder:text-neutral-500 focus:border-red-500/50 focus:outline-none"
-						/>
-					</div>
-
-					<label className="flex items-start gap-3 rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3 text-sm text-neutral-200">
-						<input
-							type="checkbox"
-							checked={isCertified}
-							onChange={(event) => onCertifiedChange(event.target.checked)}
-							className="mt-0.5 h-4 w-4 rounded border-white/20 bg-neutral-900 text-red-600"
-						/>
-						<span>I certify this ladder inspection was completed according to department procedure and this result is accurate.</span>
-					</label>
-				</div>
-
 				<div className="mt-6 flex justify-end gap-2">
-					<button
-						type="button"
-						onClick={onClose}
-						className="rounded-lg border border-white/15 bg-neutral-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800"
-					>
-						Cancel
-					</button>
-					<button
-						type="button"
-						onClick={onComplete}
-						disabled={isSaving}
-						className="rounded-lg border border-red-500/40 bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-70"
-					>
-						{isSaving ? "Completing..." : "Complete Inspection"}
-					</button>
+					<button type="button" onClick={onClose} className="rounded-lg border border-white/15 bg-neutral-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800">Cancel</button>
+					<button type="button" onClick={() => setShowConfirmation(true)} disabled={isSaving || !selectedLadder || !result || (checklistRequired && !checklistSubmissionAllowed)} className="rounded-lg border border-red-500/40 bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-70">{isSaving ? "Completing..." : "Complete Inspection"}</button>
 				</div>
+				{showConfirmation ? (
+					<div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 px-4">
+						<div role="dialog" aria-modal="true" className="w-full max-w-xl rounded-2xl border border-neutral-700 bg-[#171717] p-6 shadow-2xl">
+							<h3 className="text-xl font-bold text-white">Confirm Inspection Completion</h3>
+							<p className="mt-4 text-sm text-neutral-300">By completing this inspection, I certify that the ladder was inspected in accordance with department policy and any defects were documented.</p>
+							<div className="mt-6 flex justify-end gap-3">
+								<button type="button" onClick={() => setShowConfirmation(false)} className="rounded-xl border border-neutral-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-neutral-800">Cancel</button>
+								<button type="button" onClick={() => { setShowConfirmation(false); onCertifiedChange(true); onComplete(); }} className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700">Confirm / Complete Inspection</button>
+							</div>
+						</div>
+					</div>
+				) : null}
 			</div>
 		</div>
 	);
@@ -2421,7 +2564,7 @@ function GroundLadderCategoryServiceTestModal({
 		setCompanyName("");
 		setSessionNotes("");
 		setLadderNotes({});
-		setSelectedLadderIds(ladders.map((ladder) => ladder.id));
+		setSelectedLadderIds([]);
 		setResults({});
 		setIsSaving(false);
 	}, [isOpen, ladders]);
@@ -2430,16 +2573,22 @@ function GroundLadderCategoryServiceTestModal({
 		return null;
 	}
 
-	const selectedCount = selectedLadderIds.length;
-	const passCount = selectedLadderIds.filter((ladderId) => results[ladderId] === "Pass").length;
-	const failCount = selectedLadderIds.filter((ladderId) => results[ladderId] === "Fail").length;
+	const effectiveSelectedLadderIds = selectedLadderIds.length > 0
+		? selectedLadderIds
+		: Object.keys(results).filter((ladderId) => results[ladderId] === "Pass" || results[ladderId] === "Fail");
+	const selectedCount = effectiveSelectedLadderIds.length;
+	const passCount = effectiveSelectedLadderIds.filter((ladderId) => results[ladderId] === "Pass").length;
+	const failCount = effectiveSelectedLadderIds.filter((ladderId) => results[ladderId] === "Fail").length;
 
 	const setAllResults = (value: "Pass" | "Fail") => {
-		setResults(Object.fromEntries(ladders.map((ladder) => [ladder.id, value])));
+		const nextResults = Object.fromEntries(ladders.map((ladder) => [ladder.id, value]));
+		setResults(nextResults);
+		setSelectedLadderIds(ladders.map((ladder) => ladder.id));
 	};
 
 	const clearAllResults = () => {
 		setResults({});
+		setSelectedLadderIds([]);
 	};
 
 	const toggleResult = (ladderId: string, target: "Pass" | "Fail") => {
@@ -2447,9 +2596,11 @@ function GroundLadderCategoryServiceTestModal({
 			const next = { ...current };
 			if (current[ladderId] === target) {
 				delete next[ladderId];
+				setSelectedLadderIds((selected) => selected.filter((id) => id !== ladderId));
 				return next;
 			}
 			next[ladderId] = target;
+			setSelectedLadderIds((selected) => (selected.includes(ladderId) ? selected : [...selected, ladderId]));
 			return next;
 		});
 	};
@@ -2466,7 +2617,7 @@ function GroundLadderCategoryServiceTestModal({
 				<div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
 					<div>
 						<p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">GROUND LADDERS</p>
-						<h3 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">Session Testing</h3>
+						<h3 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">Service Testing</h3>
 						<p className="mt-2 text-sm text-neutral-400">Set the shared session details once, then mark each ladder as Pass or Fail in the session.</p>
 					</div>
 
@@ -2600,7 +2751,7 @@ function GroundLadderCategoryServiceTestModal({
 							</thead>
 							<tbody>
 								{ladders.map((ladder) => {
-									const isSelected = selectedLadderIds.includes(ladder.id);
+									const isSelected = effectiveSelectedLadderIds.includes(ladder.id);
 									const ladderResult = results[ladder.id];
 									const ladderNote = ladderNotes[ladder.id] ?? "";
 									return (
@@ -2679,7 +2830,7 @@ function GroundLadderCategoryServiceTestModal({
 					</button>
 					<button
 						type="button"
-						disabled={isSaving || selectedLadderIds.length === 0 || !testerMode}
+						disabled={isSaving || effectiveSelectedLadderIds.length === 0 || !testerMode}
 						onClick={async () => {
 							setIsSaving(true);
 							const successful = await onSave({
@@ -2690,7 +2841,7 @@ function GroundLadderCategoryServiceTestModal({
 								companyName,
 								sessionNotes,
 								ladderNotes,
-								selectedLadderIds,
+								selectedLadderIds: effectiveSelectedLadderIds,
 								results,
 							});
 							if (successful) {
@@ -2705,7 +2856,7 @@ function GroundLadderCategoryServiceTestModal({
 					{onSaveAndReportDeficiencies ? (
 						<button
 							type="button"
-							disabled={isSaving || selectedLadderIds.length === 0 || failCount === 0 || !testerMode}
+							disabled={isSaving || effectiveSelectedLadderIds.length === 0 || failCount === 0 || !testerMode}
 							onClick={() => {
 								setIsSaving(true);
 								onSaveAndReportDeficiencies({
@@ -2716,7 +2867,7 @@ function GroundLadderCategoryServiceTestModal({
 									companyName,
 									sessionNotes,
 									ladderNotes,
-									selectedLadderIds,
+									selectedLadderIds: effectiveSelectedLadderIds,
 									results,
 								});
 								setIsSaving(false);
@@ -2747,7 +2898,7 @@ function GroundLadderProceduresModal({
 		<div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 px-4 py-6">
 			<div className="w-full max-w-xl rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-6 shadow-[0_30px_90px_rgba(0,0,0,0.5)]">
 				<h3 className="text-xl font-black text-white">Ground Ladder Procedures</h3>
-				<p className="mt-1 text-sm text-neutral-400">Reference checklist for firefighter inspections and maintenance guidance.</p>
+				<p className="mt-1 text-sm text-neutral-400">Reference checklist for firefighter inspections and service testing.</p>
 
 				<ol className="mt-5 space-y-2 text-sm text-neutral-200">
 					{GROUND_LADDER_PROCEDURE_ITEMS.map((item, index) => (

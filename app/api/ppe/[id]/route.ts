@@ -1,5 +1,5 @@
 import { getCurrentMember } from "@/lib/current-member";
-import { hasDepartmentPermission } from "@/lib/member-permissions";
+import { hasInventoryPermission } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 type UploadPayload = {
@@ -130,10 +130,12 @@ function normalizeMemberName(value: unknown): string | null {
 async function uploadPpePhoto({
   supabase,
   departmentId,
+  parentId,
   upload,
 }: {
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
   departmentId: string;
+  parentId: string;
   upload: UploadPayload;
 }): Promise<string> {
   if (!upload.mimeType.toLowerCase().startsWith("image/")) {
@@ -141,7 +143,7 @@ async function uploadPpePhoto({
   }
 
   const sanitizedFileName = upload.fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const storagePath = `${departmentId}/ppe/${Date.now()}-${sanitizedFileName}`;
+  const storagePath = `${departmentId}/inventory/ppe/${parentId}/${Date.now()}-${sanitizedFileName}`;
   const binary = Buffer.from(upload.base64Data, "base64");
 
   const { error } = await supabase.storage
@@ -279,11 +281,11 @@ export async function PATCH(request: Request, context: RouteContext) {
       return jsonResponse({ ok: false, error: "Unauthorized" }, 401);
     }
 
-    const canManageInventory = await hasDepartmentPermission(
+    const canManageInventory = await hasInventoryPermission(
       supabase,
       currentMember.departmentId,
       currentMember.role,
-      "inventory_management",
+      "ppe_management",
     );
 
     if (!canManageInventory) {
@@ -374,6 +376,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       const uploadedPath = await uploadPpePhoto({
         supabase,
         departmentId: currentMember.departmentId,
+        parentId: id,
         upload: photoUpload,
       });
       nextPhotoPath = uploadedPath;
@@ -441,11 +444,11 @@ export async function DELETE(_: Request, context: RouteContext) {
       return jsonResponse({ ok: false, error: "Unauthorized" }, 401);
     }
 
-    const canManageInventory = await hasDepartmentPermission(
+    const canManageInventory = await hasInventoryPermission(
       supabase,
       currentMember.departmentId,
       currentMember.role,
-      "inventory_management",
+      "ppe_management",
     );
 
     if (!canManageInventory) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 export type ScbaPackFlowTestTesterOption = {
 	id: string;
@@ -9,7 +9,7 @@ export type ScbaPackFlowTestTesterOption = {
 
 export interface ScbaPackFlowTestValues {
 	testDate: string;
-	testerMode: "member" | "external";
+	testerType: "member" | "external";
 	memberId: string;
 	externalTesterName: string;
 	externalTesterCompany: string;
@@ -35,40 +35,24 @@ function getTodayDate() {
 	return `${year}-${month}-${day}`;
 }
 
-export default function ScbaPackFlowTestModal({
-	isOpen,
+function ScbaPackFlowTestModalContent({
 	packNumber,
 	testerOptions,
-	isSaving = false,
-	errorMessage = null,
+	isSaving,
+	errorMessage,
 	onClose,
 	onSave,
-}: ScbaPackFlowTestModalProps) {
+}: Omit<ScbaPackFlowTestModalProps, "isOpen">) {
 	const [testDate, setTestDate] = useState(getTodayDate());
-	const [selectedTesterOption, setSelectedTesterOption] = useState("");
+	const [selectedTesterType, setSelectedTesterType] = useState<"member" | "external" | "">("");
+	const [selectedMemberId, setSelectedMemberId] = useState("");
 	const [externalTesterName, setExternalTesterName] = useState("");
 	const [externalTesterCompany, setExternalTesterCompany] = useState("");
-	const [result, setResult] = useState<"Pass" | "Fail">("Pass");
+	const [result, setResult] = useState<"Pass" | "Fail" | "">("");
 	const [notes, setNotes] = useState("");
 
-	useEffect(() => {
-		if (!isOpen) {
-			return;
-		}
-
-		setTestDate(getTodayDate());
-		setSelectedTesterOption("");
-		setExternalTesterName("");
-		setExternalTesterCompany("");
-		setResult("Pass");
-		setNotes("");
-	}, [isOpen, packNumber]);
-
-	const isExternalTester = selectedTesterOption === "external";
-
-	if (!isOpen) {
-		return null;
-	}
+	const isExternalTester = selectedTesterType === "external";
+	const isMemberTester = selectedTesterType === "member";
 
 	return (
 		<div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 px-4 py-6">
@@ -96,17 +80,37 @@ export default function ScbaPackFlowTestModal({
 					<label className="block">
 						<span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-neutral-300">Tested By *</span>
 						<select
-							value={selectedTesterOption}
-							onChange={(event) => setSelectedTesterOption(event.target.value)}
+							value={selectedTesterType}
+							onChange={(event) => {
+								const nextValue = event.target.value as "member" | "external" | "";
+								setSelectedTesterType(nextValue);
+								if (nextValue !== "member") {
+									setSelectedMemberId("");
+								}
+							}}
 							className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
 						>
-							<option value="">Select department member</option>
-							{testerOptions.map((option) => (
-								<option key={option.id} value={option.id}>{option.label}</option>
-							))}
+							<option value="">Select tester type</option>
+							<option value="member">Department Member</option>
 							<option value="external">External Tester</option>
 						</select>
 					</label>
+
+					{isMemberTester ? (
+						<label className="block">
+							<span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-neutral-300">Department Member *</span>
+							<select
+								value={selectedMemberId}
+								onChange={(event) => setSelectedMemberId(event.target.value)}
+								className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
+							>
+								<option value="">Select department member</option>
+								{testerOptions.map((option) => (
+									<option key={option.id} value={option.id}>{option.label}</option>
+								))}
+							</select>
+						</label>
+					) : null}
 
 					{isExternalTester ? (
 						<>
@@ -121,7 +125,7 @@ export default function ScbaPackFlowTestModal({
 							</label>
 
 							<label className="block">
-								<span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-neutral-300">Company / Organization</span>
+								<span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-neutral-300">Company</span>
 								<input
 									value={externalTesterCompany}
 									onChange={(event) => setExternalTesterCompany(event.target.value)}
@@ -136,9 +140,13 @@ export default function ScbaPackFlowTestModal({
 						<span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-neutral-300">Result *</span>
 						<select
 							value={result}
-							onChange={(event) => setResult(event.target.value === "Fail" ? "Fail" : "Pass")}
+							onChange={(event) => {
+								const nextValue = event.target.value;
+								setResult(nextValue === "Pass" || nextValue === "Fail" ? nextValue : "");
+							}}
 							className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
 						>
+							<option value="">Select result</option>
 							<option value="Pass">Pass</option>
 							<option value="Fail">Fail</option>
 						</select>
@@ -165,18 +173,21 @@ export default function ScbaPackFlowTestModal({
 					</button>
 					<button
 						type="button"
-						disabled={isSaving}
-						onClick={() =>
+						disabled={isSaving || !result}
+						onClick={() => {
+							if (!result) {
+								return;
+							}
 							onSave({
 								testDate,
-								testerMode: selectedTesterOption === "external" ? "external" : "member",
-								memberId: selectedTesterOption === "external" ? "" : selectedTesterOption,
+								testerType: selectedTesterType === "external" ? "external" : "member",
+								memberId: selectedTesterType === "member" ? selectedMemberId : "",
 								externalTesterName,
 								externalTesterCompany,
 								result,
 								notes,
-							})
-						}
+							});
+						}}
 						className="rounded-lg border border-emerald-500/40 bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-70"
 					>
 						{isSaving ? "Saving..." : "Save Flow Test"}
@@ -184,5 +195,31 @@ export default function ScbaPackFlowTestModal({
 				</div>
 			</div>
 		</div>
+	);
+}
+
+export default function ScbaPackFlowTestModal({
+	isOpen,
+	packNumber,
+	testerOptions,
+	isSaving = false,
+	errorMessage = null,
+	onClose,
+	onSave,
+}: ScbaPackFlowTestModalProps) {
+	if (!isOpen) {
+		return null;
+	}
+
+	return (
+		<ScbaPackFlowTestModalContent
+			key={`${packNumber}-open`}
+			packNumber={packNumber}
+			testerOptions={testerOptions}
+			isSaving={isSaving}
+			errorMessage={errorMessage}
+			onClose={onClose}
+			onSave={onSave}
+		/>
 	);
 }

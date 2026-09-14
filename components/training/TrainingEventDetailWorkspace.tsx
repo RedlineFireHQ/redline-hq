@@ -92,7 +92,7 @@ type EventFormState = {
   emsNeedsReview: boolean;
   emsProviderName: string;
   topic: string;
-  trainingType: string;
+  trainingType: string[];
   date: string;
   startTime: string;
   endTime: string;
@@ -110,6 +110,23 @@ const MILITARY_TIME_OPTIONS = Array.from({ length: 24 * 4 }, (_, index) => {
   const minutes = totalMinutes % 60;
   return `${String(hours).padStart(2, "0")}${String(minutes).padStart(2, "0")}`;
 });
+
+const TRAINING_METHOD_DELIMITER = " | ";
+const TRAINING_METHOD_OPTIONS = [
+  "Classroom / Discussion",
+  "Hands-On",
+  "Demonstration",
+  "Drill / Scenario",
+  "Video / Online",
+  "Self-Reported Training",
+  "Other",
+] as const;
+
+function parseTrainingMethods(value: string | null | undefined): string[] {
+  return typeof value === "string"
+    ? value.split(TRAINING_METHOD_DELIMITER).map((method) => method.trim()).filter(Boolean)
+    : [];
+}
 
 function isoToDate(value: string) {
   const parsed = new Date(value);
@@ -205,7 +222,7 @@ function initialFormState(trainingEvent: TrainingEventRow): EventFormState {
     emsNeedsReview: trainingEvent.ems_needs_review === true,
     emsProviderName: trainingEvent.ems_provider_name ?? "",
     topic: trainingEvent.topic ?? "",
-    trainingType: trainingEvent.training_type ?? "",
+    trainingType: parseTrainingMethods(trainingEvent.training_type),
     date: isoToDate(trainingEvent.starts_at),
     startTime: isoToMilitary(trainingEvent.starts_at),
     endTime: isoToMilitary(trainingEvent.ends_at),
@@ -335,7 +352,7 @@ export default function TrainingEventDetailWorkspace({
 
     const title = formState.title.trim();
     const topic = formState.topic.trim();
-    const trainingType = formState.trainingType.trim();
+    const trainingType = formState.trainingType.join(TRAINING_METHOD_DELIMITER);
     const emsProviderName = formState.emsProviderName.trim();
     const instructorName = formState.instructorName.trim();
     const location = formState.location.trim();
@@ -877,12 +894,27 @@ export default function TrainingEventDetailWorkspace({
             </label>
 
             <label className="block">
-              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Training Type</span>
-              <input
-                value={formState.trainingType}
-                onChange={(event) => setFormState((current) => ({ ...current, trainingType: event.target.value }))}
-                className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
-              />
+              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Training Method</span>
+              <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-white/10 bg-[#1b1b1b] p-2">
+                {TRAINING_METHOD_OPTIONS.map((option) => (
+                  <label key={option} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-white hover:bg-white/[0.06]">
+                    <input
+                      type="checkbox"
+                      checked={formState.trainingType.includes(option)}
+                      onChange={(event) =>
+                        setFormState((current) => ({
+                          ...current,
+                          trainingType: event.target.checked
+                            ? [...current.trainingType, option]
+                            : current.trainingType.filter((method) => method !== option),
+                        }))
+                      }
+                      className="h-4 w-4 rounded border-white/20 bg-[#111111] accent-red-600"
+                    />
+                    <span>{option}</span>
+                  </label>
+                ))}
+              </div>
             </label>
 
             {isEmsCategoryName(categoryLookup.get(formState.categoryId)?.name) ? (

@@ -19,7 +19,7 @@ export type RopeFormValues = {
   locationType: "Apparatus" | "Station Storage" | "Other";
   apparatusId: string;
   otherLocation: string;
-  status: "Active" | "Inactive";
+  status: "Active" | "Inactive" | "Out of Service";
   notes: string;
   photoFile: File | null;
   removePhoto: boolean;
@@ -131,7 +131,7 @@ export default function RopeFormModal({
 
             <label className="block">
               <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">
-                Rope Identifier *
+                Asset ID *
               </span>
               <input
                 value={formValues.ropeIdentifier}
@@ -315,13 +315,19 @@ export default function RopeFormModal({
                 onChange={(event) =>
                   setFormValues((current) => ({
                     ...current,
-                    status: event.target.value === "Inactive" ? "Inactive" : "Active",
+                    status:
+                      mode === "edit" && event.target.value === "Out of Service"
+                        ? "Out of Service"
+                        : event.target.value === "Inactive"
+                          ? "Inactive"
+                          : "Active",
                   }))
                 }
                 className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
               >
                 <option value="Active">Active</option>
                 <option value="Inactive">Inactive</option>
+                {mode === "edit" ? <option value="Out of Service">Out of Service</option> : null}
               </select>
             </label>
 

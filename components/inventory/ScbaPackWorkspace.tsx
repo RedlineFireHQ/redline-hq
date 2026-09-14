@@ -47,7 +47,7 @@ type MemberRecord = {
 };
 
 type FlowTesterInput = {
-	testerMode: "member" | "external";
+	testerType: "member" | "external";
 	memberId: string;
 	externalTesterName: string;
 	externalTesterCompany: string;
@@ -110,7 +110,7 @@ function resolveTesterFromSelection(
 	values: FlowTesterInput,
 	testerOptions: ScbaPackFlowTestTesterOption[],
 ): { tester: string; error: string | null } {
-	if (values.testerMode === "member") {
+	if (values.testerType === "member") {
 		if (!values.memberId) {
 			return {
 				tester: "",
@@ -548,15 +548,7 @@ export default function ScbaPackWorkspace({
 	const activeRows = useMemo(() => derivedRows.filter((row) => row.status !== "Retired"), [derivedRows]);
 	const totalCount = derivedRows.length;
 	const dueCount = activeRows.filter((row) => row.flowState === "due" || row.flowState === "overdue").length;
-	const activeDeficiencyCount = activeRows.filter((row) => row.hasActiveDeficiency).length;
 	const outOfServiceCount = activeRows.filter((row) => row.displayStatus === "Out of Service").length;
-	const retiredCount = derivedRows.filter((row) => row.status === "Retired").length;
-	const currentTestCount = activeRows.filter(
-		(row) => row.flowState === "current" && !row.hasActiveDeficiency && row.displayStatus === "Ready",
-	).length;
-	const activePackCount = activeRows.length;
-	const readinessPercentage = activePackCount > 0 ? Math.round((currentTestCount / activePackCount) * 100) : 100;
-	const scoreWidth = `${Math.max(0, Math.min(100, readinessPercentage))}%`;
 
 	const openAddModal = () => {
 		setEditPackId(null);
@@ -842,35 +834,7 @@ export default function ScbaPackWorkspace({
 				return;
 			}
 
-			let nextStatus: "Ready" | "Flow Test Due" | "Out of Service" | "Retired" = editingRow.status === "Retired" ? "Retired" : "Ready";
-			if (editingRow.status === "Retired") {
-				nextStatus = "Retired";
-			} else if (result === "Fail") {
-				nextStatus = "Out of Service";
-			} else if (activeDeficiencyByPackId[editingRow.id] === true) {
-				nextStatus = "Out of Service";
-			} else {
-				nextStatus = "Ready";
-			}
-
-			const updateResult = await supabase
-				.from("scba_packs")
-				.update({
-					last_flow_test_date: testDate,
-					next_flow_test_due_date: nextFlowDueDate,
-					status: nextStatus,
-				})
-				.eq("id", editingRow.id)
-				.eq("department_id", departmentId)
-				.select("id")
-				.single();
-
 			setIsSavingFlowTest(false);
-
-			if (updateResult.error || !updateResult.data) {
-				setFlowTestErrorMessage(updateResult.error?.message || "Unable to update pack with flow test data.");
-				return;
-			}
 
 			await refreshPacks();
 			setIsFlowTestModalOpen(false);
@@ -949,37 +913,6 @@ export default function ScbaPackWorkspace({
 					return;
 				}
 
-				let nextStatus: "Ready" | "Flow Test Due" | "Out of Service" | "Retired" = row.status === "Retired" ? "Retired" : "Ready";
-				if (row.status === "Retired") {
-					nextStatus = "Retired";
-				} else if (result === "Fail") {
-					nextStatus = "Out of Service";
-				} else if (activeDeficiencyByPackId[row.id] === true) {
-					nextStatus = "Out of Service";
-				} else {
-					nextStatus = "Ready";
-				}
-
-				const updateResult = await supabase
-					.from("scba_packs")
-					.update({
-						last_flow_test_date: testDate,
-						next_flow_test_due_date: nextFlowDueDate,
-						status: nextStatus,
-					})
-					.eq("id", row.id)
-					.eq("department_id", departmentId)
-					.select("id")
-					.single();
-
-				if (updateResult.error || !updateResult.data) {
-					setIsSavingSessionFlowTest(false);
-					setSessionFlowTestErrorMessage(
-						updateResult.error?.message || `Unable to update Pack ${row.pack_number} after flow test save.`,
-					);
-					return;
-				}
-
 				processedCount += 1;
 			}
 
@@ -989,13 +922,6 @@ export default function ScbaPackWorkspace({
 			setToastMessage(`Session flow test saved for ${processedCount} pack${processedCount === 1 ? "" : "s"}.`);
 		})();
 	};
-
-	const topSummaryCards = [
-		{ label: "Total Active Packs", value: activePackCount, tone: "ready" as RowTone, filter: "All" },
-		{ label: "Flow Test Due/Overdue", value: dueCount, tone: "due" as RowTone, filter: "Flow Test Due" },
-		{ label: "Active Deficiencies", value: activeDeficiencyCount, tone: "out-of-service" as RowTone, filter: "Out of Service" },
-		{ label: "Retired", value: retiredCount, tone: "retired" as RowTone, filter: "Retired" },
-	];
 
 	return (
 		<div className="space-y-8">
@@ -1014,65 +940,49 @@ export default function ScbaPackWorkspace({
 				</div>
 			) : null}
 
-			<div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-				<div>
-					<p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">Inventory</p>
-					<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">SCBA Packs</h1>
-					<p className="mt-3 max-w-2xl text-lg text-neutral-400">Manage SCBA pack inventory, annual flow testing, and deficiency readiness.</p>
-					{departmentName ? <p className="mt-2 text-sm text-neutral-500">Department: {departmentName}</p> : null}
-				</div>
-
-				<div className="flex flex-wrap gap-2">
-					<button
-						type="button"
-						onClick={() => setIsSessionFlowTestModalOpen(true)}
-						className="inline-flex rounded-lg border border-emerald-500/30 bg-emerald-900/20 px-4 py-3 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-900/30"
-					>
-						Session Testing
-					</button>
-					<button
-						type="button"
-						onClick={openAddModal}
-						className="inline-flex rounded-lg border border-red-500/40 bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-700"
-					>
-						+ Add Pack
-					</button>
-				</div>
-			</div>
-
-			<section className="rounded-2xl border border-red-900 bg-[#242424] p-5 lg:col-span-2">
-				<div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+			<section className="rounded-2xl border border-red-900 bg-[#242424] p-5">
+				<div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
 					<div className="min-w-0 flex-1">
-						<h2 className="text-2xl font-bold text-white">Pack Readiness</h2>
-						<p className="mt-2 max-w-3xl text-sm text-neutral-400">Readiness is based on active packs that are current on annual flow testing and do not have active deficiencies.</p>
-
-						<div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-							{topSummaryCards.map((card) => {
-								const active = statusFilter === card.filter;
-								return (
-									<button
-										key={card.label}
-										type="button"
-										onClick={() => setStatusFilter(card.filter)}
-										className={summaryCardClasses(active, card.tone)}
-									>
-										<p className="text-xs uppercase tracking-[0.22em] text-neutral-500">{card.label}</p>
-										<p className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">{card.value}</p>
-									</button>
-								);
-							})}
+						<p className="text-xs font-semibold uppercase tracking-[0.28em] text-red-500">Inventory Module</p>
+						<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">SCBA Packs</h1>
+						<p className="mt-2 max-w-3xl text-sm text-neutral-400">
+							Manage SCBA pack inventory, annual flow testing, and deficiency readiness.
+						</p>
+						<div className="mt-3 flex flex-wrap items-center gap-2">
+							<button
+								type="button"
+								onClick={openAddModal}
+								className="inline-flex rounded-lg border border-red-500/40 bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700"
+							>
+								+ Add Pack
+							</button>
+							<button
+								type="button"
+								onClick={() => setIsSessionFlowTestModalOpen(true)}
+								className="inline-flex rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+							>
+								Flow Testing
+							</button>
 						</div>
 					</div>
 
-					<div className="w-full max-w-[220px] rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3">
-						<p className="text-xs uppercase tracking-[0.24em] text-neutral-500">SCBA Pack Readiness</p>
-						<p className="mt-1 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">{readinessPercentage}%</p>
-						<p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-red-400">{currentTestCount} Current / {activePackCount} Active</p>
-						<p className="mt-3 text-sm text-neutral-400">Retired packs are excluded from active readiness.</p>
-
-						<div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-neutral-800">
-							<div className="h-full rounded-full bg-red-500 transition-all" style={{ width: scoreWidth }} />
-						</div>
+					<div className="flex w-full max-w-[480px] shrink-0 flex-col gap-3 sm:flex-row">
+						<button
+							type="button"
+							onClick={() => setStatusFilter("Flow Test Due")}
+							className={`${summaryCardClasses(false, "due")} w-full shrink-0 sm:w-1/2`}
+						>
+							<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Flow Tests Due</p>
+							<p className="mt-2 text-2xl font-black text-white">{dueCount}</p>
+						</button>
+						<button
+							type="button"
+							onClick={() => setStatusFilter("Out of Service")}
+							className={`${summaryCardClasses(false, "out-of-service")} w-full shrink-0 sm:w-1/2`}
+						>
+							<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Out of Service</p>
+							<p className="mt-2 text-2xl font-black text-white">{outOfServiceCount}</p>
+						</button>
 					</div>
 				</div>
 			</section>
@@ -1106,21 +1016,20 @@ export default function ScbaPackWorkspace({
 			</section>
 
 			<section className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-6">
-				<div className="overflow-x-auto">
+				<div className="max-h-[420px] overflow-y-auto overflow-x-auto">
 					<table className="min-w-full border-separate border-spacing-0 text-left">
 						<thead>
 							<tr>
 								{[
 									"Pack Number",
-									"Manufacturer / Model",
-									"Serial Number",
+									"Manufacturer",
 									"In-Service Date",
 									"Last Flow Test",
 									"Next Flow Test Due",
 									"Status",
 									"Actions",
 								].map((label) => (
-									<th key={label} scope="col" className="border-b border-white/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">
+									<th key={label} scope="col" className="border-b border-white/10 bg-[#2E2E2E] px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">
 										{label}
 									</th>
 								))}
@@ -1130,11 +1039,11 @@ export default function ScbaPackWorkspace({
 						<tbody>
 							{derivedRows.length === 0 ? (
 								<tr>
-									<td colSpan={8} className="border-b border-white/5 px-4 py-10">
+									<td colSpan={7} className="border-b border-white/5 px-4 py-10">
 										<div className="flex flex-col items-start gap-4 text-left sm:items-center sm:text-center">
 											<div>
 												<p className="text-lg font-bold text-white">No SCBA Packs</p>
-												<p className="mt-2 max-w-2xl text-sm text-neutral-400">Add your department's SCBA packs to track annual flow tests and deficiencies.</p>
+												<p className="mt-2 max-w-2xl text-sm text-neutral-400">Add your department&apos;s SCBA packs to track annual flow tests and deficiencies.</p>
 											</div>
 
 											<button
@@ -1149,7 +1058,7 @@ export default function ScbaPackWorkspace({
 								</tr>
 							) : filteredRows.length === 0 ? (
 								<tr>
-									<td colSpan={8} className="border-b border-white/5 px-4 py-10 text-center text-sm text-neutral-400">
+									<td colSpan={7} className="border-b border-white/5 px-4 py-10 text-center text-sm text-neutral-400">
 										No packs currently match the selected filters.
 									</td>
 								</tr>
@@ -1185,10 +1094,9 @@ export default function ScbaPackWorkspace({
 											</td>
 
 											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">
-												{[row.manufacturer, row.model].filter(Boolean).join(" / ") || "-"}
+												{row.manufacturer || "-"}
 											</td>
-											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">{row.serial_number ?? "-"}</td>
-											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">{formatDate(row.in_service_date)}</td>
+													<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">{formatDate(row.in_service_date)}</td>
 											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">{formatDate(row.last_flow_test_date)}</td>
 											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">
 												{row.flowState === "overdue" ? (
@@ -1209,55 +1117,55 @@ export default function ScbaPackWorkspace({
 												</span>
 											</td>
 											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">
-												<div className="flex flex-wrap gap-2">
-													<button
-														type="button"
-														onClick={(event) => {
-															event.stopPropagation();
-															openEditModal(row.id);
-														}}
-														className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
-													>
-														Edit
-													</button>
+																<div className="flex flex-wrap items-center gap-1.5">
+																	<button
+																		type="button"
+																		onClick={(event) => {
+																			event.stopPropagation();
+																			openEditModal(row.id);
+																		}}
+																		className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800 whitespace-nowrap"
+																	>
+																		Edit
+																	</button>
 
-													<button
-														type="button"
-														onClick={(event) => {
-															event.stopPropagation();
-															setEditPackId(row.id);
-															setIsFlowTestModalOpen(true);
-														}}
-														className="rounded-lg border border-emerald-500/30 bg-emerald-900/20 px-3 py-2 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-900/30"
-													>
-														Record Flow Test
-													</button>
+																	<button
+																		type="button"
+																		onClick={(event) => {
+																			event.stopPropagation();
+																			setEditPackId(row.id);
+																			setIsFlowTestModalOpen(true);
+																		}}
+																		className="rounded-lg border border-emerald-500/30 bg-emerald-900/20 px-3 py-1.5 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-900/30 whitespace-nowrap"
+																	>
+																		Flow Test
+																	</button>
 
-													<button
-														type="button"
-														onClick={(event) => {
-															event.stopPropagation();
-															viewFlowTestHistoryForRow(row);
-														}}
-														className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
-													>
-														View Flow Test History
-													</button>
+																	<button
+																		type="button"
+																		onClick={(event) => {
+																			event.stopPropagation();
+																			viewFlowTestHistoryForRow(row);
+																		}}
+																		className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800 whitespace-nowrap"
+																	>
+																		Flow Test History
+																	</button>
 
-													{row.status !== "Retired" ? (
-														<button
-															type="button"
-															onClick={(event) => {
-																event.stopPropagation();
-																reportDeficiencyForRow(row);
-															}}
-															className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
-														>
-															Report Deficiency
-														</button>
-													) : null}
-												</div>
-											</td>
+																	{row.status !== "Retired" ? (
+																		<button
+																			type="button"
+																			onClick={(event) => {
+																				event.stopPropagation();
+																				reportDeficiencyForRow(row);
+																			}}
+																			className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800 whitespace-nowrap"
+																		>
+																			Report Deficiency
+																		</button>
+																	) : null}
+																</div>
+															</td>
 										</tr>
 									);
 								})

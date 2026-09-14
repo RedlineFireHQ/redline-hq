@@ -55,6 +55,12 @@ export default function InspectionHelpersPanel({
     setPendingAction({ memberId: member.memberId, action: "add" });
     setActionError(null);
 
+    if (!currentMemberId || !departmentId || !activeCheckSessionId) {
+      setActionError("Unable to identify your member record for this check. Please refresh and try again.");
+      setPendingAction(null);
+      return;
+    }
+
     const { error } = await supabase
       .from("apparatus_check_session_members")
       .upsert(
@@ -88,6 +94,12 @@ export default function InspectionHelpersPanel({
   async function handleRemove(helper: HelperParticipant) {
     setPendingAction({ memberId: helper.memberId, action: "remove" });
     setActionError(null);
+
+    if (!departmentId || !activeCheckSessionId) {
+      setActionError("Unable to identify this check session. Please refresh and try again.");
+      setPendingAction(null);
+      return;
+    }
 
     const { error } = await supabase
       .from("apparatus_check_session_members")

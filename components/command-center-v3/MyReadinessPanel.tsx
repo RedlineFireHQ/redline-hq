@@ -25,6 +25,8 @@ import {
   type ReadinessFactor,
   type ReadinessScoreState,
   type RequirementInput,
+  type TrainingAssignmentInput,
+  type TrainingAssignmentMemberInput,
 } from "@/lib/readiness/member-readiness";
 import {
   buildCanonicalMemberCertificationRows,
@@ -340,12 +342,16 @@ function calculateMyReadiness(input: {
   memberStartDate: string | null;
   assignedDeficiencies: DeficiencyAssignedRow[];
   personalAssignmentStartedAtByDeficiencyId: Map<string, string>;
+  trainingAssignments: TrainingAssignmentInput[];
+  assignmentMembers: TrainingAssignmentMemberInput[];
 }): MyReadinessData {
   const readinessScore = buildMemberReadinessScore({
     requirementRows: input.requirements,
     departmentHours: input.departmentHours,
     categoryHours: input.categoryHours,
     categoryNameById: input.categoryNameById,
+    trainingAssignments: input.trainingAssignments,
+    assignmentMembers: input.assignmentMembers,
     certificationStatuses: input.certifications.map((row) => ({
       certificationId: row.certification_id,
       certificationName: row.certification_name,
@@ -489,6 +495,8 @@ export default function MyReadinessPanel() {
   const [assignedDeficiencies, setAssignedDeficiencies] = useState<DeficiencyAssignedRow[]>([]);
   const [personalAssignmentStartedAtByDeficiencyId, setPersonalAssignmentStartedAtByDeficiencyId] = useState<Map<string, string>>(new Map());
   const [memberStartDate, setMemberStartDate] = useState<string | null>(null);
+  const [trainingAssignmentsForScoring, setTrainingAssignmentsForScoring] = useState<TrainingAssignmentInput[]>([]);
+  const [assignmentMembersForScoring, setAssignmentMembersForScoring] = useState<TrainingAssignmentMemberInput[]>([]);
 
   useEffect(() => {
     let isMounted = true;
@@ -508,6 +516,8 @@ export default function MyReadinessPanel() {
           setAssignedDeficiencies([]);
           setPersonalAssignmentStartedAtByDeficiencyId(new Map());
           setMemberStartDate(null);
+          setTrainingAssignmentsForScoring([]);
+          setAssignmentMembersForScoring([]);
           setIsLoading(false);
           setLoadError("Sign in to view your personal readiness.");
         }
@@ -587,13 +597,12 @@ export default function MyReadinessPanel() {
           .eq("status", "approved"),
         supabase
           .from("training_assignment_members")
-          .select("training_assignment_id, completion_status, hours_earned")
+          .select("id, training_assignment_id, completion_status, due_at, completed_at, hours_earned")
           .eq("department_id", departmentId)
-          .eq("member_id", memberId)
-          .eq("completion_status", "approved"),
+          .eq("member_id", memberId),
         supabase
           .from("training_assignments")
-          .select("id, category_id, hours_credit, status")
+          .select("id, title, category_id, due_at, hours_credit, is_required, review_required, status")
           .eq("department_id", departmentId),
         supabase
           .from("training_requirements")
@@ -660,6 +669,8 @@ export default function MyReadinessPanel() {
         setAssignedDeficiencies([]);
         setPersonalAssignmentStartedAtByDeficiencyId(new Map());
         setMemberStartDate(null);
+        setTrainingAssignmentsForScoring([]);
+        setAssignmentMembersForScoring([]);
         setIsLoading(false);
         return;
       }
@@ -795,6 +806,7 @@ export default function MyReadinessPanel() {
         })),
         includeIowaAuthority: activeIowaProfile !== null,
         includeNremtAuthority: activeNremtProfile?.maintain_track === true,
+        includeNonExpiringRoleRequirements: true,
         certificationNameById,
       });
 
@@ -823,13 +835,48 @@ export default function MyReadinessPanel() {
         category_id: typeof row.category_id === "string" ? row.category_id : null,
         hours: typeof row.hours === "number" || typeof row.hours === "string" ? row.hours : null,
       }));
-      const approvedAssignmentMembers: TrainingAssignmentMemberRow[] = (assignmentMembersData ?? []).map((row) => ({
+      // Raw, unfiltered rows passed to buildMemberReadinessScore so it can independently
+      // score required assignments (matching /my-readiness) — completion_status is NOT
+      // pre-filtered here.
+      const assignmentMemberRows: TrainingAssignmentMemberInput[] = (assignmentMembersData ?? []).map((row) => ({
+        id: typeof row.id === "string" ? row.id : String(row.id ?? ""),
         training_assignment_id: typeof row.training_assignment_id === "string" ? row.training_assignment_id : "",
         completion_status: typeof row.completion_status === "string" ? row.completion_status : "",
+        due_at: typeof row.due_at === "string" ? row.due_at : null,
+        completed_at: typeof row.completed_at === "string" ? row.completed_at : null,
         hours_earned: typeof row.hours_earned === "number" || typeof row.hours_earned === "string" ? row.hours_earned : null,
       }));
+      const trainingAssignmentRows: TrainingAssignmentInput[] = ((assignmentsData ?? []) as Array<{
+        id: string;
+        title?: string | null;
+        category_id: string | null;
+        due_at?: string | null;
+        hours_credit: number | string | null;
+        is_required?: boolean | null;
+        review_required?: boolean | null;
+        status: string;
+      }>).map((row) => ({
+        id: row.id,
+        title: typeof row.title === "string" ? row.title : "Assigned Training",
+        category_id: row.category_id,
+        due_at: typeof row.due_at === "string" ? row.due_at : null,
+        hours_credit: row.hours_credit,
+        is_required: row.is_required === true,
+        review_required: row.review_required === true,
+        status: row.status,
+      }));
+
+      // Only approved assignment-member hours contribute to completed training hours,
+      // matching /my-readiness's approvedHomeworkMembers filter.
+      const approvedAssignmentMembers: TrainingAssignmentMemberRow[] = assignmentMemberRows
+        .filter((row) => row.completion_status === "approved")
+        .map((row) => ({
+          training_assignment_id: row.training_assignment_id,
+          completion_status: row.completion_status,
+          hours_earned: row.hours_earned,
+        }));
       const assignmentsById = new Map(
-        ((assignmentsData ?? []) as Array<{ id: string; category_id: string | null; hours_credit: number | string | null; status: string }>).map((row) => [
+        trainingAssignmentRows.map((row) => [
           row.id,
           {
             id: row.id,
@@ -869,6 +916,8 @@ export default function MyReadinessPanel() {
           setCategoryNameById(new Map());
           setAssignedDeficiencies([]);
           setPersonalAssignmentStartedAtByDeficiencyId(new Map());
+          setTrainingAssignmentsForScoring([]);
+          setAssignmentMembersForScoring([]);
           setIsLoading(false);
           return;
         }
@@ -909,6 +958,8 @@ export default function MyReadinessPanel() {
           setCategoryNameById(new Map());
           setAssignedDeficiencies([]);
           setPersonalAssignmentStartedAtByDeficiencyId(new Map());
+          setTrainingAssignmentsForScoring([]);
+          setAssignmentMembersForScoring([]);
           setIsLoading(false);
           return;
         }
@@ -951,6 +1002,8 @@ export default function MyReadinessPanel() {
           setCategoryNameById(new Map());
           setAssignedDeficiencies([]);
           setPersonalAssignmentStartedAtByDeficiencyId(new Map());
+          setTrainingAssignmentsForScoring([]);
+          setAssignmentMembersForScoring([]);
           setIsLoading(false);
           return;
         }
@@ -1028,6 +1081,8 @@ export default function MyReadinessPanel() {
       setAssignedDeficiencies(assignedDeficiencyRows);
       setPersonalAssignmentStartedAtByDeficiencyId(personalAssignedAtByDeficiencyId);
       setMemberStartDate(resolvedMemberStartDate);
+      setTrainingAssignmentsForScoring(trainingAssignmentRows);
+      setAssignmentMembersForScoring(assignmentMemberRows);
       setLoadError(null);
       setIsLoading(false);
     }
@@ -1073,6 +1128,8 @@ export default function MyReadinessPanel() {
       memberStartDate,
       assignedDeficiencies,
       personalAssignmentStartedAtByDeficiencyId,
+      trainingAssignments: trainingAssignmentsForScoring,
+      assignmentMembers: assignmentMembersForScoring,
     });
   }, [
     approvedSelfSubmittedHours,
@@ -1089,6 +1146,8 @@ export default function MyReadinessPanel() {
     records,
     requirements,
     scoredCertificationStatuses,
+    trainingAssignmentsForScoring,
+    assignmentMembersForScoring,
   ]);
 
   return (

@@ -1,5 +1,5 @@
 import { getCurrentMember } from "@/lib/current-member";
-import { hasDepartmentPermission } from "@/lib/member-permissions";
+import { hasInventoryPermission } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 type UploadPayload = {
@@ -123,10 +123,12 @@ function normalizeMemberName(value: unknown): string | null {
 async function uploadPpePhoto({
   supabase,
   departmentId,
+  parentId,
   upload,
 }: {
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
   departmentId: string;
+  parentId: string;
   upload: UploadPayload;
 }): Promise<string> {
   if (!upload.mimeType.toLowerCase().startsWith("image/")) {
@@ -134,7 +136,7 @@ async function uploadPpePhoto({
   }
 
   const sanitizedFileName = upload.fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const storagePath = `${departmentId}/ppe/${Date.now()}-${sanitizedFileName}`;
+  const storagePath = `${departmentId}/inventory/ppe/${parentId}/${Date.now()}-${sanitizedFileName}`;
   const binary = Buffer.from(upload.base64Data, "base64");
 
   const { error } = await supabase.storage
@@ -243,11 +245,11 @@ export async function POST(request: Request) {
       return jsonResponse({ ok: false, error: "Unauthorized" }, 401);
     }
 
-    const canManageInventory = await hasDepartmentPermission(
+    const canManageInventory = await hasInventoryPermission(
       supabase,
       currentMember.departmentId,
       currentMember.role,
-      "inventory_management",
+      "ppe_management",
     );
 
     if (!canManageInventory) {
@@ -316,18 +318,12 @@ export async function POST(request: Request) {
       location = STATION_SUPPLY_LOCATION;
     }
 
+    const parentId = crypto.randomUUID();
     let photoPath: string | null = null;
-    if (photoUpload) {
-      photoPath = await uploadPpePhoto({
-        supabase,
-        departmentId: currentMember.departmentId,
-        upload: photoUpload,
-      });
-    }
-
-    const { data, error } = await supabase
+    const { data: createdItem, error: createError } = await supabase
       .from("ppe_items")
       .insert({
+        id: parentId,
         department_id: currentMember.departmentId,
         item_name: itemName,
         assigned_member_id: assignedMemberId,
@@ -342,28 +338,41 @@ export async function POST(request: Request) {
         location,
         status,
         notes,
-        photo_path: photoPath,
+        photo_path: null,
       })
       .select(
         "id, item_name, assigned_member_id, manufacturer, model, serial_number, asset_number, size, date_manufactured, placed_in_service_date, expiration_date, location, status, notes, photo_path, created_at, updated_at, assigned_member:assigned_member_id(first_name, last_name)",
       )
       .single();
 
-    if (error || !data) {
-      if (photoPath) {
-        await supabase.storage.from("department-documents").remove([photoPath]);
-      }
-
-      return jsonResponse({ ok: false, error: error?.message || "Unable to create PPE item." }, 400);
+    if (createError || !createdItem) {
+      return jsonResponse({ ok: false, error: createError?.message || "Unable to create PPE item." }, 400);
     }
 
-    return jsonResponse({
-      ok: true,
-      item: {
-        ...data,
-        assigned_member_name: normalizeMemberName(data.assigned_member),
-      },
-    });
+    if (!photoUpload) {
+      return jsonResponse({ ok: true, item: { ...createdItem, assigned_member_name: normalizeMemberName(createdItem.assigned_member) } });
+    }
+
+    try {
+      photoPath = await uploadPpePhoto({ supabase, departmentId: currentMember.departmentId, parentId, upload: photoUpload });
+      const { data, error } = await supabase
+        .from("ppe_items")
+        .update({ photo_path: photoPath })
+        .eq("id", parentId)
+        .eq("department_id", currentMember.departmentId)
+        .select("id, item_name, assigned_member_id, manufacturer, model, serial_number, asset_number, size, date_manufactured, placed_in_service_date, expiration_date, location, status, notes, photo_path, created_at, updated_at, assigned_member:assigned_member_id(first_name, last_name)")
+        .single();
+
+      if (error || !data) {
+        throw new Error(error?.message || "Unable to attach PPE photo.");
+      }
+
+      return jsonResponse({ ok: true, item: { ...data, assigned_member_name: normalizeMemberName(data.assigned_member) } });
+    } catch (error) {
+      await supabase.from("ppe_items").delete().eq("id", parentId).eq("department_id", currentMember.departmentId);
+      if (photoPath) await supabase.storage.from("department-documents").remove([photoPath]);
+      throw error;
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to create PPE item.";
     return jsonResponse({ ok: false, error: message }, 400);

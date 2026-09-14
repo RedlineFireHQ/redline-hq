@@ -1,42 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Bell, ChevronDown } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { supabase } from "@/lib/supabase";
 
-type DeficiencyAlertRow = {
+type NotificationRow = {
   id: string;
-  deficiency_number: string | null;
-  description: string | null;
-  reported_at: string | null;
-  status_info:
-    | { name: string | null; active: boolean | null }
-    | Array<{ name: string | null; active: boolean | null }>
-    | null;
-  priority_info:
-    | { name: string | null }
-    | Array<{ name: string | null }>
-    | null;
-  apparatus: { name: string | null } | Array<{ name: string | null }> | null;
-};
-
-type HeaderAlert = {
-  id: string;
+  type: string;
   title: string;
-  detail: string;
-  href: string;
-  reportedAt: string | null;
+  body: string | null;
+  href: string | null;
+  read_at: string | null;
+  created_at: string;
 };
-
-function normalizeRelation<T extends Record<string, unknown>>(value: T | T[] | null | undefined) {
-  if (Array.isArray(value)) {
-    return value[0] ?? null;
-  }
-
-  return value ?? null;
-}
 
 function formatAlertTime(value: string | null) {
   if (!value) {
@@ -62,13 +40,13 @@ interface HeaderProps {
 
 export default function Header({ translucent = false }: HeaderProps) {
   const router = useRouter();
-  const { user, member, signOut } = useAuth();
+  const { user, member, signOut, isLoading } = useAuth();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isAlertsOpen, setIsAlertsOpen] = useState(false);
   const [isLoadingAlerts, setIsLoadingAlerts] = useState(false);
   const [alertsError, setAlertsError] = useState<string | null>(null);
-  const [alerts, setAlerts] = useState<HeaderAlert[]>([]);
+  const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const alertsRef = useRef<HTMLDivElement | null>(null);
 
   const now = new Date();
@@ -82,10 +60,12 @@ export default function Header({ translucent = false }: HeaderProps) {
       ? metadata.full_name.trim()
       : fullNameFromParts;
 
-  const fallbackEmail = user?.email?.trim() || "Unknown User";
+  const fallbackEmail = isLoading ? "Loading user..." : user?.email?.trim() || "Unknown User";
   const userDisplayName = fullName || fallbackEmail;
   const userRole =
-    typeof member?.role === "string" && member.role.trim()
+    isLoading
+      ? "Loading..."
+      : typeof member?.role === "string" && member.role.trim()
       ? member.role.trim()
       : "Firefighter";
   const initialsSource = fullName || fallbackEmail.split("@")[0] || "User";
@@ -96,72 +76,38 @@ export default function Header({ translucent = false }: HeaderProps) {
     .map((segment) => segment.charAt(0).toUpperCase())
     .join("");
 
-  const alertCount = alerts.length;
-  const hasAlerts = alertCount > 0;
+  const unreadCount = notifications.filter((notification) => !notification.read_at).length;
+  const hasAlerts = unreadCount > 0;
 
-  const loadAlerts = useMemo(
-    () =>
-      async function loadAlertsInternal() {
-        const departmentId = member?.department_id;
+  const loadAlerts = useCallback(async () => {
+    const memberId = typeof member?.id === "string" ? member.id : "";
 
-        if (!departmentId) {
-          setAlerts([]);
-          setAlertsError(null);
-          return;
-        }
+    if (!memberId) {
+      setNotifications([]);
+      setAlertsError(null);
+      return;
+    }
 
-        setIsLoadingAlerts(true);
-        setAlertsError(null);
+    setIsLoadingAlerts(true);
+    setAlertsError(null);
 
-        const { data, error } = await supabase
-          .from("deficiencies")
-          .select(
-            "id, deficiency_number, description, reported_at, status_info:deficiency_statuses!fk_deficiencies_status(name, active), priority_info:deficiency_priorities!fk_deficiencies_priority(name), apparatus:apparatus!fk_deficiencies_apparatus(name)",
-          )
-          .eq("department_id", departmentId)
-          .order("reported_at", { ascending: false })
-          .limit(30);
+    const { data, error } = await supabase
+      .from("notifications")
+      .select("id, type, title, body, href, read_at, created_at")
+      .eq("member_id", memberId)
+      .order("created_at", { ascending: false })
+      .limit(30);
 
-        if (error) {
-          setAlerts([]);
-          setAlertsError(error.message || "Unable to load alerts.");
-          setIsLoadingAlerts(false);
-          return;
-        }
+    if (error) {
+      setNotifications([]);
+      setAlertsError(error.message || "Unable to load notifications.");
+      setIsLoadingAlerts(false);
+      return;
+    }
 
-        const mapped = ((data ?? []) as DeficiencyAlertRow[])
-          .filter((row) => {
-            const status = normalizeRelation(row.status_info);
-            const statusName = typeof status?.name === "string" ? status.name.toLowerCase() : "";
-            const isActiveStatus = status?.active === true;
-            const isResolvedByName = statusName === "resolved" || statusName === "closed";
-            return isActiveStatus || (Boolean(statusName) && !isResolvedByName);
-          })
-          .slice(0, 8)
-          .map((row) => {
-            const priority = normalizeRelation(row.priority_info);
-            const apparatus = normalizeRelation(row.apparatus);
-            const deficiencyNumber = row.deficiency_number?.trim();
-            const priorityName = typeof priority?.name === "string" ? priority.name.trim() : "";
-            const apparatusName = typeof apparatus?.name === "string" ? apparatus.name.trim() : "";
-            const description = row.description?.trim() || "Deficiency requires attention.";
-
-            const detailParts = [apparatusName, priorityName].filter(Boolean);
-
-            return {
-              id: row.id,
-              title: deficiencyNumber ? `Deficiency ${deficiencyNumber}` : "Open Deficiency",
-              detail: detailParts.length > 0 ? `${detailParts.join(" • ")} • ${description}` : description,
-              href: `/operations/deficiencies/${row.id}`,
-              reportedAt: row.reported_at,
-            } satisfies HeaderAlert;
-          });
-
-        setAlerts(mapped);
-        setIsLoadingAlerts(false);
-      },
-    [member?.department_id],
-  );
+    setNotifications((data ?? []) as NotificationRow[]);
+    setIsLoadingAlerts(false);
+  }, [member]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -172,6 +118,56 @@ export default function Header({ translucent = false }: HeaderProps) {
       window.clearTimeout(timeoutId);
     };
   }, [loadAlerts]);
+
+  async function markNotificationRead(notificationId: string) {
+    const readAt = new Date().toISOString();
+
+    setNotifications((current) =>
+      current.map((notification) =>
+        notification.id === notificationId ? { ...notification, read_at: readAt } : notification,
+      ),
+    );
+
+    await supabase
+      .from("notifications")
+      .update({ read_at: readAt })
+      .eq("id", notificationId)
+      .is("read_at", null);
+  }
+
+  async function markAllNotificationsRead() {
+    const unreadIds = notifications.filter((notification) => !notification.read_at).map((notification) => notification.id);
+
+    if (unreadIds.length === 0) {
+      return;
+    }
+
+    const readAt = new Date().toISOString();
+
+    setNotifications((current) =>
+      current.map((notification) =>
+        notification.read_at ? notification : { ...notification, read_at: readAt },
+      ),
+    );
+
+    await supabase
+      .from("notifications")
+      .update({ read_at: readAt })
+      .in("id", unreadIds)
+      .is("read_at", null);
+  }
+
+  function handleOpenNotification(notification: NotificationRow) {
+    if (!notification.read_at) {
+      void markNotificationRead(notification.id);
+    }
+
+    setIsAlertsOpen(false);
+
+    if (notification.href) {
+      router.push(notification.href);
+    }
+  }
 
   useEffect(() => {
     if (!isAlertsOpen) {
@@ -258,14 +254,20 @@ export default function Header({ translucent = false }: HeaderProps) {
               aria-haspopup="menu"
               aria-expanded={isAlertsOpen}
               aria-label="Open alerts"
-              onClick={() => setIsAlertsOpen((currentValue) => !currentValue)}
+              onClick={() => {
+                const nextOpen = !isAlertsOpen;
+                setIsAlertsOpen(nextOpen);
+                if (nextOpen) {
+                  void loadAlerts();
+                }
+              }}
               className="relative flex h-14 w-14 items-center justify-center rounded-[16px] border border-[rgba(255,255,255,0.08)] bg-[#111111] transition hover:border-[#EF2B2D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#EF2B2D]/50"
             >
               <Bell className="h-5 w-5 text-white" />
 
               {hasAlerts ? (
                 <span className="absolute right-2 top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#EF2B2D] px-1 text-[10px] font-bold text-white">
-                  {alertCount > 99 ? "99+" : alertCount}
+                  {unreadCount > 99 ? "99+" : unreadCount}
                 </span>
               ) : null}
             </button>
@@ -273,48 +275,64 @@ export default function Header({ translucent = false }: HeaderProps) {
             {isAlertsOpen ? (
               <div className="absolute right-0 top-[62px] z-50 w-[360px] overflow-hidden rounded-[16px] border border-[rgba(255,255,255,0.1)] bg-[#111111] shadow-[0_18px_40px_rgba(0,0,0,0.45)]">
                 <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-                  <p className="text-sm font-semibold text-white">Alerts</p>
-                  {hasAlerts ? <p className="text-xs font-medium text-[#A1A1AA]">{alertCount} active</p> : null}
+                  <p className="text-sm font-semibold text-white">Notifications</p>
+                  {hasAlerts ? (
+                    <button
+                      type="button"
+                      onClick={() => void markAllNotificationsRead()}
+                      className="text-xs font-medium text-[#A1A1AA] transition hover:text-white"
+                    >
+                      Mark all as read
+                    </button>
+                  ) : null}
                 </div>
 
                 {isLoadingAlerts ? (
-                  <div className="px-4 py-5 text-sm text-[#A1A1AA]">Loading alerts...</div>
+                  <div className="px-4 py-5 text-sm text-[#A1A1AA]">Loading notifications...</div>
                 ) : alertsError ? (
-                  <div className="px-4 py-5 text-sm text-red-300">Unable to load alerts right now.</div>
-                ) : hasAlerts ? (
+                  <div className="px-4 py-5 text-sm text-red-300">Unable to load notifications right now.</div>
+                ) : notifications.length > 0 ? (
                   <div className="max-h-[320px] overflow-y-auto">
-                    {alerts.map((alert) => (
-                      <button
-                        key={alert.id}
-                        type="button"
-                        onClick={() => {
-                          setIsAlertsOpen(false);
-                          router.push(alert.href);
-                        }}
-                        className="w-full border-b border-white/10 px-4 py-3 text-left transition hover:bg-white/5"
-                      >
-                        <p className="truncate text-sm font-semibold text-white">{alert.title}</p>
-                        <p className="mt-1 line-clamp-2 text-xs text-[#A1A1AA]">{alert.detail}</p>
-                        <p className="mt-1 text-[11px] text-[#737373]">{formatAlertTime(alert.reportedAt)}</p>
-                      </button>
-                    ))}
+                    {notifications.map((notification) => {
+                      const isUnread = !notification.read_at;
+
+                      return (
+                        <button
+                          key={notification.id}
+                          type="button"
+                          onClick={() => handleOpenNotification(notification)}
+                          className={`flex w-full items-start gap-3 border-b border-white/10 px-4 py-3 text-left transition hover:bg-white/5 ${
+                            isUnread ? "bg-white/[0.03]" : ""
+                          }`}
+                        >
+                          <span
+                            className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                              isUnread ? "bg-[#EF2B2D]" : "bg-transparent"
+                            }`}
+                            aria-hidden="true"
+                          />
+                          <span className="min-w-0">
+                            <p
+                              className={`truncate text-sm ${
+                                isUnread ? "font-semibold text-white" : "font-medium text-[#A1A1AA]"
+                              }`}
+                            >
+                              {notification.title}
+                            </p>
+                            {notification.body ? (
+                              <p className="mt-1 line-clamp-2 text-xs text-[#A1A1AA]">{notification.body}</p>
+                            ) : null}
+                            <p className="mt-1 text-[11px] text-[#737373]">
+                              {formatAlertTime(notification.created_at)}
+                            </p>
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 ) : (
-                  <div className="px-4 py-6 text-sm text-[#A1A1AA]">No new alerts.</div>
+                  <div className="px-4 py-6 text-sm text-[#A1A1AA]">You&apos;re all caught up.</div>
                 )}
-
-                <div className="border-t border-white/10 px-4 py-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsAlertsOpen(false);
-                      router.push("/deficiencies");
-                    }}
-                    className="text-sm font-semibold text-white transition hover:text-[#EF2B2D]"
-                  >
-                    View all alerts
-                  </button>
-                </div>
               </div>
             ) : null}
           </div>
@@ -352,13 +370,35 @@ export default function Header({ translucent = false }: HeaderProps) {
 
             {isUserMenuOpen ? (
               <div className="absolute right-0 top-[60px] z-50 w-[240px] rounded-[16px] border border-[rgba(255,255,255,0.08)] bg-[#111111] p-2">
+                {member?.id ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      router.push(`/personnel/${member.id}`);
+                    }}
+                    className="w-full cursor-pointer rounded-[12px] px-3 py-2 text-left text-[13px] font-[600] text-white transition-colors duration-200 ease-out hover:bg-[#1A1A1A] focus-visible:bg-[#1A1A1A] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#2A2A2A]"
+                  >
+                    My Profile
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsUserMenuOpen(false);
+                    router.push("/change-password");
+                  }}
+                  className="w-full cursor-pointer rounded-[12px] px-3 py-2 text-left text-[13px] font-[600] text-white transition-colors duration-200 ease-out hover:bg-[#1A1A1A] focus-visible:bg-[#1A1A1A] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#2A2A2A]"
+                >
+                  Change Password
+                </button>
                 <button
                   type="button"
                   onClick={handleLogout}
                   disabled={isSigningOut}
                   className="w-full cursor-pointer rounded-[12px] px-3 py-2 text-left text-[13px] font-[600] text-white transition-colors duration-200 ease-out hover:bg-[#1A1A1A] focus-visible:bg-[#1A1A1A] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#2A2A2A] disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {isSigningOut ? "Logging Out..." : "Log Out"}
+                  {isSigningOut ? "Logging Out..." : "Sign Out"}
                 </button>
               </div>
             ) : null}

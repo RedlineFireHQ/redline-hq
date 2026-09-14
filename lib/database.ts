@@ -167,7 +167,7 @@ export async function getApparatusById(id: string, client?: SupabaseClient) {
 
   const { data, error } = await targetClient
     .from("apparatus")
-    .select("*")
+    .select("*, department:departments(name)")
     .eq("id", id)
     .maybeSingle();
 

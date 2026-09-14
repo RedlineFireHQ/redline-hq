@@ -1,6 +1,7 @@
 import InventoryCategoryWorkspace from "@/components/inventory/InventoryCategoryWorkspace";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentMember } from "@/lib/current-member";
+import { hasDepartmentPermission } from "@/lib/member-permissions";
 
 const quickActions = [
 	{ label: "+ Add Hose", tone: "primary" as const },
@@ -97,6 +98,14 @@ export default async function FireHoseInventoryPage() {
 	const supabase = await createSupabaseServerClient();
 	const currentMember = await getCurrentMember(supabase);
 	const departmentId = currentMember?.departmentId ?? null;
+	const canManageInventory = departmentId
+		? await hasDepartmentPermission(
+			supabase,
+			departmentId,
+			currentMember?.role,
+			"inventory_management",
+		)
+		: false;
 	const canDeleteHose = currentMember?.role === "administrator";
 	console.log("[fire-hose][trace] departmentId", departmentId);
 	let departmentName: string | null = null;
@@ -259,17 +268,20 @@ export default async function FireHoseInventoryPage() {
 
 	const readinessItems = [
 		{
-			label: `• ${testsDueCount} Hose Tests Due`,
+			label: "Hose Tests Due",
+			count: testsDueCount,
 			filter: "tests-due" as const,
 			tone: "warning" as const,
 		},
 		{
-			label: `• ${openDeficienciesCount} Open Deficiencies`,
+			label: "Open Deficiencies",
+			count: openDeficienciesCount,
 			filter: "deficiencies" as const,
 			tone: "warning" as const,
 		},
 		{
-			label: `• ${outOfServiceCount} Out of Service`,
+			label: "Out of Service",
+			count: outOfServiceCount,
 			filter: "out-of-service" as const,
 			tone: "danger" as const,
 		},
@@ -291,6 +303,7 @@ export default async function FireHoseInventoryPage() {
 				rows={rows}
 				departmentId={departmentId}
 				departmentName={departmentName}
+				canManageInventory={canManageInventory}
 				canDeleteHose={canDeleteHose}
 				searchKeys={["inventoryNumber", "hoseSize", "length"]}
 				initialError={initialError}

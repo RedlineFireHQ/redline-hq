@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { CalendarDays, Clock3, MapPin, Plus, UserRound } from "lucide-react";
 import { EMS_CORE_TOPICS, type EmsCoreTopicCode } from "@/lib/ems/requirements";
 import { triggerEmsAllocationRecalculation, triggerEmsAllocationRecalculationForMembers } from "@/lib/ems/recalculate-client";
-import { parseHours } from "@/lib/readiness/member-readiness";
 import { supabase } from "@/lib/supabase";
+import SubmitTrainingModal from "@/components/training/SubmitTrainingModal";
 
 type CurrentMemberRole = "firefighter" | "officer" | "administrator";
 
@@ -173,6 +173,7 @@ interface TrainingWorkspaceProps {
   assignmentMembers: TrainingAssignmentMemberRow[];
   assignmentEvidenceRows: TrainingAssignmentEvidenceRow[];
   emsCourseDefinitions: EmsCourseDefinitionRow[];
+  departmentTrainingHoursThisYear: number;
   initialAddTrainingEventOpen?: boolean;
 }
 
@@ -183,26 +184,10 @@ type TrainingEventFormState = {
   emsCourseDefinitionId: string;
   emsNeedsReview: boolean;
   emsProviderName: string;
-  trainingMethod: string;
+  trainingMethod: string[];
   date: string;
   startTime: string;
   hoursCredit: string;
-  instructorName: string;
-  location: string;
-  details: string;
-};
-
-type OutsideTrainingFormState = {
-  title: string;
-  categoryId: string;
-  trainingKind: "general" | "ems";
-  emsCoreTopic: EmsCoreTopicCode;
-  emsCourseDefinitionId: string;
-  emsNeedsReview: boolean;
-  emsProviderName: string;
-  dateCompleted: string;
-  hours: string;
-  trainingMethod: string;
   instructorName: string;
   location: string;
   details: string;
@@ -233,6 +218,8 @@ const TRAINING_METHOD_OPTIONS = [
   "Other",
 ] as const;
 
+const TRAINING_METHOD_DELIMITER = " | ";
+
 const MILITARY_TIME_OPTIONS = Array.from({ length: 24 * 4 }, (_, index) => {
   const totalMinutes = index * 15;
   const hours = Math.floor(totalMinutes / 60);
@@ -248,28 +235,10 @@ function emptyFormState(defaultCategoryId: string): TrainingEventFormState {
     emsCourseDefinitionId: "",
     emsNeedsReview: false,
     emsProviderName: "",
-    trainingMethod: "",
+    trainingMethod: [],
     date: getTodayDateKey(),
     startTime: "",
     hoursCredit: "",
-    instructorName: "",
-    location: "",
-    details: "",
-  };
-}
-
-function emptyOutsideTrainingFormState(defaultCategoryId: string): OutsideTrainingFormState {
-  return {
-    title: "",
-    categoryId: defaultCategoryId,
-    trainingKind: "general",
-    emsCoreTopic: "other",
-    emsCourseDefinitionId: "",
-    emsNeedsReview: false,
-    emsProviderName: "",
-    dateCompleted: getTodayDateKey(),
-    hours: "",
-    trainingMethod: "",
     instructorName: "",
     location: "",
     details: "",
@@ -370,43 +339,8 @@ function formatDateOnly(value: string) {
   });
 }
 
-function isDateInYear(value: string | null | undefined, year: number) {
-  if (!value) {
-    return false;
-  }
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return false;
-  }
-
-  return parsed.getFullYear() === year;
-}
-
 function sanitizeFileName(name: string) {
   return name.replace(/[^a-zA-Z0-9._-]/g, "_");
-}
-
-function buildOutsideSubmissionNotes(input: {
-  trainingMethod: string;
-  instructorName: string;
-  location: string;
-}) {
-  const lines: string[] = [];
-
-  if (input.trainingMethod.trim()) {
-    lines.push(`Method: ${input.trainingMethod.trim()}`);
-  }
-
-  if (input.instructorName.trim()) {
-    lines.push(`Instructor: ${input.instructorName.trim()}`);
-  }
-
-  if (input.location.trim()) {
-    lines.push(`Location: ${input.location.trim()}`);
-  }
-
-  return lines.length > 0 ? lines.join("\n") : null;
 }
 
 function extractOutsideMetadata(notes: string | null) {
@@ -551,9 +485,10 @@ export default function TrainingWorkspace({
   assignmentMembers,
   assignmentEvidenceRows,
   emsCourseDefinitions,
+  departmentTrainingHoursThisYear,
 }: TrainingWorkspaceProps) {
   const router = useRouter();
-  const outsideProofInputRef = useRef<HTMLInputElement | null>(null);
+  const searchParams = useSearchParams();
   const homeworkEvidenceInputRefs = useRef<Map<string, HTMLInputElement | null>>(new Map());
   const homeworkMaterialInputRef = useRef<HTMLInputElement | null>(null);
   const [eventRows, setEventRows] = useState(events);
@@ -574,16 +509,9 @@ export default function TrainingWorkspace({
   const [selectedMemberIds, setSelectedMemberIds] = useState<Set<string>>(new Set());
   const [homeworkMemberSearch, setHomeworkMemberSearch] = useState("");
   const [selectedHomeworkMemberIds, setSelectedHomeworkMemberIds] = useState<Set<string>>(new Set());
-  const [outsideFormState, setOutsideFormState] = useState<OutsideTrainingFormState>(
-    emptyOutsideTrainingFormState(categories.find((category) => category.active)?.id ?? ""),
-  );
   const [homeworkFormState, setHomeworkFormState] = useState<HomeworkAssignmentFormState>(
     emptyHomeworkAssignmentFormState(categories.find((category) => category.active)?.id ?? ""),
   );
-  const [outsideProofFile, setOutsideProofFile] = useState<File | null>(null);
-  const [outsideSaveError, setOutsideSaveError] = useState<string | null>(null);
-  const [outsideSuccessMessage, setOutsideSuccessMessage] = useState<string | null>(null);
-  const [isSavingOutside, setIsSavingOutside] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewSuccessMessage, setReviewSuccessMessage] = useState<string | null>(null);
   const [reviewingSubmissionId, setReviewingSubmissionId] = useState<string | null>(null);
@@ -653,64 +581,6 @@ export default function TrainingWorkspace({
 
     return memberIds.size;
   }, [attendanceRows]);
-
-  const currentYear = new Date().getFullYear();
-
-  const trainingHoursThisYear = useMemo(() => {
-    const eventHoursById = new Map(
-      eventRows.map((event) => [
-        event.id,
-        {
-          startsAt: event.starts_at,
-          hoursCredit: parseHours(event.hours_credit),
-        },
-      ]),
-    );
-
-    const memberAttendanceHours = attendanceRows
-      .filter((row) => row.member_id === currentMemberId && row.attendance_status === "attending")
-      .reduce((total, row) => {
-        const event = eventHoursById.get(row.training_event_id);
-        if (!event || !isDateInYear(event.startsAt, currentYear)) {
-          return total;
-        }
-        return total + event.hoursCredit;
-      }, 0);
-
-    const memberApprovedOutsideHours = outsideSubmissionRows
-      .filter((row) => row.member_id === currentMemberId && row.status === "approved")
-      .reduce((total, row) => {
-        if (!isDateInYear(row.training_date, currentYear)) {
-          return total;
-        }
-        return total + parseHours(row.hours);
-      }, 0);
-
-    const assignmentByIdMap = new Map(assignmentRows.map((row) => [row.id, row]));
-    const memberApprovedHomeworkHours = assignmentMemberRows
-      .filter((row) => row.member_id === currentMemberId && row.completion_status === "approved")
-      .reduce((total, row) => {
-        const completedTimestamp = row.completed_at ?? row.updated_at ?? row.created_at;
-        if (!isDateInYear(completedTimestamp, currentYear)) {
-          return total;
-        }
-
-        const assignment = assignmentByIdMap.get(row.training_assignment_id);
-        const assignmentHours = assignment ? parseHours(assignment.hours_credit) : 0;
-        const rowHours = parseHours(row.hours_earned);
-        return total + (rowHours > 0 ? rowHours : assignmentHours);
-      }, 0);
-
-    return memberAttendanceHours + memberApprovedOutsideHours + memberApprovedHomeworkHours;
-  }, [
-    assignmentMemberRows,
-    assignmentRows,
-    attendanceRows,
-    currentMemberId,
-    currentYear,
-    eventRows,
-    outsideSubmissionRows,
-  ]);
 
   const attendanceByEventId = useMemo(() => {
     const map = new Map<string, { attended: number; completed: number }>();
@@ -942,6 +812,32 @@ export default function TrainingWorkspace({
     };
   }, [openModal]);
 
+  useEffect(() => {
+    if (searchParams.get("addTrainingEvent") !== "1") {
+      return;
+    }
+
+    queueMicrotask(() => {
+      openModal();
+      router.replace("/training");
+    });
+  }, [openModal, router, searchParams]);
+
+  useEffect(() => {
+    if (searchParams.get("submitTraining") !== "1") {
+      return;
+    }
+
+    queueMicrotask(() => {
+      if (canManageTraining) {
+        openModal();
+      } else {
+        document.getElementById("submit-training")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      router.replace("/training");
+    });
+  }, [canManageTraining, openModal, router, searchParams]);
+
   function closeModal() {
     if (isSaving) {
       return;
@@ -1083,88 +979,23 @@ export default function TrainingWorkspace({
 
     try {
       let supportingDocumentId: string | null = homeworkFormState.supportingDocumentId || null;
+      let uploadedTrainingDocumentId: string | null = null;
 
       if (homeworkMaterialFile) {
         const materialTitle = homeworkFormState.uploadedMaterialTitle.trim() || homeworkMaterialFile.name || title;
-        const sanitizedName = sanitizeFileName(homeworkMaterialFile.name || "homework-material");
-        const storagePath = `${departmentId}/department-documents/${Date.now()}-${sanitizedName}`;
-        const today = getTodayDateKey();
-
-        const { error: uploadError } = await supabase.storage
-          .from("department-documents")
-          .upload(storagePath, homeworkMaterialFile, {
-            cacheControl: "3600",
-            upsert: false,
-          });
-
-        if (uploadError) {
-          setHomeworkSaveError(uploadError.message || "Unable to upload training material.");
+        const formData = new FormData();
+        formData.set("departmentId", departmentId);
+        formData.set("title", materialTitle);
+        formData.set("file", homeworkMaterialFile);
+        const response = await fetch("/api/training/materials", { method: "POST", body: formData });
+        const result = (await response.json().catch(() => null)) as { ok?: boolean; error?: string; documentId?: string } | null;
+        if (!response.ok || !result?.ok || !result.documentId) {
+          setHomeworkSaveError(result?.error || "Unable to upload training material.");
           setIsSavingHomework(false);
           return;
         }
-
-        const { data: documentData, error: documentInsertError } = await supabase
-          .from("documents")
-          .insert({
-            department_id: departmentId,
-            category: "Department Documents",
-            source_kind: "training",
-            title: materialTitle,
-            description: null,
-            document_number: null,
-            effective_date: today,
-            status: "Active",
-            uploaded_by: currentMemberId,
-            current_revision_id: null,
-          })
-          .select("id")
-          .single();
-
-        if (documentInsertError || !documentData) {
-          setHomeworkSaveError(documentInsertError?.message || "Unable to create training material document record.");
-          setIsSavingHomework(false);
-          return;
-        }
-
-        const { data: revisionData, error: revisionInsertError } = await supabase
-          .from("document_revisions")
-          .insert({
-            department_id: departmentId,
-            document_id: documentData.id,
-            revision_number: 1,
-            file_name: homeworkMaterialFile.name,
-            file_path: storagePath,
-            file_size_bytes: homeworkMaterialFile.size,
-            mime_type: homeworkMaterialFile.type || null,
-            uploaded_by: currentMemberId,
-            effective_date: today,
-            revision_date: today,
-            notes: `Uploaded from homework assignment: ${title}`,
-            status: "Active",
-            content_text: null,
-          })
-          .select("id")
-          .single();
-
-        if (revisionInsertError || !revisionData) {
-          setHomeworkSaveError(revisionInsertError?.message || "Unable to create training material revision record.");
-          setIsSavingHomework(false);
-          return;
-        }
-
-        const { error: updateDocumentError } = await supabase
-          .from("documents")
-          .update({ current_revision_id: revisionData.id })
-          .eq("id", documentData.id)
-          .eq("department_id", departmentId);
-
-        if (updateDocumentError) {
-          setHomeworkSaveError(updateDocumentError.message || "Unable to attach training material revision.");
-          setIsSavingHomework(false);
-          return;
-        }
-
-        supportingDocumentId = String(documentData.id);
+        uploadedTrainingDocumentId = result.documentId;
+        supportingDocumentId = result.documentId;
       }
 
       const { data: insertedAssignmentData, error: insertedAssignmentError } = await supabase
@@ -1191,6 +1022,9 @@ export default function TrainingWorkspace({
         .single();
 
       if (insertedAssignmentError || !insertedAssignmentData) {
+        if (uploadedTrainingDocumentId) {
+          await fetch("/api/training/materials", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ documentId: uploadedTrainingDocumentId }) });
+        }
         setHomeworkSaveError(insertedAssignmentError?.message || "Unable to create assigned training.");
         setIsSavingHomework(false);
         return;
@@ -2164,197 +1998,6 @@ export default function TrainingWorkspace({
     </div>
   ) : null;
 
-  async function handleSubmitOutsideTraining(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const title = outsideFormState.title.trim();
-    const trainingMethod = outsideFormState.trainingMethod.trim();
-    const instructorName = outsideFormState.instructorName.trim();
-    const location = outsideFormState.location.trim();
-    const details = outsideFormState.details.trim();
-    const emsProviderName = outsideFormState.emsProviderName.trim();
-    const isEmsTraining = outsideFormState.trainingKind === "ems";
-    const emsCourseDefinitionId = outsideFormState.emsCourseDefinitionId || null;
-    const emsCoreTopic = isEmsTraining ? outsideFormState.emsCoreTopic : null;
-    const emsNeedsReview =
-      isEmsTraining && (outsideFormState.emsNeedsReview || outsideFormState.emsCoreTopic === "other");
-
-    if (!title) {
-      setOutsideSaveError("Training title is required.");
-      return;
-    }
-
-    if (!outsideFormState.categoryId) {
-      setOutsideSaveError("Select a training category.");
-      return;
-    }
-
-    if (!outsideFormState.dateCompleted.trim()) {
-      setOutsideSaveError("Date completed is required.");
-      return;
-    }
-
-    if (!outsideFormState.hours.trim()) {
-      setOutsideSaveError("Training hours are required.");
-      return;
-    }
-
-    const hours = Number.parseFloat(outsideFormState.hours);
-    if (!Number.isFinite(hours) || hours <= 0) {
-      setOutsideSaveError("Training hours must be greater than 0.");
-      return;
-    }
-
-    const selectedCategory = activeCategories.find((category) => category.id === outsideFormState.categoryId);
-    if (!selectedCategory) {
-      setOutsideSaveError("Select an active training category.");
-      return;
-    }
-
-    setIsSavingOutside(true);
-    setOutsideSaveError(null);
-    setOutsideSuccessMessage(null);
-
-    try {
-      const { data: submissionData, error: submissionError } = await supabase
-        .from("training_outside_submissions")
-        .insert({
-          department_id: departmentId,
-          member_id: currentMemberId,
-          title,
-          category_id: outsideFormState.categoryId,
-          training_date: outsideFormState.dateCompleted,
-          hours,
-          is_ems_training: isEmsTraining,
-          ems_core_topic: emsCoreTopic,
-          ems_course_definition_id: emsCourseDefinitionId,
-          ems_needs_review: emsNeedsReview,
-          ems_provider_name: emsProviderName || instructorName || null,
-          description: details || null,
-          notes:
-            buildOutsideSubmissionNotes({
-              trainingMethod,
-              instructorName,
-              location,
-            }) || null,
-          status: "submitted",
-          created_by: currentMemberId,
-          updated_by: currentMemberId,
-        })
-        .select(
-          "id, member_id, title, category_id, training_date, hours, is_ems_training, ems_core_topic, ems_course_definition_id, ems_needs_review, ems_provider_name, description, notes, status, review_required, reviewed_by, reviewed_at, review_notes, created_at, updated_at",
-        )
-        .single();
-
-      if (submissionError || !submissionData) {
-        setOutsideSaveError(submissionError?.message || "Unable to submit self-reported training.");
-        setIsSavingOutside(false);
-        return;
-      }
-
-      const insertedSubmission: TrainingOutsideSubmissionRow = {
-        id: String(submissionData.id),
-        member_id: typeof submissionData.member_id === "string" ? submissionData.member_id : currentMemberId,
-        title: typeof submissionData.title === "string" ? submissionData.title : title,
-        category_id: typeof submissionData.category_id === "string" ? submissionData.category_id : outsideFormState.categoryId,
-        training_date:
-          typeof submissionData.training_date === "string" ? submissionData.training_date : outsideFormState.dateCompleted,
-        hours:
-          typeof submissionData.hours === "number" && Number.isFinite(submissionData.hours)
-            ? submissionData.hours
-            : typeof submissionData.hours === "string"
-              ? Number.parseFloat(submissionData.hours)
-              : hours,
-        is_ems_training: submissionData.is_ems_training === true,
-        ems_core_topic: typeof submissionData.ems_core_topic === "string" ? submissionData.ems_core_topic : emsCoreTopic,
-        ems_course_definition_id:
-          typeof submissionData.ems_course_definition_id === "string"
-            ? submissionData.ems_course_definition_id
-            : emsCourseDefinitionId,
-        ems_needs_review: submissionData.ems_needs_review === true,
-        ems_provider_name: typeof submissionData.ems_provider_name === "string" ? submissionData.ems_provider_name : emsProviderName || instructorName || null,
-        description: typeof submissionData.description === "string" ? submissionData.description : details || null,
-        notes: typeof submissionData.notes === "string" ? submissionData.notes : null,
-        status: typeof submissionData.status === "string" ? submissionData.status : "pending_review",
-        review_required:
-          typeof submissionData.review_required === "boolean" ? submissionData.review_required : true,
-        reviewed_by: typeof submissionData.reviewed_by === "string" ? submissionData.reviewed_by : null,
-        reviewed_at: typeof submissionData.reviewed_at === "string" ? submissionData.reviewed_at : null,
-        review_notes: typeof submissionData.review_notes === "string" ? submissionData.review_notes : null,
-        created_at: typeof submissionData.created_at === "string" ? submissionData.created_at : new Date().toISOString(),
-        updated_at: typeof submissionData.updated_at === "string" ? submissionData.updated_at : new Date().toISOString(),
-      };
-
-      let uploadWarning: string | null = null;
-
-      if (outsideProofFile) {
-        const sanitizedName = sanitizeFileName(outsideProofFile.name || "proof.pdf");
-        const storagePath = `${departmentId}/${currentMemberId}/${insertedSubmission.id}/${Date.now()}-${sanitizedName}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("training-evidence")
-          .upload(storagePath, outsideProofFile, {
-            cacheControl: "3600",
-            upsert: false,
-          });
-
-        if (uploadError) {
-          uploadWarning = uploadError.message || "Proof upload failed.";
-        } else {
-          const { data: evidenceData, error: evidenceError } = await supabase
-            .from("training_outside_submission_evidence")
-            .insert({
-              department_id: departmentId,
-              submission_id: insertedSubmission.id,
-              member_id: currentMemberId,
-              file_name: outsideProofFile.name,
-              file_path: storagePath,
-              file_size_bytes: outsideProofFile.size,
-              mime_type: outsideProofFile.type || null,
-              uploaded_by: currentMemberId,
-            })
-            .select("id, submission_id, member_id, created_at")
-            .single();
-
-          if (evidenceError || !evidenceData) {
-            uploadWarning = evidenceError?.message || "Proof record could not be saved.";
-          } else {
-            setOutsideEvidenceState((current) => [
-              ...current,
-              {
-                id: String(evidenceData.id),
-                submission_id: typeof evidenceData.submission_id === "string" ? evidenceData.submission_id : insertedSubmission.id,
-                member_id: typeof evidenceData.member_id === "string" ? evidenceData.member_id : currentMemberId,
-                file_name: outsideProofFile.name,
-                file_path: storagePath,
-                mime_type: outsideProofFile.type || null,
-                created_at: typeof evidenceData.created_at === "string" ? evidenceData.created_at : new Date().toISOString(),
-              },
-            ]);
-          }
-        }
-      }
-
-      setOutsideSubmissionRows((current) => [insertedSubmission, ...current]);
-      setOutsideFormState(emptyOutsideTrainingFormState(activeCategories[0]?.id ?? ""));
-      setOutsideProofFile(null);
-      if (outsideProofInputRef.current) {
-        outsideProofInputRef.current.value = "";
-      }
-      setOutsideSuccessMessage(
-        uploadWarning
-          ? `Self-reported training submitted. ${uploadWarning}`
-          : "Outside training submitted for review.",
-      );
-      await triggerEmsAllocationRecalculation(currentMemberId);
-      router.refresh();
-    } catch (error) {
-      setOutsideSaveError(error instanceof Error ? error.message : "Unable to submit self-reported training.");
-    } finally {
-      setIsSavingOutside(false);
-    }
-  }
-
   async function reviewOutsideSubmission(submissionId: string, status: "approved" | "rejected") {
     if (!canReviewTraining) {
       return;
@@ -2454,7 +2097,7 @@ export default function TrainingWorkspace({
     event.preventDefault();
 
     const title = formState.title.trim();
-    const trainingMethod = formState.trainingMethod.trim();
+    const trainingMethod = formState.trainingMethod.join(TRAINING_METHOD_DELIMITER);
     const instructorName = formState.instructorName.trim();
     const location = formState.location.trim();
     const details = formState.details.trim();
@@ -2932,210 +2575,19 @@ export default function TrainingWorkspace({
           </div>
         ) : null}
 
-        <section className="rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
-          <h2 className="text-2xl font-semibold text-white">Submit Training</h2>
-          <p className="mt-2 text-sm text-neutral-400">
-            Required: title, category, date completed, and hours. Optional proof can be uploaded now or provided later.
-          </p>
-
-          {outsideSaveError ? (
-            <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-              {outsideSaveError}
-            </div>
-          ) : null}
-
-          {outsideSuccessMessage ? (
-            <div className="mt-4 rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-200">
-              {outsideSuccessMessage}
-            </div>
-          ) : null}
-
-          <form onSubmit={handleSubmitOutsideTraining} className="mt-5 space-y-5">
-            <div className="grid gap-5 md:grid-cols-2">
-              <label className="block md:col-span-2">
-                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Training Title *</span>
-                <input
-                  value={outsideFormState.title}
-                  onChange={(event) => setOutsideFormState((current) => ({ ...current, title: event.target.value }))}
-                  className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
-                />
-              </label>
-
-              <label className="block">
-                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Category *</span>
-                <select
-                  value={outsideFormState.categoryId}
-                  onChange={(event) => setOutsideFormState((current) => ({ ...current, categoryId: event.target.value }))}
-                  className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
-                >
-                  <option value="">Select category</option>
-                  {activeCategories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="block">
-                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Date Completed *</span>
-                <input
-                  type="date"
-                  value={outsideFormState.dateCompleted}
-                  onChange={(event) => setOutsideFormState((current) => ({ ...current, dateCompleted: event.target.value }))}
-                  className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white [color-scheme:dark] focus:border-red-500/50 focus:outline-none"
-                />
-              </label>
-
-              <label className="block">
-                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Training Hours *</span>
-                <input
-                  type="number"
-                  step="0.25"
-                  min="0.25"
-                  value={outsideFormState.hours}
-                  onChange={(event) => setOutsideFormState((current) => ({ ...current, hours: event.target.value }))}
-                  className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
-                />
-              </label>
-
-              <label className="block">
-                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Training Method</span>
-                <select
-                  value={outsideFormState.trainingMethod}
-                  onChange={(event) => setOutsideFormState((current) => ({ ...current, trainingMethod: event.target.value }))}
-                  className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
-                >
-                  <option value="">Select method</option>
-                  {TRAINING_METHOD_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="block">
-                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Type of Training</span>
-                <select
-                  value={outsideFormState.trainingKind}
-                  onChange={(event) =>
-                    setOutsideFormState((current) => ({
-                      ...current,
-                      trainingKind: event.target.value === "ems" ? "ems" : "general",
-                      emsNeedsReview: event.target.value === "ems" ? current.emsNeedsReview : false,
-                    }))
-                  }
-                  className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
-                >
-                  <option value="general">General</option>
-                  <option value="ems">EMS</option>
-                </select>
-              </label>
-
-              {outsideFormState.trainingKind === "ems" ? (
-                <>
-                  <label className="block">
-                    <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">EMS Core Topic</span>
-                    <select
-                      value={outsideFormState.emsCoreTopic}
-                      onChange={(event) => setOutsideFormState((current) => ({ ...current, emsCoreTopic: event.target.value as EmsCoreTopicCode }))}
-                      className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
-                    >
-                      {EMS_CORE_TOPICS.map((topic) => (
-                        <option key={topic.code} value={topic.code}>{topic.label}</option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label className="block">
-                    <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">EMS Course / Training</span>
-                    <select
-                      value={outsideFormState.emsCourseDefinitionId}
-                      onChange={(event) => setOutsideFormState((current) => ({ ...current, emsCourseDefinitionId: event.target.value }))}
-                      className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
-                    >
-                      <option value="">Unlisted / Other (Needs Review)</option>
-                      {activeEmsCourseDefinitions.map((course) => (
-                        <option key={course.id} value={course.id}>{course.course_name}</option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label className="block">
-                    <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Training Provider / Sponsor</span>
-                    <input
-                      value={outsideFormState.emsProviderName}
-                      onChange={(event) => setOutsideFormState((current) => ({ ...current, emsProviderName: event.target.value }))}
-                      className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
-                    />
-                  </label>
-
-                  <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300 md:col-span-2">
-                    <input
-                      type="checkbox"
-                      checked={outsideFormState.emsNeedsReview}
-                      onChange={(event) => setOutsideFormState((current) => ({ ...current, emsNeedsReview: event.target.checked }))}
-                    />
-                    Mark as NEEDS REVIEW
-                  </label>
-                </>
-              ) : null}
-
-              <label className="block">
-                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Instructor</span>
-                <input
-                  value={outsideFormState.instructorName}
-                  onChange={(event) => setOutsideFormState((current) => ({ ...current, instructorName: event.target.value }))}
-                  className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
-                />
-              </label>
-
-              <label className="block">
-                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Location</span>
-                <input
-                  value={outsideFormState.location}
-                  onChange={(event) => setOutsideFormState((current) => ({ ...current, location: event.target.value }))}
-                  className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
-                />
-              </label>
-
-              <label className="block md:col-span-2">
-                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Training Details / Notes</span>
-                <textarea
-                  rows={4}
-                  value={outsideFormState.details}
-                  onChange={(event) => setOutsideFormState((current) => ({ ...current, details: event.target.value }))}
-                  className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
-                />
-              </label>
-
-              <label className="block md:col-span-2">
-                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Supporting Document (Optional)</span>
-                <input
-                  ref={outsideProofInputRef}
-                  type="file"
-                  onChange={(event) => setOutsideProofFile((event.target.files ?? [])[0] ?? null)}
-                  className="block w-full text-sm text-zinc-400 file:mr-4 file:rounded-lg file:border-0 file:bg-red-600 file:px-4 file:py-2 file:font-semibold file:text-white hover:file:bg-red-500"
-                />
-                <p className="mt-2 text-xs text-zinc-500">
-                  Certificate, completion card, transcript, or other proof (not required).
-                </p>
-              </label>
-            </div>
-
-            <div className="flex justify-end">
-              <button
-                type="submit"
-                disabled={isSavingOutside || activeCategories.length === 0}
-                className="rounded-xl border border-red-500/50 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-100 transition hover:border-red-400 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.04] disabled:text-neutral-400"
-              >
-                {isSavingOutside ? "Submitting..." : "Submit Training"}
-              </button>
-            </div>
-          </form>
-        </section>
-
+        <SubmitTrainingModal
+          variant="inline"
+          departmentId={departmentId}
+          currentMemberId={currentMemberId}
+          categories={categories}
+          emsCourseDefinitions={emsCourseDefinitions}
+          onSubmitted={(submission, evidence) => {
+            setOutsideSubmissionRows((current) => [submission, ...current]);
+            if (evidence) {
+              setOutsideEvidenceState((current) => [...current, evidence]);
+            }
+          }}
+        />
         <section className="rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
           <h2 className="text-2xl font-semibold text-white">My Self-Reported Training</h2>
           <p className="mt-2 text-sm text-neutral-400">
@@ -3257,21 +2709,21 @@ export default function TrainingWorkspace({
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-xl border border-white/10 bg-neutral-900 px-4 py-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-neutral-400">Your Training This Year</p>
-          <p className="mt-2 text-3xl font-black text-white">{trainingHoursThisYear.toFixed(2)}</p>
-          <p className="mt-1 text-xs text-neutral-500">Hours</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-neutral-400">Department Training Hours</p>
+          <p className="mt-2 text-3xl font-black text-white">{departmentTrainingHoursThisYear.toFixed(2)}</p>
+          <p className="mt-1 text-xs text-neutral-500">Calendar Year</p>
         </div>
 
         <div className="rounded-xl border border-white/10 bg-neutral-900 px-4 py-4">
           <p className="text-xs uppercase tracking-[0.18em] text-neutral-400">Training Events</p>
           <p className="mt-2 text-3xl font-black text-white">{eventRows.length}</p>
-          <p className="mt-1 text-xs text-neutral-500">Department total</p>
+          <p className="mt-1 text-xs text-neutral-500">Department Total</p>
         </div>
 
         <div className="rounded-xl border border-white/10 bg-neutral-900 px-4 py-4">
           <p className="text-xs uppercase tracking-[0.18em] text-neutral-400">Members Trained</p>
           <p className="mt-2 text-3xl font-black text-white">{membersTrainedCount}</p>
-          <p className="mt-1 text-xs text-neutral-500">Distinct members marked attended</p>
+          <p className="mt-1 text-xs text-neutral-500">Department Total</p>
         </div>
 
         <div className="rounded-xl border border-white/10 bg-neutral-900 px-4 py-4">
@@ -3281,10 +2733,11 @@ export default function TrainingWorkspace({
         </div>
       </div>
 
-      <section className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
-        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-neutral-800 pb-4">
-          <div>
-            <h2 className="text-xl font-semibold text-white">Pending Training Reviews</h2>
+      {canReviewTraining ? (
+        <section className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+          <div className="flex flex-wrap items-end justify-between gap-3 border-b border-neutral-800 pb-4">
+            <div>
+              <h2 className="text-xl font-semibold text-white">Pending Training Reviews</h2>
             <p className="mt-1 text-sm text-neutral-400">
               Review submitted firefighter assigned training and approve completion credit.
             </p>
@@ -3404,12 +2857,14 @@ export default function TrainingWorkspace({
             })}
           </div>
         )}
-      </section>
+        </section>
+      ) : null}
 
-      <section className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
-        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-neutral-800 pb-4">
-          <div>
-            <h2 className="text-xl font-semibold text-white">Assigned Training</h2>
+      {(canManageTraining || canAssignHomework) ? (
+        <section className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+          <div className="flex flex-wrap items-end justify-between gap-3 border-b border-neutral-800 pb-4">
+            <div>
+              <h2 className="text-xl font-semibold text-white">Assigned Training</h2>
             <p className="mt-1 text-sm text-neutral-400">
               Assigned training lives in assignment records and contributes training credit after approval.
             </p>
@@ -3424,7 +2879,7 @@ export default function TrainingWorkspace({
             No assigned training yet.
           </div>
         ) : (
-          <div className="mt-4 space-y-3">
+          <div className="mt-4 max-h-[32rem] space-y-3 overflow-y-auto pr-1">
             {sortedAssignments.map((assignment) => {
               const memberRows = assignmentMembersByAssignmentId.get(assignment.id) ?? [];
               const completedCount = memberRows.filter((row) => row.completion_status === "approved").length;
@@ -3460,12 +2915,14 @@ export default function TrainingWorkspace({
             })}
           </div>
         )}
-      </section>
+        </section>
+      ) : null}
 
-      <section className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
-        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-neutral-800 pb-4">
-          <div>
-            <h2 className="text-xl font-semibold text-white">Pending Self-Reported Training Reviews</h2>
+      {canReviewTraining ? (
+        <section className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
+          <div className="flex flex-wrap items-end justify-between gap-3 border-b border-neutral-800 pb-4">
+            <div>
+              <h2 className="text-xl font-semibold text-white">Pending Self-Reported Training Reviews</h2>
             <p className="mt-1 text-sm text-neutral-400">
               Approve or reject firefighter self-reported training submissions.
             </p>
@@ -3570,7 +3027,8 @@ export default function TrainingWorkspace({
             })}
           </div>
         )}
-      </section>
+        </section>
+      ) : null}
 
       {sortedEvents.length === 0 ? (
         <section className="rounded-2xl border border-dashed border-neutral-700 bg-neutral-900 px-6 py-10 text-center">
@@ -3590,8 +3048,14 @@ export default function TrainingWorkspace({
         </section>
       ) : (
         <section className="overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900">
-          <div className="hidden overflow-x-auto md:block">
-            <table className="w-full min-w-[980px]">
+          <div className="border-b border-neutral-800 px-5 py-4">
+            <h2 className="text-xl font-semibold text-white">Training Events</h2>
+            <p className="mt-1 text-sm text-neutral-400">Department training history.</p>
+          </div>
+
+          <div className="max-h-[28rem] overflow-y-auto">
+            <div className="hidden overflow-x-auto md:block">
+              <table className="w-full min-w-[980px]">
               <thead className="border-b border-neutral-800 bg-[#111111]">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-[0.16em] text-neutral-500">Training</th>
@@ -3613,7 +3077,7 @@ export default function TrainingWorkspace({
                         <Link href={`/training/${trainingEvent.id}`} className="font-semibold text-white hover:text-red-300">
                           {trainingEvent.title}
                         </Link>
-                        <p className="mt-1 text-xs text-neutral-400">{trainingEvent.topic || trainingEvent.training_type || "-"}</p>
+                        <p className="mt-1 text-xs text-neutral-400">{trainingEvent.topic || trainingEvent.training_type?.replaceAll(" | ", " • ") || "-"}</p>
                       </td>
                       <td className="px-4 py-3 text-sm text-neutral-200">
                         {getCategoryNameById(categories, trainingEvent.category_id)}
@@ -3634,10 +3098,10 @@ export default function TrainingWorkspace({
                   );
                 })}
               </tbody>
-            </table>
-          </div>
+              </table>
+            </div>
 
-          <div className="space-y-3 p-4 md:hidden">
+            <div className="space-y-3 p-4 md:hidden">
             {sortedEvents.map((trainingEvent) => {
               const attendance = attendanceByEventId.get(trainingEvent.id) ?? { attended: 0, completed: 0 };
               return (
@@ -3680,6 +3144,7 @@ export default function TrainingWorkspace({
                 </Link>
               );
             })}
+            </div>
           </div>
         </section>
       )}
@@ -4024,18 +3489,26 @@ export default function TrainingWorkspace({
 
                 <label className="block">
                   <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Training Method</span>
-                  <select
-                    value={formState.trainingMethod}
-                    onChange={(event) => setFormState((current) => ({ ...current, trainingMethod: event.target.value }))}
-                    className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
-                  >
-                    <option value="">Select method</option>
+                  <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-white/10 bg-[#1b1b1b] p-2">
                     {TRAINING_METHOD_OPTIONS.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
+                      <label key={option} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-white hover:bg-white/[0.06]">
+                        <input
+                          type="checkbox"
+                          checked={formState.trainingMethod.includes(option)}
+                          onChange={(event) =>
+                            setFormState((current) => ({
+                              ...current,
+                              trainingMethod: event.target.checked
+                                ? [...current.trainingMethod, option]
+                                : current.trainingMethod.filter((method) => method !== option),
+                            }))
+                          }
+                          className="h-4 w-4 rounded border-white/20 bg-[#111111] accent-red-600"
+                        />
+                        <span>{option}</span>
+                      </label>
                     ))}
-                  </select>
+                  </div>
                 </label>
 
                 {isEmsCategoryName(activeCategories.find((category) => category.id === formState.categoryId)?.name) ? (

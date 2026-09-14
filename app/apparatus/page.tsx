@@ -164,6 +164,18 @@ export default async function ApparatusPage() {
                 }
               />
               <Link
+                href="/apparatus/pump-test"
+                className="inline-flex items-center justify-center rounded-xl border border-red-500/25 bg-red-600/10 px-4 py-2 text-sm font-semibold text-red-100 transition hover:bg-red-600/20"
+              >
+                Pump Test
+              </Link>
+              <Link
+                href="/apparatus/pump-test-history"
+                className="inline-flex items-center justify-center rounded-xl border border-white/15 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/[0.08]"
+              >
+                Pump Test History
+              </Link>
+              <Link
                 href="/apparatus/archived"
                 className="inline-flex items-center justify-center rounded-xl border border-white/15 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/[0.08]"
               >

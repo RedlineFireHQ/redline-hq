@@ -27,6 +27,23 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+.eyebrow {
+  color: #ff5956;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  line-height: 1.4;
+}
+
+.section-title {
+  margin-top: 1rem;
+  max-width: 42rem;
+  font-size: clamp(2.5rem, 5vw, 5rem);
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 0.98;
+}
+
 .report-results-scrollbar {
   scrollbar-gutter: stable both-edges;
   scrollbar-width: thin;

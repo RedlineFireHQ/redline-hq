@@ -286,15 +286,48 @@ export default function PersonnelQualificationsSection({
 
     try {
       if (selectedDocumentFile) {
+        const formData = new FormData();
+        formData.set("memberId", memberId);
+        formData.set("qualificationId", selectedQualificationId);
+        formData.set("earnedAt", earnedAt);
+        formData.set("file", selectedDocumentFile);
+
+        const response = await fetch("/api/personnel/qualifications/supporting-document", {
+          method: "POST",
+          body: formData,
+        });
+        const result = (await response.json().catch(() => null)) as {
+          ok?: boolean;
+          error?: string;
+          document?: DepartmentDocumentRow;
+          qualification?: MemberQualificationInsertResult;
+        } | null;
+
+        if (!response.ok || !result?.ok || !result.qualification || !result.document) {
+          setSaveError(result?.error || "Unable to add qualification.");
+          return;
+        }
+
+        setDocuments((current) => [result.document!, ...current.filter((row) => row.id !== result.document!.id)]);
+        setRows((current) => [result.qualification!, ...current]);
+        setSaveSuccess("Qualification added.");
+        setIsModalOpen(false);
+        setSelectedDocumentFile(null);
+        router.refresh();
+        return;
+      }
+
+      if (selectedDocumentFile) {
+        const legacyDocumentFile = selectedDocumentFile as File;
         const selectedQualificationName = qualificationTypeById.get(selectedQualificationId)?.name ?? "Qualification";
         const documentTitle = `${selectedQualificationName} Qualification Document`;
         const today = getLocalDateString();
-        const sanitizedName = sanitizeFileName(selectedDocumentFile.name || "qualification-document");
-        uploadedStoragePath = `${departmentId}/department-documents/${Date.now()}-${sanitizedName}`;
+        const sanitizedName = sanitizeFileName(legacyDocumentFile.name || "qualification-document");
+        uploadedStoragePath = `${departmentId}/qualifications/${Date.now()}-${sanitizedName}`;
 
         const { error: uploadError } = await supabase.storage
           .from("department-documents")
-          .upload(uploadedStoragePath, selectedDocumentFile, {
+          .upload(uploadedStoragePath, legacyDocumentFile, {
             cacheControl: "3600",
             upsert: false,
           });
@@ -338,10 +371,10 @@ export default function PersonnelQualificationsSection({
             department_id: departmentId,
             document_id: createdDocumentId,
             revision_number: 1,
-            file_name: selectedDocumentFile.name,
+            file_name: legacyDocumentFile.name,
             file_path: uploadedStoragePath,
-            file_size_bytes: selectedDocumentFile.size,
-            mime_type: selectedDocumentFile.type || null,
+            file_size_bytes: legacyDocumentFile.size,
+            mime_type: legacyDocumentFile.type || null,
             uploaded_by: editorMemberId,
             effective_date: today,
             revision_date: today,
@@ -384,7 +417,7 @@ export default function PersonnelQualificationsSection({
 
           return [
             {
-              id: createdDocumentId,
+                id: createdDocumentId ?? "",
               title: typeof documentData.title === "string" ? documentData.title : "Qualification Document",
               category: typeof documentData.category === "string" ? documentData.category : "Department Documents",
               document_number: typeof documentData.document_number === "string" ? documentData.document_number : null,

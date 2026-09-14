@@ -8,6 +8,7 @@ export interface ScbaCylinderFormValues {
 	cylinderType: "Composite" | "Steel";
 	inServiceDate: string;
 	lastHydrostaticTestDate: string;
+	nextHydrostaticTestDueDate: string;
 	manufacturer: string;
 	model: string;
 	serialNumber: string;
@@ -33,6 +34,7 @@ const EMPTY_VALUES: ScbaCylinderFormValues = {
 	cylinderType: "Composite",
 	inServiceDate: "",
 	lastHydrostaticTestDate: "",
+	nextHydrostaticTestDueDate: "",
 	manufacturer: "",
 	model: "",
 	serialNumber: "",
@@ -79,14 +81,6 @@ function formatDate(value: string) {
 	});
 }
 
-function deriveNextHydroDate(values: ScbaCylinderFormValues) {
-	if (!values.lastHydrostaticTestDate) {
-		return "";
-	}
-
-	return addYearsToIsoDate(values.lastHydrostaticTestDate, values.cylinderType === "Composite" ? 3 : 5);
-}
-
 function deriveServiceLifeEnd(values: ScbaCylinderFormValues) {
 	if (values.cylinderType !== "Composite" || !values.inServiceDate) {
 		return "";
@@ -116,7 +110,7 @@ function deriveProjectedStatus(values: ScbaCylinderFormValues, currentStatus?: s
 		return currentStatus;
 	}
 
-	const nextHydroDate = deriveNextHydroDate(values);
+	const nextHydroDate = values.nextHydrostaticTestDueDate;
 	if (!nextHydroDate) {
 		return "Ready";
 	}
@@ -153,6 +147,7 @@ export default function ScbaCylinderFormModal({
 				cylinderType: initialValues.cylinderType ?? "Composite",
 				inServiceDate: initialValues.inServiceDate ?? "",
 				lastHydrostaticTestDate: initialValues.lastHydrostaticTestDate ?? "",
+				nextHydrostaticTestDueDate: initialValues.nextHydrostaticTestDueDate ?? "",
 				manufacturer: initialValues.manufacturer ?? "",
 				model: initialValues.model ?? "",
 				serialNumber: initialValues.serialNumber ?? "",
@@ -180,7 +175,6 @@ export default function ScbaCylinderFormModal({
 		initialValues?.notes,
 	]);
 
-	const projectedNextHydroDate = useMemo(() => deriveNextHydroDate(formValues), [formValues]);
 	const projectedServiceLifeEndDate = useMemo(() => deriveServiceLifeEnd(formValues), [formValues]);
 	const projectedStatus = useMemo(
 		() => deriveProjectedStatus(formValues, currentStatus),
@@ -244,7 +238,7 @@ export default function ScbaCylinderFormModal({
 						/>
 					</FormField>
 
-					<FormField label="Last Hydrostatic Test Date">
+					<FormField label="Last Hydrostatic Test Date" required>
 						<input
 							type="date"
 							value={formValues.lastHydrostaticTestDate}
@@ -252,6 +246,20 @@ export default function ScbaCylinderFormModal({
 								setFormValues((current) => ({
 									...current,
 									lastHydrostaticTestDate: event.target.value,
+								}))
+							}
+							className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
+						/>
+					</FormField>
+
+					<FormField label="Next Hydrostatic Test Due Date" required>
+						<input
+							type="date"
+							value={formValues.nextHydrostaticTestDueDate}
+							onChange={(event) =>
+								setFormValues((current) => ({
+									...current,
+									nextHydrostaticTestDueDate: event.target.value,
 								}))
 							}
 							className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
@@ -303,7 +311,7 @@ export default function ScbaCylinderFormModal({
 				<div className="mt-5 grid gap-3 md:grid-cols-3">
 					<PreviewCard
 						label="Next Hydrostatic Test Due"
-						value={projectedNextHydroDate ? formatDate(projectedNextHydroDate) : "Pending"}
+						value={formValues.nextHydrostaticTestDueDate ? formatDate(formValues.nextHydrostaticTestDueDate) : "Pending"}
 					/>
 					<PreviewCard
 						label="Service Life End"

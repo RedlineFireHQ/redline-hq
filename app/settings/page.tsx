@@ -7,6 +7,9 @@ import TrainingCategoriesSection from "@/components/settings/TrainingCategoriesS
 import ApparatusInspectionSettingsSection from "@/components/settings/ApparatusInspectionSettingsSection";
 import GasMonitorCalibrationSettingsSection from "@/components/settings/GasMonitorCalibrationSettingsSection";
 import GroundLadderInspectionSettingsSection from "@/components/settings/GroundLadderInspectionSettingsSection";
+import DeficiencyAssignmentSettingsSection from "@/components/settings/DeficiencyAssignmentSettingsSection";
+import DeficiencyResolutionSettingsSection from "@/components/settings/DeficiencyResolutionSettingsSection";
+import EmsSupplyNotificationSettingsSection from "@/components/settings/EmsSupplyNotificationSettingsSection";
 import { getCurrentMember } from "@/lib/current-member";
 import { hasDepartmentPermission } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
@@ -95,6 +98,11 @@ export default async function SettingsPage() {
     { data: apparatusInspectionSettingsData, error: apparatusInspectionSettingsError },
     { data: groundLadderInspectionSettingsData, error: groundLadderInspectionSettingsError },
     { data: gasMonitorCalibrationSettingsData, error: gasMonitorCalibrationSettingsError },
+    { data: deficiencyCategoryData, error: deficiencyCategoryError },
+    { data: memberData, error: memberError },
+    { data: deficiencyAssignmentData, error: deficiencyAssignmentError },
+    { data: emsSupplyRecipientData, error: emsSupplyRecipientError },
+    { data: departmentSettingsData, error: departmentSettingsError },
   ] = await Promise.all([
     supabase
       .from("certifications")
@@ -141,6 +149,31 @@ export default async function SettingsPage() {
       .select("calibration_interval_months")
       .eq("department_id", currentMember.departmentId)
       .maybeSingle(),
+    supabase
+      .from("deficiency_categories")
+      .select("id, name, active")
+      .order("display_order", { ascending: true }),
+    supabase
+      .from("members")
+      .select("id, first_name, last_name, active")
+      .eq("department_id", currentMember.departmentId)
+      .order("last_name", { ascending: true })
+      .order("first_name", { ascending: true }),
+    supabase
+      .from("deficiency_notification_settings")
+      .select("id, category_id, member_id, active")
+      .eq("department_id", currentMember.departmentId),
+    supabase
+      .from("department_notification_recipients")
+      .select("id, member_id, active")
+      .eq("department_id", currentMember.departmentId)
+      .eq("notification_type", "ems_supply_low_stock")
+      .maybeSingle(),
+    supabase
+      .from("departments")
+      .select("restrict_deficiency_resolution")
+      .eq("id", currentMember.departmentId)
+      .maybeSingle(),
   ]);
 
   if (certificationError) {
@@ -174,6 +207,55 @@ export default async function SettingsPage() {
   if (gasMonitorCalibrationSettingsError) {
     throw new Error(gasMonitorCalibrationSettingsError.message || "Unable to load gas monitor calibration settings.");
   }
+
+  if (deficiencyCategoryError) {
+    throw new Error(deficiencyCategoryError.message || "Unable to load deficiency categories.");
+  }
+
+  if (memberError) {
+    throw new Error(memberError.message || "Unable to load department members.");
+  }
+
+  if (deficiencyAssignmentError) {
+    throw new Error(deficiencyAssignmentError.message || "Unable to load deficiency assignment settings.");
+  }
+
+  if (emsSupplyRecipientError) {
+    throw new Error(emsSupplyRecipientError.message || "Unable to load EMS supply notification settings.");
+  }
+
+  if (departmentSettingsError) {
+    throw new Error(departmentSettingsError.message || "Unable to load department settings.");
+  }
+
+  const emsSupplyRecipient = emsSupplyRecipientData
+    ? {
+        id: String(emsSupplyRecipientData.id),
+        member_id:
+          typeof emsSupplyRecipientData.member_id === "string" ? emsSupplyRecipientData.member_id : "",
+        active: emsSupplyRecipientData.active === true,
+      }
+    : null;
+
+  const deficiencyCategories = (deficiencyCategoryData ?? []).map((row) => ({
+    id: String(row.id),
+    name: typeof row.name === "string" ? row.name : "",
+    active: typeof row.active === "boolean" ? row.active : true,
+  }));
+
+  const members = (memberData ?? []).map((row) => ({
+    id: String(row.id),
+    first_name: typeof row.first_name === "string" ? row.first_name : null,
+    last_name: typeof row.last_name === "string" ? row.last_name : null,
+    active: typeof row.active === "boolean" ? row.active : true,
+  }));
+
+  const deficiencyAssignmentSettings = (deficiencyAssignmentData ?? []).map((row) => ({
+    id: typeof row.id === "number" ? row.id : Number(row.id),
+    category_id: typeof row.category_id === "string" ? row.category_id : "",
+    member_id: typeof row.member_id === "string" ? row.member_id : "",
+    active: row.active === true,
+  }));
 
   const certificationTypes: CertificationTypeRow[] = (certificationData ?? []).map((row) => ({
     id: String(row.id),
@@ -290,6 +372,30 @@ export default async function SettingsPage() {
           departmentId={currentMember.departmentId}
           currentMemberId={currentMember.id}
           trainingCategories={trainingCategories}
+        />
+      </div>
+
+      <div className="mt-6">
+        <DeficiencyAssignmentSettingsSection
+          departmentId={currentMember.departmentId}
+          categories={deficiencyCategories}
+          members={members}
+          assignmentSettings={deficiencyAssignmentSettings}
+        />
+      </div>
+
+      <div className="mt-6">
+        <DeficiencyResolutionSettingsSection
+          departmentId={currentMember.departmentId}
+          initialRestricted={departmentSettingsData?.restrict_deficiency_resolution === true}
+        />
+      </div>
+
+      <div className="mt-6">
+        <EmsSupplyNotificationSettingsSection
+          departmentId={currentMember.departmentId}
+          members={members}
+          recipient={emsSupplyRecipient}
         />
       </div>
 

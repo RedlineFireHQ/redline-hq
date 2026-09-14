@@ -1511,7 +1511,7 @@ export async function getDepartmentReadinessData(
         id: `member-${member.memberId}-${coachItem.factorId}${qualificationTarget ? `-${qualificationTarget}` : ""}`,
         title: `${member.memberName} - ${coachItem.title}${qualificationLabel}`,
         description: actionDescription,
-        href: "/my-readiness",
+        href: member.memberId === viewer.id ? "/my-readiness" : `/personnel/${member.memberId}`,
         ownerLabel: member.memberName,
         category: "personnel",
         audience: member.memberId === viewer.id ? "all" : "officer_admin",

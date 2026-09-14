@@ -31,6 +31,14 @@ type MaintenanceHistoryRow = {
   description: string | null;
 };
 
+type PumpTestHistoryRow = {
+  id: string;
+  test_date: string | null;
+  tested_by: string;
+  result: string | null;
+  notes: string | null;
+};
+
 interface ApparatusHistoryCardsProps {
   apparatusName: string;
   inspectionHistory: InspectionHistoryRow[];
@@ -39,6 +47,8 @@ interface ApparatusHistoryCardsProps {
   deficiencyHistory: DeficiencyHistoryRow[];
   deficiencyPriorityNameById: Record<string, string>;
   deficiencyStatusNameById: Record<string, string>;
+  deficiencyReporterNameById: Record<string, string>;
+  pumpTestHistory: PumpTestHistoryRow[];
   maintenanceHistory: MaintenanceHistoryRow[];
   maintenanceMemberNameById: Record<string, string>;
   maintenanceDeficiencyNumberById: Record<string, string>;
@@ -166,6 +176,8 @@ export default function ApparatusHistoryCards({
   deficiencyHistory,
   deficiencyPriorityNameById,
   deficiencyStatusNameById,
+  deficiencyReporterNameById,
+  pumpTestHistory,
   maintenanceHistory,
   maintenanceMemberNameById,
   maintenanceDeficiencyNumberById,
@@ -174,8 +186,29 @@ export default function ApparatusHistoryCards({
   const [inspectionSearch, setInspectionSearch] = useState("");
   const [deficiencySearch, setDeficiencySearch] = useState("");
   const [maintenanceSearch, setMaintenanceSearch] = useState("");
+  const [selectedInspection, setSelectedInspection] = useState<InspectionHistoryRow | null>(null);
 
   const normalizedApparatusName = apparatusName.trim();
+
+  const selectedInspectionInspectorName = selectedInspection?.member_id
+    ? inspectionMemberNameById[selectedInspection.member_id] ?? "Unknown"
+    : "Unknown";
+  const selectedInspectionHelperNames = selectedInspection
+    ? (inspectionHelperMemberIdsByInspectionId[selectedInspection.id] ?? [])
+        .map((memberId) => inspectionMemberNameById[memberId] ?? "Unknown")
+        .join(", ")
+    : "";
+  const selectedInspectionDateTime = selectedInspection
+    ? formatInspectionDateTime(selectedInspection.created_at)
+    : null;
+  const selectedInspectionStatus =
+    selectedInspection?.status === "ready"
+      ? "Ready"
+      : selectedInspection?.status === "needs_attention" || selectedInspection?.status === "deficiency"
+        ? "Needs Attention"
+        : selectedInspection?.status === "out_of_service"
+          ? "Out of Service"
+          : selectedInspection?.status ?? "Unknown";
 
   function toSearchText(values: Array<string | null | undefined>) {
     return values
@@ -237,7 +270,9 @@ export default function ApparatusHistoryCards({
     }
 
     return deficiencyHistory.filter((deficiency) => {
-      const reportedBy = deficiency.reported_by?.trim() || "Unknown";
+      const reportedBy = deficiency.reported_by
+        ? deficiencyReporterNameById[deficiency.reported_by] ?? deficiency.reported_by
+        : "Unknown";
       const deficiencyDateTime = formatDeficiencyDateTime(deficiency.reported_at);
       const priorityName = deficiency.priority
         ? deficiencyPriorityNameById[deficiency.priority] ?? null
@@ -264,6 +299,7 @@ export default function ApparatusHistoryCards({
   }, [
     deficiencyHistory,
     deficiencyPriorityNameById,
+    deficiencyReporterNameById,
     deficiencySearch,
     deficiencyStatusNameById,
     normalizedApparatusName,
@@ -308,6 +344,26 @@ export default function ApparatusHistoryCards({
     maintenanceSearch,
     normalizedApparatusName,
   ]);
+
+  const filteredPumpTestHistory = useMemo(() => {
+    const query = maintenanceSearch.trim().toLowerCase();
+
+    if (!query) {
+      return pumpTestHistory;
+    }
+
+    return pumpTestHistory.filter((test) => {
+      const searchableText = toSearchText([
+        normalizedApparatusName,
+        formatInspectionDateTime(test.test_date).date,
+        test.tested_by,
+        test.result ?? "",
+        test.notes ?? "",
+      ]);
+
+      return searchableText.includes(query);
+    });
+  }, [maintenanceSearch, normalizedApparatusName, pumpTestHistory]);
 
   return (
     <>
@@ -371,6 +427,13 @@ export default function ApparatusHistoryCards({
                       tabIndex={0}
                       role="button"
                       aria-label={`Inspection history entry ${statusLabel} by ${inspectorName}`}
+                      onClick={() => setSelectedInspection(inspection)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          setSelectedInspection(inspection);
+                        }
+                      }}
                       className="group cursor-pointer transition-colors hover:bg-white/[0.03] focus-visible:bg-white/[0.03] focus-visible:outline-none"
                     >
                       <td className="px-4 py-4 align-top text-white">
@@ -407,6 +470,61 @@ export default function ApparatusHistoryCards({
           )}
         </div>
       </div>
+
+      {selectedInspection && selectedInspectionDateTime ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="inspection-history-detail-title"
+        >
+          <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#242424] p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-red-400">Inspection History</p>
+                <h3 id="inspection-history-detail-title" className="mt-1 text-xl font-bold text-white">
+                  {apparatusName}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedInspection(null)}
+                className="rounded-lg border border-white/10 px-3 py-1.5 text-sm font-semibold text-zinc-200 transition hover:bg-white/[0.08]"
+              >
+                Close
+              </button>
+            </div>
+
+            <dl className="mt-6 grid gap-4 text-sm sm:grid-cols-2">
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">Date &amp; Time</dt>
+                <dd className="mt-1 text-white">
+                  {selectedInspectionDateTime.date}
+                  {selectedInspectionDateTime.time ? ` ${selectedInspectionDateTime.time}` : ""}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">Status</dt>
+                <dd className="mt-1 text-white">{selectedInspectionStatus}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">Inspector</dt>
+                <dd className="mt-1 text-white">{selectedInspectionInspectorName}</dd>
+              </div>
+              {selectedInspectionHelperNames ? (
+                <div>
+                  <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">Assisted By</dt>
+                  <dd className="mt-1 text-white">{selectedInspectionHelperNames}</dd>
+                </div>
+              ) : null}
+              <div className="sm:col-span-2">
+                <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">Notes</dt>
+                <dd className="mt-1 whitespace-pre-wrap text-white">{selectedInspection.notes?.trim() || "—"}</dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      ) : null}
 
       {/* Deficiency History */}
       <div className="rounded-2xl border border-red-900 bg-[#242424] p-8">
@@ -446,7 +564,9 @@ export default function ApparatusHistoryCards({
 
               <tbody className="divide-y divide-white/5 text-neutral-300">
                 {filteredDeficiencyHistory.map((deficiency) => {
-                  const reportedBy = deficiency.reported_by?.trim() || "Unknown";
+                  const reportedBy = deficiency.reported_by
+                    ? deficiencyReporterNameById[deficiency.reported_by] ?? deficiency.reported_by
+                    : "Unknown";
                   const deficiencyDateTime = formatDeficiencyDateTime(deficiency.reported_at);
                   const priorityName = deficiency.priority
                     ? deficiencyPriorityNameById[deficiency.priority] ?? null
@@ -503,6 +623,68 @@ export default function ApparatusHistoryCards({
                     </tr>
                   );
                 })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {/* Pump Test History */}
+      <div className="rounded-2xl border border-red-900 bg-[#242424] p-8">
+        <div>
+          <h2 className="text-2xl font-bold text-white">Pump Test History</h2>
+          <p className="mt-2 text-neutral-400">
+            Department-scoped pass/fail results for this apparatus.
+          </p>
+        </div>
+
+        <div className="mt-4">
+          <input
+            type="search"
+            value={maintenanceSearch}
+            onChange={(event) => setMaintenanceSearch(event.target.value)}
+            placeholder="Search pump test history"
+            className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-500 focus:border-red-500/50 focus:outline-none"
+          />
+        </div>
+
+        <div className="mt-6 max-h-[18rem] overflow-x-auto overflow-y-auto rounded-xl border border-white/10 bg-[#1b1b1b]">
+          {filteredPumpTestHistory.length === 0 ? (
+            <div className="flex min-h-full items-center justify-center px-6 py-8 text-center text-neutral-400">
+              No pump-test history available for this apparatus.
+            </div>
+          ) : (
+            <table className="min-w-full text-left text-sm">
+              <thead>
+                <tr className="sticky top-0 border-b border-white/10 bg-[#1b1b1b] text-[11px] uppercase tracking-[0.12em] text-neutral-500">
+                  <th className="px-4 py-3 font-semibold">Test Date</th>
+                  <th className="px-4 py-3 font-semibold">Tested By</th>
+                  <th className="px-4 py-3 font-semibold">Result</th>
+                  <th className="px-4 py-3 font-semibold">Notes</th>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-white/5 text-neutral-300">
+                {filteredPumpTestHistory.map((test) => (
+                  <tr key={test.id} className="transition-colors hover:bg-white/[0.03]">
+                    <td className="px-4 py-4 align-top text-white">{formatInspectionDateTime(test.test_date).date}</td>
+                    <td className="px-4 py-4 align-top text-white">{test.tested_by}</td>
+                    <td className="px-4 py-4 align-top">
+                      <span
+                        className={`inline-flex rounded-full border px-3.5 py-1.5 text-sm font-semibold ${
+                          test.result === "Pass"
+                            ? "border-green-500/30 bg-green-500/15 text-green-300"
+                            : test.result === "Fail"
+                              ? "border-red-500/35 bg-red-500/15 text-red-300"
+                              : "border-white/10 bg-white/5 text-neutral-300"
+                        }`}
+                      >
+                        {test.result ?? "Unknown"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4 align-top text-neutral-300">{test.notes?.trim() || "—"}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           )}

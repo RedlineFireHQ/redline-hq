@@ -57,6 +57,7 @@ type CalendarWorkspaceProps = {
     role: CurrentMemberRole;
     name: string;
   };
+  canManageCalendar: boolean;
   initialActivities: CalendarActivity[];
   memberOptions: MemberOption[];
 };
@@ -512,11 +513,11 @@ function ActivityModal({
 
 export default function CalendarWorkspace({
   currentMember,
+  canManageCalendar,
   initialActivities,
   memberOptions,
 }: CalendarWorkspaceProps) {
-  const canManageActivities =
-    currentMember.role === "administrator" || currentMember.role === "officer";
+  const canManageActivities = canManageCalendar;
 
   const [activities, setActivities] = useState<CalendarActivity[]>(sortActivities(initialActivities));
   const [displayMonth, setDisplayMonth] = useState(startOfMonth(new Date()));

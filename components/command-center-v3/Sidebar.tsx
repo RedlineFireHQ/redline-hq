@@ -44,25 +44,34 @@ interface SidebarProps {
 
 export default function Sidebar({ translucent = false }: SidebarProps) {
   const pathname = usePathname();
-  const { member, user } = useAuth();
+  const { member, user, permissions, department, isLoading } = useAuth();
   const normalizedRole = typeof member?.role === "string" ? member.role.trim().toLowerCase() : "";
   const isAdministrator = normalizedRole === "administrator";
-  const canManagePersonnel = member?.can_manage_personnel === true;
+  const canManagePersonnel = permissions.personnel_management;
+  const canAccessReports = permissions.reports_management;
+
+  const departmentName = isLoading ? "Loading department..." : department?.name?.trim() || "Redline HQ";
 
   const memberFirstName =
     typeof member?.first_name === "string" ? member.first_name.trim() : "";
   const memberLastName =
     typeof member?.last_name === "string" ? member.last_name.trim() : "";
   const fullName = `${memberFirstName} ${memberLastName}`.trim();
-  const displayName = fullName || user?.email?.trim() || "Unknown User";
+  const displayName = isLoading ? "Loading user..." : fullName || user?.email?.trim() || "Unknown User";
   const displayRole =
-    typeof member?.role === "string" && member.role.trim()
+    isLoading
+      ? "Loading..."
+      : typeof member?.role === "string" && member.role.trim()
       ? member.role.trim()
       : "Firefighter";
 
   const visibleNavigationItems = navigationItems.filter((item) => {
     if (item.href === "/personnel") {
       return isAdministrator || canManagePersonnel;
+    }
+
+    if (item.href === "/reports") {
+      return isAdministrator || canAccessReports;
     }
 
     return true;
@@ -97,9 +106,7 @@ export default function Sidebar({ translucent = false }: SidebarProps) {
 
         <div className="mt-4 text-center">
           <p className="text-[12px] font-semibold uppercase leading-5 tracking-[0.22em] text-zinc-300">
-            Elliott Volunteer
-            <br />
-            Fire Department
+            {departmentName}
           </p>
         </div>
 

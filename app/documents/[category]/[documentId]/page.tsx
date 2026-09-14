@@ -90,14 +90,16 @@ export default async function DocumentViewerPage({
     currentMember.role,
   );
 
-  const { data: currentRevision, error: revisionError } = await supabase
-    .from("document_revisions")
-    .select(
-      "id, document_id, revision_number, uploaded_by, revision_date, effective_date, file_name, file_path, mime_type, notes, content_text, status, created_at, updated_at",
-    )
-    .eq("id", document.current_revision_id)
-    .eq("department_id", currentMember.departmentId)
-    .maybeSingle();
+  const { data: currentRevision, error: revisionError } = document.current_revision_id
+    ? await supabase
+        .from("document_revisions")
+        .select(
+          "id, document_id, revision_number, uploaded_by, revision_date, effective_date, file_name, file_path, mime_type, notes, content_text, status, created_at, updated_at",
+        )
+        .eq("id", document.current_revision_id)
+        .eq("department_id", currentMember.departmentId)
+        .maybeSingle()
+    : { data: null, error: null };
 
   if (revisionError) {
     throw new Error(revisionError.message || "Unable to load the document revision.");

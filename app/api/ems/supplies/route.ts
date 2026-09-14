@@ -1,5 +1,5 @@
 import { getCurrentMember } from "@/lib/current-member";
-import { hasDepartmentPermission } from "@/lib/member-permissions";
+import { hasInventoryPermission } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 type CreateSupplyPayload = {
@@ -141,11 +141,11 @@ export async function POST(request: Request) {
       return jsonResponse({ ok: false, error: "Unauthorized" }, 401);
     }
 
-    const canManageInventory = await hasDepartmentPermission(
+    const canManageInventory = await hasInventoryPermission(
       supabase,
       currentMember.departmentId,
       currentMember.role,
-      "inventory_management",
+      "ems_supply_management",
     );
 
     if (!canManageInventory) {

@@ -7,7 +7,7 @@ export type ScbaPackSessionResult = "Pass" | "Fail" | "";
 
 export interface ScbaPackSessionFlowTestValues {
 	testDate: string;
-	testerMode: "member" | "external";
+	testerType: "member" | "external";
 	memberId: string;
 	externalTesterName: string;
 	externalTesterCompany: string;
@@ -71,7 +71,8 @@ export default function ScbaPackSessionFlowTestModal({
 	onSave,
 }: ScbaPackSessionFlowTestModalProps) {
 	const [testDate, setTestDate] = useState(getTodayDate());
-	const [selectedTesterOption, setSelectedTesterOption] = useState("");
+	const [selectedTesterType, setSelectedTesterType] = useState<"member" | "external" | "">("");
+	const [selectedMemberId, setSelectedMemberId] = useState("");
 	const [externalTesterName, setExternalTesterName] = useState("");
 	const [externalTesterCompany, setExternalTesterCompany] = useState("");
 	const [sessionNotes, setSessionNotes] = useState("");
@@ -84,7 +85,8 @@ export default function ScbaPackSessionFlowTestModal({
 		}
 
 		setTestDate(getTodayDate());
-		setSelectedTesterOption("");
+		setSelectedTesterType("");
+		setSelectedMemberId("");
 		setExternalTesterName("");
 		setExternalTesterCompany("");
 		setSessionNotes("");
@@ -92,7 +94,8 @@ export default function ScbaPackSessionFlowTestModal({
 		setPackNotes(Object.fromEntries(packs.map((pack) => [pack.id, ""])));
 	}, [isOpen, packs]);
 
-	const isExternalTester = selectedTesterOption === "external";
+	const isExternalTester = selectedTesterType === "external";
+	const isMemberTester = selectedTesterType === "member";
 
 	const selectedCount = useMemo(
 		() => Object.values(packResults).filter((result) => result === "Pass" || result === "Fail").length,
@@ -168,17 +171,37 @@ export default function ScbaPackSessionFlowTestModal({
 						<label className="block">
 							<span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-neutral-300">Tested By *</span>
 							<select
-								value={selectedTesterOption}
-								onChange={(event) => setSelectedTesterOption(event.target.value)}
+								value={selectedTesterType}
+								onChange={(event) => {
+									const nextValue = event.target.value as "member" | "external" | "";
+									setSelectedTesterType(nextValue);
+									if (nextValue !== "member") {
+										setSelectedMemberId("");
+									}
+								}}
 								className="w-full rounded-lg border border-white/10 bg-[#141414] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
 							>
-								<option value="">Select department member</option>
-								{testerOptions.map((option) => (
-									<option key={option.id} value={option.id}>{option.label}</option>
-								))}
+								<option value="">Select tester type</option>
+								<option value="member">Department Member</option>
 								<option value="external">External Tester</option>
 							</select>
 						</label>
+
+						{isMemberTester ? (
+							<label className="block">
+								<span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-neutral-300">Department Member *</span>
+								<select
+									value={selectedMemberId}
+									onChange={(event) => setSelectedMemberId(event.target.value)}
+									className="w-full rounded-lg border border-white/10 bg-[#141414] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
+								>
+									<option value="">Select department member</option>
+									{testerOptions.map((option) => (
+										<option key={option.id} value={option.id}>{option.label}</option>
+									))}
+								</select>
+							</label>
+						) : null}
 
 						{isExternalTester ? (
 							<>
@@ -193,7 +216,7 @@ export default function ScbaPackSessionFlowTestModal({
 								</label>
 
 								<label className="block">
-									<span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-neutral-300">Company / Organization</span>
+									<span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-neutral-300">Company</span>
 									<input
 										value={externalTesterCompany}
 										onChange={(event) => setExternalTesterCompany(event.target.value)}
@@ -336,8 +359,8 @@ export default function ScbaPackSessionFlowTestModal({
 						onClick={() =>
 							onSave({
 								testDate,
-								testerMode: selectedTesterOption === "external" ? "external" : "member",
-								memberId: selectedTesterOption === "external" ? "" : selectedTesterOption,
+								testerType: selectedTesterType === "external" ? "external" : "member",
+								memberId: selectedTesterType === "member" ? selectedMemberId : "",
 								externalTesterName,
 								externalTesterCompany,
 								sessionNotes,

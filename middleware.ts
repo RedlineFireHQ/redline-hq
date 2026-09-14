@@ -34,18 +34,29 @@ export async function middleware(request: NextRequest) {
 
 	const { pathname } = request.nextUrl;
 	const isLoginRoute = pathname === "/login";
+	const isPublicRootRoute = pathname === "/";
+	const isPublicDemoRequestRoute = pathname === "/api/demo-request";
+	const isChangePasswordRoute = pathname === "/change-password";
+	const mustChangePassword = user?.user_metadata?.must_change_password === true;
 
-	if (!user && !isLoginRoute) {
+	if (!user && !isLoginRoute && !isPublicRootRoute && !isPublicDemoRequestRoute) {
 		const url = request.nextUrl.clone();
 		url.pathname = "/login";
 		url.search = "";
 		return NextResponse.redirect(url);
 	}
 
+	if (user && mustChangePassword && !isChangePasswordRoute) {
+		const url = request.nextUrl.clone();
+		url.pathname = "/change-password";
+		url.search = "?first=1";
+		return NextResponse.redirect(url);
+	}
+
 	if (user && isLoginRoute) {
 		const url = request.nextUrl.clone();
-		url.pathname = "/";
-		url.search = "";
+		url.pathname = mustChangePassword ? "/change-password" : "/";
+		url.search = mustChangePassword ? "?first=1" : "";
 		return NextResponse.redirect(url);
 	}
 

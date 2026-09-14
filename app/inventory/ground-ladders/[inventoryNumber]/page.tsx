@@ -43,9 +43,6 @@ export default async function GroundLadderDetailPage({ params }: GroundLadderDet
 				initialRows={data.ladders}
 				initialAssignments={data.assignments}
 				initialServiceTests={data.serviceTests}
-				initialMaintenanceSettings={data.maintenanceSettings}
-				initialMaintenanceRecords={data.maintenanceRecords}
-				initialMaintenanceItems={data.maintenanceItems}
 				apparatusOptions={data.apparatusOptions}
 				selectedLadderNumber={selectedLadderNumber}
 				canDeleteLadder={member.role === "administrator" || member.role === "officer"}

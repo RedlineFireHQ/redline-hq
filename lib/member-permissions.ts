@@ -24,6 +24,18 @@ export async function hasDepartmentPermission(
     return true;
   }
 
+  return hasAssignedDepartmentPermission(supabase, departmentId, permissionKey);
+}
+
+export async function hasAssignedDepartmentPermission(
+  supabase: SupabaseClient,
+  departmentId: string,
+  permissionKey: string,
+): Promise<boolean> {
+  if (!departmentId) {
+    return false;
+  }
+
   const { data, error } = await supabase.rpc("member_has_app_permission", {
     p_department_id: departmentId,
     p_permission_key: permissionKey,
@@ -34,6 +46,97 @@ export async function hasDepartmentPermission(
   }
 
   return Boolean(data as RpcBooleanRow);
+}
+
+export async function hasInventoryPermission(
+  supabase: SupabaseClient,
+  departmentId: string,
+  role: unknown,
+  permissionKey: string,
+): Promise<boolean> {
+  if (!departmentId) {
+    return false;
+  }
+
+  if (isAdministratorRole(role)) {
+    return true;
+  }
+
+  const { data, error } = await supabase.rpc("member_has_inventory_permission", {
+    p_department_id: departmentId,
+    p_permission_key: permissionKey,
+  });
+
+  if (error) {
+    return false;
+  }
+
+  return Boolean(data as RpcBooleanRow);
+}
+
+export async function hasTrainingProgramManagementPermission(
+  supabase: SupabaseClient,
+  departmentId: string,
+  role: unknown,
+): Promise<boolean> {
+  if (!departmentId) {
+    return false;
+  }
+
+  if (isAdministratorRole(role)) {
+    return true;
+  }
+
+  const [canonical, legacy] = await Promise.all([
+    hasDepartmentPermission(supabase, departmentId, role, "training_program_management"),
+    hasDepartmentPermission(supabase, departmentId, role, "training_management"),
+  ]);
+
+  return canonical || legacy;
+}
+
+export async function hasTrainingAssignmentManagementPermission(
+  supabase: SupabaseClient,
+  departmentId: string,
+  role: unknown,
+): Promise<boolean> {
+  if (!departmentId) {
+    return false;
+  }
+
+  if (isAdministratorRole(role)) {
+    return true;
+  }
+
+  const [canonical, legacyHomework, legacyTraining] = await Promise.all([
+    hasDepartmentPermission(supabase, departmentId, role, "training_assignment_management"),
+    hasDepartmentPermission(supabase, departmentId, role, "homework_assignment"),
+    hasDepartmentPermission(supabase, departmentId, role, "training_management"),
+  ]);
+
+  return canonical || legacyHomework || legacyTraining;
+}
+
+export async function hasTrainingReviewManagementPermission(
+  supabase: SupabaseClient,
+  departmentId: string,
+  role: unknown,
+): Promise<boolean> {
+  if (!departmentId) {
+    return false;
+  }
+
+  if (isAdministratorRole(role)) {
+    return true;
+  }
+
+  const [canonical, legacyReview, legacyTraining] = await Promise.all([
+    hasDepartmentPermission(supabase, departmentId, role, "training_review_management"),
+    hasDepartmentPermission(supabase, departmentId, role, "training_review"),
+    hasDepartmentPermission(supabase, departmentId, role, "training_management"),
+  ]);
+
+  return canonical || legacyReview || legacyTraining;
 }
 
 export async function canManagePersonnel(
@@ -101,6 +204,31 @@ export async function canManageDocuments(
   const { data, error } = await supabase.rpc("member_has_app_permission", {
     p_department_id: departmentId,
     p_permission_key: "documents_management",
+  });
+
+  if (error) {
+    return false;
+  }
+
+  return Boolean(data as RpcBooleanRow);
+}
+
+export async function canManagePrePlans(
+  supabase: SupabaseClient,
+  departmentId: string,
+  role: unknown,
+): Promise<boolean> {
+  if (!departmentId) {
+    return false;
+  }
+
+  if (isAdministratorRole(role)) {
+    return true;
+  }
+
+  const { data, error } = await supabase.rpc("member_has_app_permission", {
+    p_department_id: departmentId,
+    p_permission_key: "pre_plans_management",
   });
 
   if (error) {

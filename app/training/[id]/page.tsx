@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import TrainingEventDetailWorkspace from "@/components/training/TrainingEventDetailWorkspace";
 import { getCurrentMember } from "@/lib/current-member";
-import { hasDepartmentPermission } from "@/lib/member-permissions";
+import { hasAssignedDepartmentPermission } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 type TrainingCategoryRow = {
@@ -82,16 +82,9 @@ export default async function TrainingEventDetailPage({
     redirect("/login");
   }
 
-  const canManageTraining = await hasDepartmentPermission(
-    supabase,
-    currentMember.departmentId,
-    currentMember.role,
-    "training_management",
-  );
-
-  if (!canManageTraining) {
-    redirect("/");
-  }
+  const canManageTraining =
+    (await hasAssignedDepartmentPermission(supabase, currentMember.departmentId, "training_program_management")) ||
+    (await hasAssignedDepartmentPermission(supabase, currentMember.departmentId, "training_management"));
 
   const [
     { data: eventData, error: eventError },

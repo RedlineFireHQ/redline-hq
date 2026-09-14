@@ -40,6 +40,21 @@ test("authoritative readiness certification scope excludes generic EMT duplicate
 	);
 });
 
+test("current non-expiring role-required certification can be explicitly scored", () => {
+	const scoped = buildScoredCertificationStatuses({
+		memberDepartmentRoleId: "firefighter",
+		certificationStatuses: [
+			{ certificationId: "ff1", certificationName: "Firefighter 1", status: "current", authority: null, expiresAt: null },
+		],
+		roleRequiredCertifications: [{ department_role_id: "firefighter", certification_id: "ff1" }],
+		includeIowaAuthority: false,
+		includeNremtAuthority: false,
+		includeNonExpiringRoleRequirements: true,
+	});
+
+	assert.deepEqual(scoped.map((row) => row.certificationId), ["ff1"]);
+});
+
 test("optional NREMT is excluded from the certification bucket when not maintained", () => {
 	const scoped = buildScoredCertificationStatuses({
 		memberDepartmentRoleId: "firefighter",

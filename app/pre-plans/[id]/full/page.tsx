@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import PageLayout from "@/components/layout/PageLayout";
+import ArchivePrePlanControls from "@/components/pre-plans/ArchivePrePlanControls";
 import { getCurrentMember } from "@/lib/current-member";
+import { canManagePrePlans } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 type PrePlanRecord = {
@@ -132,6 +134,11 @@ export default async function FullPrePlanPage({ params }: FullPrePlanPageProps) 
   }
 
   const record = data as PrePlanRecord;
+  const canManagePrePlansForDepartment = await canManagePrePlans(
+    supabase,
+    departmentId,
+    currentMember?.role,
+  );
 
   const [hydrantsResult, hazardsResult] = await Promise.all([
     supabase
@@ -168,12 +175,19 @@ export default async function FullPrePlanPage({ params }: FullPrePlanPageProps) 
             >
               Back to Quick View
             </Link>
-            <Link
-              href={`/pre-plans/${record.id}/edit`}
-              className="inline-flex rounded-lg border border-red-500/40 bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
-            >
-              Edit Pre-Plan
-            </Link>
+            {canManagePrePlansForDepartment ? (
+              <Link
+                href={`/pre-plans/${record.id}/edit`}
+                className="inline-flex rounded-lg border border-red-500/40 bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+              >
+                Edit Pre-Plan
+              </Link>
+            ) : null}
+            <ArchivePrePlanControls
+              prePlanId={record.id}
+              prePlanName={record.business_name}
+              canManage={canManagePrePlansForDepartment}
+            />
           </div>
         </div>
 

@@ -109,28 +109,6 @@ function statusBadgeClasses(status: string, hasActiveDeficiency: boolean) {
 	return "border-white/15 bg-neutral-900 text-neutral-200";
 }
 
-function summaryCardClasses(active: boolean, tone: "good" | "warn" | "bad" | "neutral") {
-	const base = "rounded-xl border px-4 py-3 text-left transition";
-
-	if (active) {
-		return `${base} border-white/20 bg-white/[0.06]`;
-	}
-
-	if (tone === "good") {
-		return `${base} border-green-700/30 bg-green-950/20 hover:bg-green-950/30`;
-	}
-
-	if (tone === "warn") {
-		return `${base} border-amber-700/30 bg-amber-950/20 hover:bg-amber-950/30`;
-	}
-
-	if (tone === "bad") {
-		return `${base} border-red-700/30 bg-red-950/20 hover:bg-red-950/30`;
-	}
-
-	return `${base} border-neutral-700/30 bg-neutral-900/40 hover:bg-neutral-900/60`;
-}
-
 function getMemberName(member: MemberRecord | undefined) {
 	if (!member) {
 		return "Unknown Member";
@@ -443,11 +421,6 @@ export default function ThermalImagingCameraWorkspace({
 	const outOfServiceCount = activeRows.filter((row) => row.status === "Out of Service").length;
 	const lostStolenCount = activeRows.filter((row) => row.status === "Lost" || row.status === "Stolen").length;
 	const retiredCount = sortedRows.filter((row) => row.status === "Retired").length;
-	const inServiceReadyCount = activeRows.filter(
-		(row) => row.status === "In Service" && activeDeficiencyByCameraId[row.id] !== true,
-	).length;
-	const readinessPercentage = activeRows.length > 0 ? Math.round((inServiceReadyCount / activeRows.length) * 100) : 100;
-
 	const editingRow = useMemo(
 		() => (editCameraId ? sortedRows.find((row) => row.id === editCameraId) ?? null : null),
 		[editCameraId, sortedRows],
@@ -843,7 +816,6 @@ export default function ThermalImagingCameraWorkspace({
 
 	const hasRows = rows.length > 0;
 	const hasVisibleRows = filteredRows.length > 0;
-	const scoreWidth = `${Math.max(0, Math.min(100, readinessPercentage))}%`;
 
 	return (
 		<div className="mx-auto max-w-7xl space-y-8 pb-16">
@@ -873,72 +845,11 @@ export default function ThermalImagingCameraWorkspace({
 					</div>
 
 					<div className="w-full max-w-[220px] rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3">
-						<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Accountability</p>
-						<p className="mt-1 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">{readinessPercentage}%</p>
-						<p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-red-400">In Service Ready</p>
-						<div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-neutral-800">
-							<div className="h-full rounded-full bg-red-500 transition-all" style={{ width: scoreWidth }} />
-						</div>
+						<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Out of Service</p>
+						<p className="mt-1 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">{outOfServiceCount}</p>
+						<p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-red-400">Status</p>
 						<p className="mt-2 text-[11px] text-neutral-500">{departmentName ?? "Department"}</p>
 					</div>
-				</div>
-			</section>
-
-			<section className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-5">
-				<div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
-					<button
-						type="button"
-						onClick={() => setActiveSummaryFilter("all")}
-						className={summaryCardClasses(activeSummaryFilter === "all", "neutral")}
-					>
-						<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Total Cameras</p>
-						<p className="mt-2 text-2xl font-black text-white">{totalCount}</p>
-					</button>
-
-					<button
-						type="button"
-						onClick={() => setActiveSummaryFilter("in-service")}
-						className={summaryCardClasses(activeSummaryFilter === "in-service", "good")}
-					>
-						<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">In Service</p>
-						<p className="mt-2 text-2xl font-black text-white">{inServiceCount}</p>
-					</button>
-
-					<button
-						type="button"
-						onClick={() => setActiveSummaryFilter("unassigned")}
-						className={summaryCardClasses(activeSummaryFilter === "unassigned", "warn")}
-					>
-						<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Unassigned</p>
-						<p className="mt-2 text-2xl font-black text-white">{unassignedCount}</p>
-					</button>
-
-					<button
-						type="button"
-						onClick={() => setActiveSummaryFilter("out-of-service")}
-						className={summaryCardClasses(activeSummaryFilter === "out-of-service", "bad")}
-					>
-						<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Out of Service</p>
-						<p className="mt-2 text-2xl font-black text-white">{outOfServiceCount}</p>
-					</button>
-
-					<button
-						type="button"
-						onClick={() => setActiveSummaryFilter("lost-stolen")}
-						className={summaryCardClasses(activeSummaryFilter === "lost-stolen", "bad")}
-					>
-						<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Lost / Stolen</p>
-						<p className="mt-2 text-2xl font-black text-white">{lostStolenCount}</p>
-					</button>
-
-					<button
-						type="button"
-						onClick={() => setActiveSummaryFilter("retired")}
-						className={summaryCardClasses(activeSummaryFilter === "retired", "neutral")}
-					>
-						<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Retired</p>
-						<p className="mt-2 text-2xl font-black text-white">{retiredCount}</p>
-					</button>
 				</div>
 			</section>
 
@@ -968,11 +879,11 @@ export default function ThermalImagingCameraWorkspace({
 					</div>
 				</div>
 
-				<div className="mt-5 overflow-x-auto">
+				<div className="mt-5 max-h-[18rem] overflow-y-auto overflow-x-auto">
 					<table className="min-w-full border-separate border-spacing-0 text-left">
 						<thead>
 							<tr>
-								{["Camera Number", "Serial Number", "Manufacturer", "Model", "Status", "Current Assignment", "Actions"].map((label) => (
+								{["Camera Number", "Manufacturer", "Model", "Status", "Current Assignment", "Actions"].map((label) => (
 									<th
 										key={label}
 										scope="col"
@@ -986,13 +897,13 @@ export default function ThermalImagingCameraWorkspace({
 						<tbody>
 							{!hasRows ? (
 								<tr>
-									<td colSpan={7} className="border-b border-white/5 px-4 py-8 text-center text-sm text-neutral-400">
+									<td colSpan={6} className="border-b border-white/5 px-4 py-8 text-center text-sm text-neutral-400">
 										No thermal imaging cameras have been added yet.
 									</td>
 								</tr>
 							) : !hasVisibleRows ? (
 								<tr>
-									<td colSpan={7} className="border-b border-white/5 px-4 py-8 text-center text-sm text-neutral-400">
+									<td colSpan={6} className="border-b border-white/5 px-4 py-8 text-center text-sm text-neutral-400">
 										No cameras match the current filters.
 									</td>
 								</tr>
@@ -1002,7 +913,6 @@ export default function ThermalImagingCameraWorkspace({
 									return (
 										<tr key={row.id} className="transition hover:bg-white/5">
 											<td className="border-b border-white/5 px-4 py-3 text-sm font-semibold text-white">{row.camera_number}</td>
-											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">{row.serial_number}</td>
 											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">{row.manufacturer ?? "-"}</td>
 											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">{row.model ?? "-"}</td>
 											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">

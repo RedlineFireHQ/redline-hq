@@ -68,7 +68,12 @@ export default function LoginPage() {
 			return;
 		}
 
-		router.replace("/");
+		const {
+			data: { user: signedInUser },
+		} = await supabase.auth.getUser();
+		const mustChangePassword = signedInUser?.user_metadata?.must_change_password === true;
+
+		router.replace(mustChangePassword ? "/change-password?first=1" : "/");
 		router.refresh();
 	}
 
@@ -155,9 +160,9 @@ export default function LoginPage() {
 						}`}
 					>
 						<div className="mb-8 sm:mb-10 lg:mt-4">
-							<div className="relative h-[126px] w-[270px] max-w-full sm:h-[152px] sm:w-[340px] lg:h-[166px] lg:w-[372px]">
+							<div className="relative ml-[50px] h-[126px] w-[270px] max-w-full sm:h-[152px] sm:w-[340px] lg:h-[166px] lg:w-[372px]">
 								<Image
-									src="/branding/logos/desktop.png"
+								src="/branding/images/redlinesidebarlogo.png"
 									alt="Redline HQ"
 									fill
 									priority

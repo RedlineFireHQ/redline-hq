@@ -10,7 +10,7 @@ export type BatteryFormValues = {
 	batteryType: string;
 	compatibleEquipment: string;
 	inServiceDate: string;
-	status: "In Service" | "Unassigned" | "Out of Service" | "Lost" | "Stolen" | "Retired";
+	status: "In Service" | "Unassigned" | "Out of Service" | "Station Storage" | "Lost" | "Stolen" | "Retired";
 	notes: string;
 };
 
@@ -39,6 +39,8 @@ interface BatteryFormModalProps {
 		initialAssignment?: BatteryInitialAssignmentValues,
 	) => void;
 	onRetire?: () => void;
+	onAssign?: () => void;
+	onHistory?: () => void;
 	onDelete?: () => void;
 	onReportDeficiency?: () => void;
 }
@@ -62,6 +64,25 @@ const EMPTY_INITIAL_ASSIGNMENT: BatteryInitialAssignmentValues = {
 	equipmentReference: "",
 };
 
+function getLocalTodayDateString() {
+	const now = new Date();
+	const offsetMinutes = now.getTimezoneOffset();
+	const localDate = new Date(now.getTime() - offsetMinutes * 60 * 1000);
+	return localDate.toISOString().slice(0, 10);
+}
+
+const ADD_MODE_STATUS_OPTIONS: BatteryFormValues["status"][] = [
+	"In Service",
+	"Out of Service",
+	"Station Storage",
+];
+
+const EDIT_MODE_STATUS_OPTIONS: BatteryFormValues["status"][] = [
+	"In Service",
+	"Out of Service",
+	"Station Storage",
+];
+
 const STATUS_OPTIONS: BatteryFormValues["status"][] = [
 	"In Service",
 	"Unassigned",
@@ -84,6 +105,10 @@ function statusBadgeClasses(status: string) {
 		return "border-red-700/40 bg-red-900/20 text-red-300";
 	}
 
+	if (status === "Station Storage") {
+		return "border-cyan-700/40 bg-cyan-900/20 text-cyan-300";
+	}
+
 	if (status === "Retired") {
 		return "border-neutral-600/40 bg-neutral-800 text-neutral-300";
 	}
@@ -101,6 +126,8 @@ export default function BatteryFormModal({
 	onClose,
 	onSave,
 	onRetire,
+	onAssign,
+	onHistory,
 	onDelete,
 	onReportDeficiency,
 }: BatteryFormModalProps) {
@@ -115,6 +142,10 @@ export default function BatteryFormModal({
 		}
 
 		if (mode === "edit" && initialValues) {
+			const sanitizedStatus = EDIT_MODE_STATUS_OPTIONS.includes(initialValues.status as BatteryFormValues["status"])
+				? initialValues.status
+				: "In Service";
+
 			setFormValues({
 				batteryNumber: initialValues.batteryNumber ?? "",
 				serialNumber: initialValues.serialNumber ?? "",
@@ -123,14 +154,18 @@ export default function BatteryFormModal({
 				batteryType: initialValues.batteryType ?? "",
 				compatibleEquipment: initialValues.compatibleEquipment ?? "",
 				inServiceDate: initialValues.inServiceDate ?? "",
-				status: initialValues.status ?? "Unassigned",
+				status: sanitizedStatus,
 				notes: initialValues.notes ?? "",
 			});
 			setInitialAssignment(EMPTY_INITIAL_ASSIGNMENT);
 			return;
 		}
 
-		setFormValues(EMPTY_VALUES);
+		setFormValues({
+			...EMPTY_VALUES,
+			inServiceDate: mode === "add" ? getLocalTodayDateString() : "",
+			status: mode === "add" ? "In Service" : "Unassigned",
+		});
 		setInitialAssignment(EMPTY_INITIAL_ASSIGNMENT);
 	}, [
 		initialValues?.batteryNumber,
@@ -201,15 +236,6 @@ export default function BatteryFormModal({
 					</label>
 
 					<label className="block">
-						<span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Battery Platform / Type</span>
-						<input
-							value={formValues.batteryType}
-							onChange={(event) => setFormValues((current) => ({ ...current, batteryType: event.target.value }))}
-							className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
-						/>
-					</label>
-
-					<label className="block">
 						<span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">In-Service Date</span>
 						<input
 							type="date"
@@ -223,17 +249,19 @@ export default function BatteryFormModal({
 						<span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Status *</span>
 						<select
 							value={formValues.status}
-							onChange={(event) =>
-								setFormValues((current) => ({
-									...current,
-									status: STATUS_OPTIONS.includes(event.target.value as BatteryFormValues["status"])
-										? (event.target.value as BatteryFormValues["status"])
-										: "Unassigned",
-								}))
-							}
+							onChange={(event) => {
+								const nextStatus =
+									mode === "add"
+										? ADD_MODE_STATUS_OPTIONS.includes(event.target.value as BatteryFormValues["status"])
+											? (event.target.value as BatteryFormValues["status"])
+											: "In Service"
+										: EDIT_MODE_STATUS_OPTIONS.includes(event.target.value as BatteryFormValues["status"])
+											? (event.target.value as BatteryFormValues["status"])
+											: "In Service";
+							}}
 							className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
 						>
-							{STATUS_OPTIONS.map((status) => (
+							{(mode === "add" ? ADD_MODE_STATUS_OPTIONS : EDIT_MODE_STATUS_OPTIONS).map((status) => (
 								<option key={status} value={status}>{status}</option>
 							))}
 						</select>
@@ -362,6 +390,26 @@ export default function BatteryFormModal({
 								className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
 							>
 								Report Deficiency
+							</button>
+						) : null}
+
+						{mode === "edit" && onAssign ? (
+							<button
+								type="button"
+								onClick={onAssign}
+								className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+							>
+								Assign
+							</button>
+						) : null}
+
+						{mode === "edit" && onHistory ? (
+							<button
+								type="button"
+								onClick={onHistory}
+								className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+							>
+								History
 							</button>
 						) : null}
 

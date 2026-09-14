@@ -238,6 +238,67 @@ export default async function ApparatusDetailPage({
   });
 
   const deficiencyHistory = (deficiencyHistoryData ?? []) as DeficiencyHistoryRow[];
+  const deficiencyReporterMemberIds = Array.from(
+    new Set(
+      deficiencyHistory
+        .map((deficiency) => deficiency.reported_by)
+        .filter((memberId): memberId is string => Boolean(memberId))
+    )
+  );
+
+  const { data: pumpTestHistoryData } = await supabase
+    .from("apparatus_pump_tests")
+    .select("id, test_date, result, notes, tester_type, tester_member_id, external_tester_name, external_tester_company")
+    .eq("apparatus_id", truck.id)
+    .eq("department_id", truck.department_id)
+    .order("test_date", { ascending: false })
+    .order("created_at", { ascending: false });
+
+  const memberIdsForPumpTests = Array.from(
+    new Set(
+      ((pumpTestHistoryData ?? []) as Array<{ tester_member_id: string | null }>).map((row) => row.tester_member_id).filter((memberId): memberId is string => Boolean(memberId)),
+    ),
+  );
+
+  let memberNameByIdForPumpTests: Record<string, string> = {};
+
+  if (memberIdsForPumpTests.length > 0) {
+    const { data: pumpTestMembersData } = await supabase
+      .from("members")
+      .select("id, first_name, last_name")
+      .in("id", memberIdsForPumpTests);
+
+    memberNameByIdForPumpTests = ((pumpTestMembersData ?? []) as Array<{ id: string; first_name: string | null; last_name: string | null }>).reduce<Record<string, string>>((accumulator, member) => {
+      const label = `${member.first_name ?? ""} ${member.last_name ?? ""}`.trim();
+      accumulator[member.id] = label || member.id;
+      return accumulator;
+    }, {});
+  }
+
+  const pumpTestHistory = ((pumpTestHistoryData ?? []) as Array<{
+    id: string;
+    test_date: string | null;
+    result: string | null;
+    notes: string | null;
+    tester_type: string | null;
+    tester_member_id: string | null;
+    external_tester_name: string | null;
+    external_tester_company: string | null;
+  }>).map((row) => {
+    const testedBy = row.tester_type === "external_tester"
+      ? [row.external_tester_name, row.external_tester_company].filter(Boolean).join(" / ") || "External Tester"
+      : row.tester_member_id
+        ? memberNameByIdForPumpTests[row.tester_member_id] ?? "Department Member"
+        : "Department Member";
+
+    return {
+      id: row.id,
+      test_date: row.test_date,
+      tested_by: testedBy,
+      result: row.result,
+      notes: row.notes,
+    };
+  });
 
   console.log("[apparatus-detail] deficiency history render source", {
     usesVariable: "deficiencyHistory",
@@ -265,6 +326,32 @@ export default async function ApparatusDetailPage({
 
   let deficiencyPriorityNameById: Record<string, string> = {};
   let deficiencyStatusNameById: Record<string, string> = {};
+  let deficiencyReporterNameById: Record<string, string> = {};
+
+  if (deficiencyReporterMemberIds.length > 0) {
+    const { data: deficiencyReporterMembersData } = await supabase
+      .from("members")
+      .select("id, first_name, last_name")
+      .eq("department_id", truck.department_id)
+      .in("id", deficiencyReporterMemberIds);
+
+    deficiencyReporterNameById = (deficiencyReporterMembersData ?? []).reduce<Record<string, string>>(
+      (accumulator, memberRow) => {
+        const row = memberRow as Record<string, unknown>;
+        const memberId = typeof row.id === "string" ? row.id : "";
+
+        if (!memberId) {
+          return accumulator;
+        }
+
+        const firstName = typeof row.first_name === "string" ? row.first_name.trim() : "";
+        const lastName = typeof row.last_name === "string" ? row.last_name.trim() : "";
+        accumulator[memberId] = `${firstName} ${lastName}`.trim() || memberId;
+        return accumulator;
+      },
+      {}
+    );
+  }
 
   const { data: maintenanceHistoryData } = await supabase
     .from("maintenance_records")
@@ -1028,6 +1115,18 @@ export default async function ApparatusDetailPage({
                   >
                     Report Deficiency
                   </Link>
+                  <Link
+                    href="/apparatus/pump-test"
+                    className="rounded-lg border border-red-500/30 bg-red-600/10 px-3 py-2 text-xs font-semibold text-red-100 transition hover:bg-red-600/20"
+                  >
+                    Pump Test
+                  </Link>
+                  <Link
+                    href="/apparatus/pump-test-history"
+                    className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+                  >
+                    Pump Test History
+                  </Link>
                   <PerformMaintenanceButton
                     apparatusId={truck.id}
                     returnTo={`/apparatus/${id}`}
@@ -1065,6 +1164,8 @@ export default async function ApparatusDetailPage({
             deficiencyHistory={deficiencyHistory}
             deficiencyPriorityNameById={deficiencyPriorityNameById}
             deficiencyStatusNameById={deficiencyStatusNameById}
+            deficiencyReporterNameById={deficiencyReporterNameById}
+            pumpTestHistory={pumpTestHistory}
             maintenanceHistory={maintenanceHistory}
             maintenanceMemberNameById={maintenanceMemberNameById}
             maintenanceDeficiencyNumberById={maintenanceDeficiencyNumberById}

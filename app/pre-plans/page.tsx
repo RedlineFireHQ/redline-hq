@@ -54,6 +54,7 @@ export default async function PrePlansPage({ searchParams }: PrePlansPageProps) 
       .from("pre_plans")
       .select("id, business_name, address, city, state, zip, occupancy_id_number, updated_at")
       .eq("department_id", departmentId)
+      .eq("lifecycle_status", "active")
       .order("business_name", { ascending: true })
       .limit(250);
 

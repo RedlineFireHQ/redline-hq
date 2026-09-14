@@ -43,7 +43,7 @@ export default async function ApparatusChecklistPage({
     redirect("/login");
   }
 
-  const apparatus = await getApparatusById(id);
+  const apparatus = await getApparatusById(id, supabase);
   if (!apparatus || apparatus.department_id !== currentMember.departmentId) {
     redirect("/apparatus");
   }

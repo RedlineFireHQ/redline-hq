@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Suspense } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import PageLayout from "@/components/layout/PageLayout";
@@ -480,7 +481,7 @@ async function resolveCurrentReporter() {
   return memberId ? { memberId } : null;
 }
 
-export default function ReportDeficiencyPage() {
+function ReportDeficiencyPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -491,6 +492,8 @@ export default function ReportDeficiencyPage() {
   const inventoryItemIdParam = searchParams.get("inventoryItemId");
   const inventoryItemLabelParam = searchParams.get("inventoryItemLabel");
   const failedHoseIdsParam = searchParams.get("failedHoseIds");
+  const failedRopeIdsParam = searchParams.get("failedRopeIds");
+  const failedLadderIdsParam = searchParams.get("failedLadderIds");
   const failedIndexParam = searchParams.get("failedIndex");
   const safeReturnTo =
     typeof returnToParam === "string" && returnToParam.startsWith("/") ? returnToParam : null;
@@ -523,6 +526,14 @@ export default function ReportDeficiencyPage() {
   const failedHoseIds =
     typeof failedHoseIdsParam === "string" && failedHoseIdsParam.trim().length > 0
       ? failedHoseIdsParam.split(",").map((value) => value.trim()).filter(Boolean)
+      : [];
+  const failedRopeIds =
+    typeof failedRopeIdsParam === "string" && failedRopeIdsParam.trim().length > 0
+      ? failedRopeIdsParam.split(",").map((value) => value.trim()).filter(Boolean)
+      : [];
+  const failedLadderIds =
+    typeof failedLadderIdsParam === "string" && failedLadderIdsParam.trim().length > 0
+      ? failedLadderIdsParam.split(",").map((value) => value.trim()).filter(Boolean)
       : [];
   const failedIndexCandidate = Number.parseInt(failedIndexParam ?? "0", 10);
   const failedIndex = Number.isFinite(failedIndexCandidate) ? Math.max(0, failedIndexCandidate) : 0;
@@ -709,6 +720,42 @@ export default function ReportDeficiencyPage() {
     }));
   }, [isInventoryDeficiencyLaunch, normalizedInventoryCategory, inventoryItemId]);
 
+  const resolveInventoryItemLabelForRoute = async (category: string, itemId: string): Promise<string> => {
+    if (!itemId) {
+      return "";
+    }
+
+    const lookupByCategory: Record<string, { table: string; column: string; fallbackColumn?: string }> = {
+      "fire-hose": { table: "fire_hose", column: "inventory_number" },
+      "ground-ladders": { table: "ground_ladders", column: "ladder_number" },
+      rope: { table: "rope_items", column: "rope_name", fallbackColumn: "rope_identifier" },
+    };
+
+    const config = lookupByCategory[category];
+    if (!config) {
+      return "";
+    }
+
+    const { data, error } = await supabase
+      .from(config.table)
+      .select(`${config.column}${config.fallbackColumn ? `, ${config.fallbackColumn}` : ""}`)
+      .eq("id", itemId)
+      .maybeSingle();
+
+    if (error || !data || typeof data !== "object") {
+      return "";
+    }
+
+    const record = data as Record<string, unknown>;
+    const label = typeof record[config.column] === "string"
+      ? record[config.column]
+      : typeof record[config.fallbackColumn ?? ""] === "string"
+        ? record[config.fallbackColumn ?? ""]
+        : "";
+
+    return typeof label === "string" ? label : "";
+  };
+
   const canSubmit = useMemo(() => {
     const effectiveApparatusId = isSessionScopedDeficiency
       ? (apparatusIdParam ?? "")
@@ -889,10 +936,11 @@ export default function ReportDeficiencyPage() {
     const isRopeDeficiency = normalizedInventoryCategory === "rope";
     const isMiscFireEquipmentDeficiency = normalizedInventoryCategory === "misc-fire-equipment";
 
-    const routeToNextStep = (insertedDeficiencyId?: string) => {
+    const routeToNextStep = async (insertedDeficiencyId?: string) => {
       if (isFireHoseDeficiency && failedHoseIds.length > 0 && failedIndex < failedHoseIds.length - 1) {
         const nextIndex = failedIndex + 1;
         const nextHoseId = failedHoseIds[nextIndex];
+        const nextLabel = await resolveInventoryItemLabelForRoute("fire-hose", nextHoseId);
         const params = new URLSearchParams();
 
         if (safeReturnTo) {
@@ -909,7 +957,70 @@ export default function ReportDeficiencyPage() {
 
         params.set("inventoryCategory", "fire-hose");
         params.set("inventoryItemId", nextHoseId);
+        if (nextLabel) {
+          params.set("inventoryItemLabel", nextLabel);
+        }
         params.set("failedHoseIds", failedHoseIds.join(","));
+        params.set("failedIndex", String(nextIndex));
+
+        router.push(`/deficiencies/report?${params.toString()}`);
+        return;
+      }
+
+      if (isRopeDeficiency && failedRopeIds.length > 0 && failedIndex < failedRopeIds.length - 1) {
+        const nextIndex = failedIndex + 1;
+        const nextRopeId = failedRopeIds[nextIndex];
+        const nextLabel = await resolveInventoryItemLabelForRoute("rope", nextRopeId);
+        const params = new URLSearchParams();
+
+        if (safeReturnTo) {
+          params.set("returnTo", safeReturnTo);
+        }
+
+        if (apparatusIdParam) {
+          params.set("apparatusId", apparatusIdParam);
+        }
+
+        if (activeCheckSessionId) {
+          params.set("checkSessionId", activeCheckSessionId);
+        }
+
+        params.set("inventoryCategory", "rope");
+        params.set("inventoryItemId", nextRopeId);
+        if (nextLabel) {
+          params.set("inventoryItemLabel", nextLabel);
+        }
+        params.set("failedRopeIds", failedRopeIds.join(","));
+        params.set("failedIndex", String(nextIndex));
+
+        router.push(`/deficiencies/report?${params.toString()}`);
+        return;
+      }
+
+      if (isGroundLadderDeficiency && failedLadderIds.length > 0 && failedIndex < failedLadderIds.length - 1) {
+        const nextIndex = failedIndex + 1;
+        const nextLadderId = failedLadderIds[nextIndex];
+        const nextLabel = await resolveInventoryItemLabelForRoute("ground-ladders", nextLadderId);
+        const params = new URLSearchParams();
+
+        if (safeReturnTo) {
+          params.set("returnTo", safeReturnTo);
+        }
+
+        if (apparatusIdParam) {
+          params.set("apparatusId", apparatusIdParam);
+        }
+
+        if (activeCheckSessionId) {
+          params.set("checkSessionId", activeCheckSessionId);
+        }
+
+        params.set("inventoryCategory", "ground-ladders");
+        params.set("inventoryItemId", nextLadderId);
+        if (nextLabel) {
+          params.set("inventoryItemLabel", nextLabel);
+        }
+        params.set("failedLadderIds", failedLadderIds.join(","));
         params.set("failedIndex", String(nextIndex));
 
         router.push(`/deficiencies/report?${params.toString()}`);
@@ -1083,7 +1194,7 @@ export default function ReportDeficiencyPage() {
 
     setIsSubmitting(false);
 
-    routeToNextStep(insertedDeficiencyId);
+    await routeToNextStep(insertedDeficiencyId);
   }
 
   return (
@@ -1242,5 +1353,13 @@ export default function ReportDeficiencyPage() {
         </div>
       </div>
     </PageLayout>
+  );
+}
+
+export default function ReportDeficiencyPage() {
+  return (
+    <Suspense>
+      <ReportDeficiencyPageContent />
+    </Suspense>
   );
 }

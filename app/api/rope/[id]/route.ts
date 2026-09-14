@@ -1,4 +1,6 @@
 import { getCurrentMember } from "@/lib/current-member";
+import { normalizeRopeStatus } from "@/lib/inventory/rope-status";
+import { hasInventoryPermission } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 type UploadPayload = {
@@ -38,10 +40,6 @@ function jsonResponse(payload: unknown, status = 200): Response {
       "content-type": "application/json",
     },
   });
-}
-
-function isElevatedRole(role: unknown): boolean {
-  return role === "administrator" || role === "officer";
 }
 
 function asTrimmedString(value: unknown): string {
@@ -152,10 +150,12 @@ function normalizeLocationType(value: unknown): "Apparatus" | "Station Storage" 
 async function uploadRopePhoto({
   supabase,
   departmentId,
+  parentId,
   upload,
 }: {
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
   departmentId: string;
+  parentId: string;
   upload: UploadPayload;
 }): Promise<string> {
   if (!upload.mimeType.toLowerCase().startsWith("image/")) {
@@ -163,7 +163,7 @@ async function uploadRopePhoto({
   }
 
   const sanitizedFileName = upload.fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const storagePath = `${departmentId}/rope/${Date.now()}-${sanitizedFileName}`;
+  const storagePath = `${departmentId}/inventory/rope/${parentId}/${Date.now()}-${sanitizedFileName}`;
   const binary = Buffer.from(upload.base64Data, "base64");
 
   const { error } = await supabase.storage.from("department-documents").upload(storagePath, binary, {
@@ -210,7 +210,7 @@ function normalizeRopeRow(row: Record<string, unknown>) {
     apparatus_id: typeof row.apparatus_id === "string" ? row.apparatus_id : null,
     apparatus_name: normalizeRelatedName(row.apparatus),
     other_location: typeof row.other_location === "string" ? row.other_location : null,
-    status: row.status === "Inactive" ? "Inactive" : "Active",
+    status: normalizeRopeStatus(row.status),
     notes: typeof row.notes === "string" ? row.notes : null,
     photo_path: typeof row.photo_path === "string" ? row.photo_path : null,
     created_at: typeof row.created_at === "string" ? row.created_at : "",
@@ -263,7 +263,14 @@ export async function PATCH(request: Request, context: RouteContext) {
       return jsonResponse({ ok: false, error: "Unauthorized" }, 401);
     }
 
-    if (!isElevatedRole(currentMember.role)) {
+    const canManageInventory = await hasInventoryPermission(
+      supabase,
+      currentMember.departmentId,
+      currentMember.role,
+      "rope_management",
+    );
+
+    if (!canManageInventory) {
       return jsonResponse({ ok: false, error: "Forbidden" }, 403);
     }
 
@@ -292,7 +299,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     const locationType = normalizeLocationType(payload.locationType);
     const apparatusId = asTrimmedString(payload.apparatusId) || null;
     const otherLocation = asTrimmedString(payload.otherLocation) || null;
-    const status = asTrimmedString(payload.status) === "Inactive" ? "Inactive" : "Active";
+    const status = normalizeRopeStatus(payload.status);
     const notes = asTrimmedString(payload.notes) || null;
     const photoUpload = parseUpload(payload.photoUpload);
     const removePhoto = payload.removePhoto === true;
@@ -348,6 +355,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       nextPhotoPath = await uploadRopePhoto({
         supabase,
         departmentId: currentMember.departmentId,
+        parentId: id,
         upload: photoUpload,
       });
     } else if (removePhoto) {
@@ -405,7 +413,14 @@ export async function DELETE(_: Request, context: RouteContext) {
       return jsonResponse({ ok: false, error: "Unauthorized" }, 401);
     }
 
-    if (!isElevatedRole(currentMember.role)) {
+    const canManageInventory = await hasInventoryPermission(
+      supabase,
+      currentMember.departmentId,
+      currentMember.role,
+      "rope_management",
+    );
+
+    if (!canManageInventory) {
       return jsonResponse({ ok: false, error: "Forbidden" }, 403);
     }
 

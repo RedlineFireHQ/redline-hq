@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import PageLayout from "@/components/layout/PageLayout";
 import HistorySection from "@/components/my-readiness/HistorySection";
+import AddTrainingButton from "@/components/my-readiness/AddTrainingButton";
 import { department } from "@/lib/department";
 import {
   applyAuthoritativeCertificationToTrackProfile,
@@ -113,6 +114,13 @@ type AssignmentRow = {
 type TrainingCategoryRow = {
   id: string;
   name: string;
+  active: boolean;
+};
+
+type EmsCourseDefinitionRow = {
+  id: string;
+  course_name: string;
+  active: boolean;
 };
 
 type MemberCertificationRow = {
@@ -814,6 +822,43 @@ export default async function MyReadinessPage() {
     categories = (categoryRows ?? []) as TrainingCategoryRow[];
   }
 
+  const [
+    { data: addTrainingCategoryRows, error: addTrainingCategoryError },
+    { data: emsCourseDefinitionRows, error: emsCourseDefinitionError },
+  ] = await Promise.all([
+    supabase
+      .from("training_categories")
+      .select("id, name, active")
+      .eq("department_id", currentMember.departmentId)
+      .order("name", { ascending: true }),
+    supabase
+      .from("ems_course_definitions")
+      .select("id, course_name, active")
+      .eq("department_id", currentMember.departmentId)
+      .eq("active", true)
+      .order("course_name", { ascending: true }),
+  ]);
+
+  if (addTrainingCategoryError) {
+    throw new Error(addTrainingCategoryError.message || "Unable to load training categories.");
+  }
+
+  if (emsCourseDefinitionError) {
+    throw new Error(emsCourseDefinitionError.message || "Unable to load EMS course definitions.");
+  }
+
+  const addTrainingCategories: TrainingCategoryRow[] = (addTrainingCategoryRows ?? []).map((row) => ({
+    id: String(row.id),
+    name: typeof row.name === "string" ? row.name : "",
+    active: typeof row.active === "boolean" ? row.active : true,
+  }));
+
+  const emsCourseDefinitions: EmsCourseDefinitionRow[] = (emsCourseDefinitionRows ?? []).map((row) => ({
+    id: String(row.id),
+    course_name: typeof row.course_name === "string" ? row.course_name : "",
+    active: row.active === true,
+  }));
+
   const categoryNameById = new Map(categories.map((row) => [row.id, row.name]));
   const memberCertificationDocumentIds = Array.from(
     new Set(
@@ -1115,6 +1160,7 @@ export default async function MyReadinessPage() {
     roleRequiredCertifications,
     includeIowaAuthority: activeIowaProfile !== null,
     includeNremtAuthority: activeNremtProfile?.maintain_track === true,
+    includeNonExpiringRoleRequirements: true,
     certificationNameById,
   });
 
@@ -1533,11 +1579,17 @@ export default async function MyReadinessPage() {
          </section>
 
          <section className="rounded-2xl border border-white/10 bg-neutral-900/70 p-5">
-           <div className="flex flex-col gap-3 border-b border-neutral-800 pb-4">
+           <div className="flex items-center justify-between gap-3 border-b border-neutral-800 pb-4">
              <div>
                <h2 className="text-2xl font-semibold uppercase tracking-[0.04em] text-white">Training</h2>
                <p className="mt-1 text-sm text-neutral-400">Calendar Year {currentCalendarYear}</p>
              </div>
+             <AddTrainingButton
+               departmentId={currentMember.departmentId}
+               currentMemberId={currentMember.id}
+               categories={addTrainingCategories}
+               emsCourseDefinitions={emsCourseDefinitions}
+             />
            </div>
 
            <div className="mt-4 grid gap-3 md:grid-cols-3">

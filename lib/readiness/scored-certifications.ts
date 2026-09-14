@@ -21,6 +21,7 @@ export function buildScoredCertificationStatuses(params: {
 	roleRequiredCertifications: RoleRequiredCertificationScopeRow[];
 	includeIowaAuthority: boolean;
 	includeNremtAuthority: boolean;
+	includeNonExpiringRoleRequirements?: boolean;
 	certificationNameById?: Map<string, string>;
 }) {
 	const selectedIds = new Set<string>();
@@ -37,7 +38,7 @@ export function buildScoredCertificationStatuses(params: {
 		}
 
 		const existing = byId.get(row.certification_id);
-		if (existing?.expiresAt === null) {
+		if (existing?.expiresAt === null && !params.includeNonExpiringRoleRequirements) {
 			continue;
 		}
 		selectedIds.add(row.certification_id);

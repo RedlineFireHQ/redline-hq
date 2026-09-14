@@ -7,6 +7,8 @@ import {
   MAINTENANCE_PHOTOS_BUCKET,
 } from "@/lib/maintenance";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { getCurrentMember } from "@/lib/current-member";
+import { hasDepartmentPermission } from "@/lib/member-permissions";
 
 type MaintenanceRecordRow = {
   id: string;
@@ -90,6 +92,7 @@ export default async function MaintenanceDetailPage({
 }: MaintenanceDetailPageProps) {
   const { id } = await params;
   const supabase = await createSupabaseServerClient();
+  const currentMember = await getCurrentMember(supabase);
 
   const { data, error } = await supabase
     .from("maintenance_records")
@@ -102,6 +105,9 @@ export default async function MaintenanceDetailPage({
   }
 
   const record = data as MaintenanceRecordRow;
+  const canManageMaintenance = currentMember?.departmentId
+    ? await hasDepartmentPermission(supabase, currentMember.departmentId, currentMember.role, "maintenance_management")
+    : false;
 
   const [apparatusResult, deficiencyResult, memberResult] = await Promise.all([
     record.apparatus_id
@@ -165,7 +171,7 @@ export default async function MaintenanceDetailPage({
               <span className="inline-flex items-center rounded-full border border-red-500/30 bg-red-500/15 px-3 py-1.5 text-xs font-semibold text-red-100">
                 {record.maintenance_type ?? "Unknown"}
               </span>
-              <EditMaintenanceButton record={record} />
+              {canManageMaintenance ? <EditMaintenanceButton record={record} /> : null}
             </div>
           </div>
 

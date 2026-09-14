@@ -3544,6 +3544,7 @@ async function runApparatusReport(
 			context.supabase
 				.from("maintenance_records")
 				.select("id, apparatus_id, completed_by, service_date, maintenance_number, maintenance_type, notes, mileage, engine_hours")
+				.eq("department_id", context.departmentId)
 				.in("apparatus_id", apparatusIds)
 				.order("service_date", { ascending: false }),
 		]);
@@ -3798,6 +3799,7 @@ async function runApparatusReport(
 		context.supabase
 			.from("maintenance_records")
 			.select("id, maintenance_number, apparatus_id, deficiency_id, maintenance_type, completed_by, service_date, description, parts_used, labor_hours, mileage, engine_hours, cost, notes, photos, attachments, created_at, updated_at")
+			.eq("department_id", context.departmentId)
 			.in("apparatus_id", apparatusIds)
 			.order("service_date", { ascending: false }),
 	]);
@@ -4108,6 +4110,7 @@ async function runMaintenanceReport(
 		.select(
 			"id, maintenance_number, apparatus_id, deficiency_id, maintenance_type, completed_by, service_date, description, parts_used, labor_hours, mileage, engine_hours, cost, notes, photos, attachments, created_at, updated_at",
 		)
+		.eq("department_id", context.departmentId)
 		.order("service_date", { ascending: false });
 
 	if (maintenanceQuery.error) {
@@ -4526,6 +4529,7 @@ async function runActivityReport(
 			? context.supabase
 					.from("maintenance_records")
 					.select("id, maintenance_number, maintenance_type, service_date, description, completed_by")
+					.eq("department_id", context.departmentId)
 					.in("apparatus_id", apparatusIds)
 					.order("service_date", { ascending: false })
 			: Promise.resolve({ data: [] as unknown[], error: null }),
@@ -5333,7 +5337,7 @@ async function runTrainingReport(
 		category_name: record.categoryName,
 		hours: formatHoursValue(record.hours),
 		instructor_name: record.instructorName,
-		training_type: record.trainingType,
+		training_type: record.trainingType.replaceAll(" | ", " • "),
 		source_type: record.sourceType,
 	}));
 

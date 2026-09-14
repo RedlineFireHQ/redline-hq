@@ -1,5 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getActiveApparatusOptions } from "@/lib/database";
 
 export type ApparatusOption = {
 	id: string;
@@ -49,41 +48,6 @@ export type GroundLadderServiceTestRecord = {
 	result: string;
 	notes: string | null;
 	next_test_due_date: string | null;
-	created_at: string;
-	updated_at: string;
-};
-
-export type GroundLadderMaintenanceSettingsRecord = {
-	id: string;
-	department_id: string;
-	maintenance_interval_months: number | null;
-	created_at: string;
-	updated_at: string;
-};
-
-export type GroundLadderMaintenanceRecord = {
-	id: string;
-	department_id: string;
-	ground_ladder_id: string;
-	maintenance_date: string;
-	performed_by_member_id: string | null;
-	performed_by_name: string | null;
-	result: string;
-	notes: string | null;
-	next_maintenance_due: string | null;
-	maintenance_interval_months: number | null;
-	created_at: string;
-	updated_at: string;
-};
-
-export type GroundLadderMaintenanceItemRecord = {
-	id: string;
-	department_id: string;
-	maintenance_id: string;
-	check_order: number;
-	check_name: string;
-	result: string;
-	notes: string | null;
 	created_at: string;
 	updated_at: string;
 };
@@ -173,53 +137,6 @@ export function normalizeGroundLadderServiceTestRecord(
 	};
 }
 
-export function normalizeGroundLadderMaintenanceSettingsRecord(
-	row: Record<string, unknown>,
-): GroundLadderMaintenanceSettingsRecord {
-	return {
-		id: typeof row.id === "string" ? row.id : String(row.id ?? ""),
-		department_id: typeof row.department_id === "string" ? row.department_id : "",
-		maintenance_interval_months: normalizeNumber(row.maintenance_interval_months),
-		created_at: typeof row.created_at === "string" ? row.created_at : "",
-		updated_at: typeof row.updated_at === "string" ? row.updated_at : "",
-	};
-}
-
-export function normalizeGroundLadderMaintenanceRecord(
-	row: Record<string, unknown>,
-): GroundLadderMaintenanceRecord {
-	return {
-		id: typeof row.id === "string" ? row.id : String(row.id ?? ""),
-		department_id: typeof row.department_id === "string" ? row.department_id : "",
-		ground_ladder_id: typeof row.ground_ladder_id === "string" ? row.ground_ladder_id : "",
-		maintenance_date: typeof row.maintenance_date === "string" ? row.maintenance_date : "",
-		performed_by_member_id: normalizeText(row.performed_by_member_id),
-		performed_by_name: normalizeText(row.performed_by_name),
-		result: typeof row.result === "string" ? row.result : "",
-		notes: normalizeText(row.notes),
-		next_maintenance_due: normalizeDate(row.next_maintenance_due),
-		maintenance_interval_months: normalizeNumber(row.maintenance_interval_months),
-		created_at: typeof row.created_at === "string" ? row.created_at : "",
-		updated_at: typeof row.updated_at === "string" ? row.updated_at : "",
-	};
-}
-
-export function normalizeGroundLadderMaintenanceItemRecord(
-	row: Record<string, unknown>,
-): GroundLadderMaintenanceItemRecord {
-	return {
-		id: typeof row.id === "string" ? row.id : String(row.id ?? ""),
-		department_id: typeof row.department_id === "string" ? row.department_id : "",
-		maintenance_id: typeof row.maintenance_id === "string" ? row.maintenance_id : "",
-		check_order: normalizeNumber(row.check_order) ?? 0,
-		check_name: typeof row.check_name === "string" ? row.check_name : "",
-		result: typeof row.result === "string" ? row.result : "",
-		notes: normalizeText(row.notes),
-		created_at: typeof row.created_at === "string" ? row.created_at : "",
-		updated_at: typeof row.updated_at === "string" ? row.updated_at : "",
-	};
-}
-
 export async function loadGroundLadderInventoryData(
 	supabase: SupabaseClient,
 	departmentId: string,
@@ -228,10 +145,7 @@ export async function loadGroundLadderInventoryData(
 		laddersResult,
 		assignmentsResult,
 		serviceTestsResult,
-		maintenanceSettingsResult,
-		maintenanceResult,
-		maintenanceItemsResult,
-		apparatusData,
+		apparatusResult,
 	] = await Promise.all([
 		supabase
 			.from("ground_ladders")
@@ -252,26 +166,23 @@ export async function loadGroundLadderInventoryData(
 			.order("test_date", { ascending: false })
 			.order("created_at", { ascending: false }),
 		supabase
-			.from("ground_ladder_maintenance_settings")
-			.select("*")
+			.from("apparatus")
+			.select("id, name")
 			.eq("department_id", departmentId)
-			.order("created_at", { ascending: false })
-			.limit(1)
-			.maybeSingle(),
-		supabase
-			.from("ground_ladder_maintenance")
-			.select("*")
-			.eq("department_id", departmentId)
-			.order("maintenance_date", { ascending: false })
-			.order("created_at", { ascending: false }),
-		supabase
-			.from("ground_ladder_maintenance_items")
-			.select("*")
-			.eq("department_id", departmentId)
-			.order("check_order", { ascending: true })
-			.order("created_at", { ascending: false }),
-		getActiveApparatusOptions({ client: supabase, departmentId }),
+			.eq("lifecycle_status", "active")
+			.order("name", { ascending: true }),
 	]);
+
+	const queryError = [
+		laddersResult.error,
+		assignmentsResult.error,
+		serviceTestsResult.error,
+		apparatusResult.error,
+	].find(Boolean);
+
+	if (queryError) {
+		throw queryError;
+	}
 
 	return {
 		ladders: (laddersResult.data ?? []).map((row) => normalizeGroundLadderRecord(row as Record<string, unknown>)),
@@ -281,18 +192,7 @@ export async function loadGroundLadderInventoryData(
 		serviceTests: (serviceTestsResult.data ?? []).map((row) =>
 			normalizeGroundLadderServiceTestRecord(row as Record<string, unknown>),
 		),
-		maintenanceSettings: maintenanceSettingsResult.data
-			? normalizeGroundLadderMaintenanceSettingsRecord(
-				maintenanceSettingsResult.data as Record<string, unknown>,
-			  )
-			: null,
-		maintenanceRecords: (maintenanceResult.data ?? []).map((row) =>
-			normalizeGroundLadderMaintenanceRecord(row as Record<string, unknown>),
-		),
-		maintenanceItems: (maintenanceItemsResult.data ?? []).map((row) =>
-			normalizeGroundLadderMaintenanceItemRecord(row as Record<string, unknown>),
-		),
-		apparatusOptions: apparatusData.map((row) => ({
+		apparatusOptions: (apparatusResult.data ?? []).map((row) => ({
 			id: row.id,
 			name: typeof row.name === "string" ? row.name : null,
 		})),

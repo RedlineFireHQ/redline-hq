@@ -69,6 +69,11 @@ const STATUS_OPTIONS: ThermalImagingCameraFormValues["status"][] = [
 	"Retired",
 ];
 
+const ADD_STATUS_OPTIONS: ThermalImagingCameraFormValues["status"][] = [
+	"In Service",
+	"Out of Service",
+];
+
 function statusBadgeClasses(status: string) {
 	if (status === "In Service") {
 		return "border-green-700/40 bg-green-900/20 text-green-300";
@@ -107,6 +112,7 @@ export default function ThermalImagingCameraFormModal({
 	const [initialAssignment, setInitialAssignment] = useState<ThermalImagingCameraInitialAssignmentValues>(
 		EMPTY_INITIAL_ASSIGNMENT,
 	);
+	const availableStatusOptions = mode === "add" ? ADD_STATUS_OPTIONS : STATUS_OPTIONS;
 
 	useEffect(() => {
 		if (!isOpen) {
@@ -201,14 +207,14 @@ export default function ThermalImagingCameraFormModal({
 							onChange={(event) =>
 								setFormValues((current) => ({
 									...current,
-									status: STATUS_OPTIONS.includes(event.target.value as ThermalImagingCameraFormValues["status"])
+									status: availableStatusOptions.includes(event.target.value as ThermalImagingCameraFormValues["status"])
 										? (event.target.value as ThermalImagingCameraFormValues["status"])
 										: "In Service",
 								}))
 							}
 							className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
 						>
-							{STATUS_OPTIONS.map((status) => (
+							{availableStatusOptions.map((status) => (
 								<option key={status} value={status}>{status}</option>
 							))}
 						</select>

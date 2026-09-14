@@ -123,7 +123,7 @@ export default async function ApparatusPanel() {
                 <div className="relative h-[150px] w-full overflow-hidden">
 
                   <Image
-                    src={getApparatusImagePath(apparatus.name) ?? "/branding/images/redline-shield.png"}
+                    src={getApparatusImagePath(apparatus.name) ?? "/branding/images/todays-readiness-shield.png"}
                     alt={apparatus.name}
                     fill
                     className="object-cover transition-transform duration-500 group-hover:scale-105"

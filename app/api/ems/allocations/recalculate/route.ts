@@ -36,13 +36,14 @@ export async function POST(request: Request) {
     }
 
     if (targetMemberId !== currentMember.id) {
-      const [canManageTraining, canManagePersonnel, canManageCertifications] = await Promise.all([
-        hasDepartmentPermission(supabase, currentMember.departmentId, currentMember.role, "training_management"),
-        hasDepartmentPermission(supabase, currentMember.departmentId, currentMember.role, "personnel_management"),
-        hasDepartmentPermission(supabase, currentMember.departmentId, currentMember.role, "certification_management"),
-      ]);
+      const canManageEms = await hasDepartmentPermission(
+        supabase,
+        currentMember.departmentId,
+        currentMember.role,
+        "ems_management",
+      );
 
-      if (!canManageTraining && !canManagePersonnel && !canManageCertifications) {
+      if (!canManageEms) {
         return jsonResponse({ ok: false, error: "Forbidden." }, 403);
       }
     }

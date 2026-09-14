@@ -8,6 +8,7 @@ import PageLayout from "@/components/layout/PageLayout";
 import { getCurrentMember } from "@/lib/current-member";
 import { canManageApparatus as hasApparatusManagementPermission } from "@/lib/member-permissions";
 import { getApparatusImagePath } from "@/lib/apparatus-images";
+import { getApparatusById } from "@/lib/database";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import type { SimpleApparatusConfigurationDraft } from "@/lib/apparatus-configuration-simple";
 
@@ -85,22 +86,7 @@ export default async function ApparatusInformationPage({
 }: ApparatusInformationPageProps) {
   const { id } = await params;
   const supabase = await createSupabaseServerClient();
-
-  const { data: truck, error: truckError } = await supabase
-    .from("apparatus")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
-
-  if (truckError) {
-    console.error("[apparatus-information] apparatus lookup failed", {
-      apparatusId: id,
-      code: truckError.code,
-      message: truckError.message,
-      details: truckError.details,
-      hint: truckError.hint,
-    });
-  }
+  const truck = await getApparatusById(id, supabase);
 
   if (!truck) {
     notFound();

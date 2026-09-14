@@ -176,28 +176,6 @@ function cylinderTypeBadgeClasses(cylinderType: string) {
 	return "border-slate-700/40 bg-slate-900/20 text-slate-200";
 }
 
-function summaryCardClasses(active: boolean, tone: RowTone) {
-	const base = "rounded-xl border px-4 py-3 text-left transition";
-
-	if (active) {
-		return `${base} border-white/20 bg-white/[0.06]`;
-	}
-
-	if (tone === "testing-due") {
-		return `${base} border-amber-700/30 bg-amber-950/20 hover:bg-amber-950/30`;
-	}
-
-	if (tone === "out-of-service") {
-		return `${base} border-red-700/30 bg-red-950/20 hover:bg-red-950/30`;
-	}
-
-	if (tone === "retired") {
-		return `${base} border-neutral-700/30 bg-neutral-900/40 hover:bg-neutral-900/60`;
-	}
-
-	return `${base} border-green-700/30 bg-green-950/20 hover:bg-green-950/30`;
-}
-
 function normalizeOptionalText(value: string) {
 	return value.trim();
 }
@@ -318,15 +296,7 @@ export default function ScbaCylinderWorkspace({
 	}, [searchTerm, sortedRows, statusFilter, typeFilter]);
 
 	const activeRows = useMemo(() => inventoryRows.filter((row) => row.status !== "Retired"), [inventoryRows]);
-	const totalCount = inventoryRows.length;
-	const hydroDueCount = activeRows.filter((row) => isHydroDue(row)).length;
 	const outOfServiceCount = inventoryRows.filter((row) => row.status === "Out of Service").length;
-	const retiredCount = inventoryRows.filter((row) => row.status === "Retired").length;
-	const readyCount = activeRows.filter((row) => isCylinderReady(row)).length;
-	const activeCylinderCount = activeRows.length;
-	const readinessPercentage =
-		activeCylinderCount > 0 ? Math.round((readyCount / activeCylinderCount) * 100) : 100;
-	const scoreWidth = `${Math.max(0, Math.min(100, readinessPercentage))}%`;
 
 	const editingRow = useMemo(
 		() => (editCylinderId ? inventoryRows.find((row) => row.id === editCylinderId) ?? null : null),
@@ -468,15 +438,21 @@ export default function ScbaCylinderWorkspace({
 			}
 
 			const cylinderNumber = values.cylinderNumber.trim();
-			if (!cylinderNumber || !values.cylinderType || !values.inServiceDate) {
-				setToastMessage("Cylinder Number, Cylinder Type, and In-Service Date are required.");
+			if (
+				!cylinderNumber ||
+				!values.cylinderType ||
+				!values.inServiceDate ||
+				!values.lastHydrostaticTestDate ||
+				!values.nextHydrostaticTestDueDate
+			) {
+				setToastMessage(
+					"Cylinder Number, Cylinder Type, In-Service Date, Last Hydrostatic Test Date, and Next Hydrostatic Test Due Date are required.",
+				);
 				return;
 			}
 
 			const lastHydrostaticTestDate = normalizeOptionalText(values.lastHydrostaticTestDate);
-			const nextHydrostaticTestDueDate = lastHydrostaticTestDate
-				? addYearsToIsoDate(lastHydrostaticTestDate, values.cylinderType === "Composite" ? 3 : 5)
-				: null;
+			const nextHydrostaticTestDueDate = normalizeOptionalText(values.nextHydrostaticTestDueDate) || null;
 			const serviceLifeEndDate =
 				values.cylinderType === "Composite"
 					? addYearsToIsoDate(values.inServiceDate, 15)
@@ -544,12 +520,9 @@ export default function ScbaCylinderWorkspace({
 		})();
 	};
 
-	const topSummaryCards = [
-		{ label: "Total Cylinders", value: totalCount, tone: "ready" as RowTone, filter: "All" },
-		{ label: "Hydro Tests Due", value: hydroDueCount, tone: "testing-due" as RowTone, filter: "Testing Due" },
-		{ label: "Out of Service", value: outOfServiceCount, tone: "out-of-service" as RowTone, filter: "Out of Service" },
-		{ label: "Retired", value: retiredCount, tone: "retired" as RowTone, filter: "Retired" },
-	];
+	const reportDeficiencyTarget = useMemo(() => {
+		return inventoryRows.find((row) => row.status !== "Retired") ?? inventoryRows[0] ?? null;
+	}, [inventoryRows]);
 
 	return (
 		<div className="space-y-8">
@@ -568,63 +541,42 @@ export default function ScbaCylinderWorkspace({
 				</div>
 			) : null}
 
-			<div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-				<div>
-					<p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">Inventory</p>
-					<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">SCBA Cylinders</h1>
-					<p className="mt-3 max-w-2xl text-lg text-neutral-400">Manage department SCBA cylinder inventory.</p>
-					{departmentName ? <p className="mt-2 text-sm text-neutral-500">Department: {departmentName}</p> : null}
-				</div>
-
-				<button
-					type="button"
-					onClick={openAddModal}
-					className="inline-flex rounded-lg border border-red-500/40 bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-700"
-				>
-					+ Add Cylinder
-				</button>
-			</div>
-
-			<section className="rounded-2xl border border-red-900 bg-[#242424] p-5 lg:col-span-2">
-				<div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+			<section className="rounded-2xl border border-red-900 bg-[#242424] p-5">
+				<div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
 					<div className="min-w-0 flex-1">
-						<h2 className="text-2xl font-bold text-white">Cylinder Readiness</h2>
-						<p className="mt-2 max-w-3xl text-sm text-neutral-400">
-							Readiness is calculated from live cylinder records using ready cylinders divided by active cylinders.
-						</p>
-
-						<div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-							{topSummaryCards.map((card) => {
-								const active = statusFilter === card.filter;
-								return (
-									<button
-										key={card.label}
-										type="button"
-										onClick={() => setStatusFilter(card.filter)}
-										className={summaryCardClasses(active, card.tone)}
-									>
-										<p className="text-xs uppercase tracking-[0.22em] text-neutral-500">{card.label}</p>
-										<p className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">{card.value}</p>
-									</button>
-								);
-							})}
+						<p className="text-xs font-semibold uppercase tracking-[0.28em] text-red-500">Inventory Module</p>
+						<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">SCBA Cylinders</h1>
+						<p className="mt-2 max-w-3xl text-sm text-neutral-400">Manage department SCBA cylinder inventory.</p>
+						<div className="mt-3 flex flex-wrap items-center gap-2">
+							<button
+								type="button"
+								onClick={openAddModal}
+								className="inline-flex rounded-lg border border-red-500/40 bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700"
+							>
+								+ Add Cylinder
+							</button>
+							<button
+								type="button"
+								onClick={() => {
+									if (reportDeficiencyTarget) {
+										reportDeficiencyForRow(reportDeficiencyTarget);
+									}
+								}}
+								className="inline-flex rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+							>
+								Report Deficiency
+							</button>
 						</div>
 					</div>
 
-					<div className="w-full max-w-[220px] rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3">
-						<p className="text-xs uppercase tracking-[0.24em] text-neutral-500">SCBA Cylinder Readiness</p>
-						<p className="mt-1 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">{readinessPercentage}%</p>
-						<p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-red-400">
-							{readyCount} Ready / {activeCylinderCount} Active
-						</p>
-						<p className="mt-3 text-sm text-neutral-400">
-							Hydro due, out-of-service, and expired service-life cylinders are excluded from readiness.
-						</p>
-
-						<div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-neutral-800">
-							<div className="h-full rounded-full bg-red-500 transition-all" style={{ width: scoreWidth }} />
-						</div>
-					</div>
+					<button
+						type="button"
+						onClick={() => setStatusFilter("Out of Service")}
+						className="w-full max-w-[220px] shrink-0 rounded-xl border border-red-700/30 bg-red-950/20 px-4 py-3 text-left transition hover:bg-red-950/30"
+					>
+						<p className="text-xs uppercase tracking-[0.16em] text-neutral-500">Out of Service</p>
+						<p className="mt-2 text-2xl font-black text-white">{outOfServiceCount}</p>
+					</button>
 				</div>
 			</section>
 
@@ -673,7 +625,7 @@ export default function ScbaCylinderWorkspace({
 			</section>
 
 			<section className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-6">
-				<div className="overflow-x-auto">
+				<div className="max-h-[32rem] overflow-y-auto overflow-x-auto">
 					<table className="min-w-full border-separate border-spacing-0 text-left">
 						<thead>
 							<tr>
@@ -683,7 +635,6 @@ export default function ScbaCylinderWorkspace({
 									"In-Service Date",
 									"Last Hydrostatic Test",
 									"Next Hydrostatic Test Due",
-									"Service Life End",
 									"Status",
 									"Actions",
 								].map((label) => (
@@ -699,153 +650,116 @@ export default function ScbaCylinderWorkspace({
 						</thead>
 
 						<tbody>
-							{!hasRows ? (
-								<tr>
-									<td colSpan={8} className="border-b border-white/5 px-4 py-10">
-										<div className="flex flex-col items-start gap-4 text-left sm:items-center sm:text-center">
-											<div>
-												<p className="text-lg font-bold text-white">No SCBA Cylinders</p>
-												<p className="mt-2 max-w-2xl text-sm text-neutral-400">
-													Add your department's SCBA cylinder inventory to track hydro dates, service life, and deficiencies.
-												</p>
-											</div>
+									{!hasRows ? (
+										<tr>
+											<td colSpan={7} className="border-b border-white/5 px-4 py-10">
+												<div className="flex flex-col items-start gap-4 text-left sm:items-center sm:text-center">
+													<div>
+														<p className="text-lg font-bold text-white">No SCBA Cylinders</p>
+														<p className="mt-2 max-w-2xl text-sm text-neutral-400">
+															Add your department's SCBA cylinder inventory to track hydro dates, service life, and deficiencies.
+														</p>
+													</div>
 
-											<button
-												type="button"
-												onClick={openAddModal}
-												className="inline-flex rounded-lg border border-red-500/40 bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-700"
-											>
-												Add Cylinder
-											</button>
-										</div>
-									</td>
-								</tr>
-							) : !hasVisibleRows ? (
-								<tr>
-									<td colSpan={8} className="border-b border-white/5 px-4 py-10">
-										<div className="flex flex-col items-start gap-2 text-left sm:items-center sm:text-center">
-											<p className="text-lg font-bold text-white">No Cylinders Found</p>
-											<p className="max-w-2xl text-sm text-neutral-400">No cylinders currently match the selected filters.</p>
-										</div>
-									</td>
-								</tr>
-							) : (
-								filteredRows.map((row) => {
-									const due = isHydroDue(row);
-									const tone = statusTone(row.status, due);
-									const rowClassName =
-										tone === "testing-due"
-											? "cursor-pointer bg-amber-950/15 transition hover:bg-white/5"
-											: tone === "out-of-service"
-												? "cursor-pointer bg-red-950/15 transition hover:bg-white/5"
-												: tone === "retired"
-													? "cursor-pointer opacity-75 transition hover:bg-white/5"
-													: "cursor-pointer transition hover:bg-white/5";
-
-									return (
-										<tr
-											key={row.id}
-											className={rowClassName}
-											onClick={() => openEditModal(row)}
-											onKeyDown={(event) => {
-												if (event.key === "Enter" || event.key === " ") {
-													event.preventDefault();
-													openEditModal(row);
-												}
-											}}
-											tabIndex={0}
-										>
-											<td className="border-b border-white/5 px-4 py-3 text-sm text-white">
-												<div className="space-y-1">
-													<p className="font-semibold text-white">{row.cylinder_number}</p>
-													<p className="text-xs text-neutral-400">
-														{[row.manufacturer, row.model, row.serial_number].filter(Boolean).join(" • ") || "-"}
-													</p>
-												</div>
-											</td>
-
-											<td className="border-b border-white/5 px-4 py-3 text-sm text-white">
-												<span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${cylinderTypeBadgeClasses(row.cylinder_type)}`}>
-													{row.cylinder_type}
-												</span>
-											</td>
-
-											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">{formatDate(row.in_service_date)}</td>
-
-											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">{formatHydroCell(row.last_hydrostatic_test_date)}</td>
-
-											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">
-												{formatHydroDueCell(row.next_hydrostatic_test_due_date, due)}
-											</td>
-
-											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">
-												{row.cylinder_type === "Composite" ? formatHydroCell(row.service_life_end_date) : "No limit established"}
-											</td>
-
-											<td className="border-b border-white/5 px-4 py-3 text-sm text-white">
-												<span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusBadgeClasses(row.status)}`}>
-													{row.status}
-												</span>
-											</td>
-
-											<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">
-												<div className="flex flex-wrap gap-2">
 													<button
 														type="button"
-														onClick={(event) => {
-															event.stopPropagation();
-															openEditModal(row);
-														}}
-														className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+														onClick={openAddModal}
+														className="inline-flex rounded-lg border border-red-500/40 bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-700"
 													>
-														Edit
+														Add Cylinder
 													</button>
-
-													{row.status !== "Retired" ? (
-														<button
-															type="button"
-															onClick={(event) => {
-																event.stopPropagation();
-																reportDeficiencyForRow(row);
-															}}
-															className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
-														>
-														Report Deficiency
-														</button>
-													) : null}
-
-													{row.status !== "Retired" ? (
-														<button
-															type="button"
-															onClick={(event) => {
-																event.stopPropagation();
-																void retireCylinderForRow(row);
-															}}
-															className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200 transition hover:bg-red-500/20"
-														>
-														Retire
-														</button>
-													) : null}
-
-													{canDeleteCylinder ? (
-														<button
-															type="button"
-															onClick={(event) => {
-																event.stopPropagation();
-																void deleteCylinderForRow(row);
-															}}
-															className="rounded-lg border border-red-700/60 bg-red-900/20 px-3 py-2 text-xs font-semibold text-red-100 transition hover:bg-red-900/30"
-														>
-														Delete
-														</button>
-													) : null}
 												</div>
 											</td>
 										</tr>
-									);
-								})
-							)}
-						</tbody>
+									) : !hasVisibleRows ? (
+										<tr>
+											<td colSpan={7} className="border-b border-white/5 px-4 py-10">
+												<div className="flex flex-col items-start gap-2 text-left sm:items-center sm:text-center">
+													<p className="text-lg font-bold text-white">No Cylinders Found</p>
+													<p className="max-w-2xl text-sm text-neutral-400">No cylinders currently match the selected filters.</p>
+												</div>
+											</td>
+										</tr>
+									) : (
+										filteredRows.map((row) => {
+																					const due = isHydroDue(row);
+																					const tone = statusTone(row.status, due);
+																					const rowClassName =
+																						tone === "testing-due"
+																							? "cursor-pointer bg-amber-950/15 transition hover:bg-white/5"
+																							: tone === "out-of-service"
+																								? "cursor-pointer bg-red-950/15 transition hover:bg-white/5"
+																								: tone === "retired"
+																									? "cursor-pointer opacity-75 transition hover:bg-white/5"
+																									: "cursor-pointer transition hover:bg-white/5";
+
+																					return (
+																						<tr
+																							key={row.id}
+																							className={rowClassName}
+																							onClick={() => openEditModal(row)}
+																							onKeyDown={(event) => {
+																								if (event.key === "Enter" || event.key === " ") {
+																									event.preventDefault();
+																									openEditModal(row);
+																								}
+																							}}
+																							tabIndex={0}
+																						>
+																						<td className="border-b border-white/5 px-4 py-3 text-sm text-white">
+																							<p className="font-semibold text-white">{row.cylinder_number}</p>
+																						</td>
+
+																						<td className="border-b border-white/5 px-4 py-3 text-sm text-white">
+																							<span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${cylinderTypeBadgeClasses(row.cylinder_type)}`}>
+																								{row.cylinder_type}
+																							</span>
+																						</td>
+
+																						<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">{formatDate(row.in_service_date)}</td>
+
+																						<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">{formatHydroCell(row.last_hydrostatic_test_date)}</td>
+
+																						<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">
+																							{formatHydroDueCell(row.next_hydrostatic_test_due_date, due)}
+																						</td>
+
+																						<td className="border-b border-white/5 px-4 py-3 text-sm text-white">
+																							<span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusBadgeClasses(row.status)}`}>
+																								{row.status}
+																							</span>
+																						</td>
+
+																						<td className="border-b border-white/5 px-4 py-3 text-sm text-neutral-200">
+																							<div className="flex flex-wrap gap-2">
+																								<button
+																									type="button"
+																									onClick={(event) => {
+																										event.stopPropagation();
+																										openEditModal(row);
+																									}}
+																									className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+																								>
+																									Edit
+																								</button>
+
+																								<button
+																									type="button"
+																									onClick={(event) => {
+																										event.stopPropagation();
+																										reportDeficiencyForRow(row);
+																									}}
+																									className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+																								>
+																									Report Deficiency
+																								</button>
+																							</div>
+																						</td>
+																					</tr>
+																				);
+																			})
+																			)}
+</tbody>
 					</table>
 				</div>
 			</section>
@@ -860,6 +774,7 @@ export default function ScbaCylinderWorkspace({
 							cylinderType: editingRow.cylinder_type === "Steel" ? "Steel" : "Composite",
 							inServiceDate: editingRow.in_service_date ?? "",
 							lastHydrostaticTestDate: editingRow.last_hydrostatic_test_date ?? "",
+							nextHydrostaticTestDueDate: editingRow.next_hydrostatic_test_due_date ?? "",
 							manufacturer: editingRow.manufacturer ?? "",
 							model: editingRow.model ?? "",
 							serialNumber: editingRow.serial_number ?? "",

@@ -4,6 +4,12 @@ const APPARATUS_IMAGE_BY_NAME: Record<string, string> = {
   "grass truck 420": "/apparatus/elliott/brush-420.jpg",
   "grass truck 421": "/apparatus/elliott/brush-421.jpg",
   "tanker 445": "/apparatus/elliott/tanker-445.jpg",
+  "engine 1": "/apparatus/cedarbluff/engine-1.jpg",
+  "engine 2": "/apparatus/cedarbluff/engine-2.jpg",
+  "tanker 1": "/apparatus/cedarbluff/tanker-1.jpg",
+  "brush 1": "/apparatus/cedarbluff/brush-1.jpg",
+  "rescue 1": "/apparatus/cedarbluff/rescue-1.jpg",
+  "medic 1": "/apparatus/cedarbluff/medic-1.jpg",
 };
 
 export function getApparatusImagePath(apparatusName: string | null | undefined): string | null {

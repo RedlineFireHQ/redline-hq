@@ -1,11 +1,13 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import PageLayout from "@/components/layout/PageLayout";
 import MaintenanceFormModal from "@/components/maintenance/MaintenanceFormModal";
+import { useMaintenancePermission } from "@/components/maintenance/useMaintenancePermission";
 
-export default function PerformMaintenancePage() {
+function PerformMaintenancePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -17,6 +19,7 @@ export default function PerformMaintenancePage() {
       ? returnToParam
       : null;
   const lockApparatus = Boolean(apparatusId);
+  const { canManageMaintenance, isCheckingMaintenancePermission } = useMaintenancePermission();
 
   return (
     <PageLayout>
@@ -40,7 +43,7 @@ export default function PerformMaintenancePage() {
           </p>
         </div>
 
-        <MaintenanceFormModal
+        {isCheckingMaintenancePermission ? <p className="text-sm text-zinc-400">Checking Maintenance access...</p> : canManageMaintenance ? <MaintenanceFormModal
           isOpen
           mode="create"
           title="Perform Maintenance"
@@ -61,8 +64,16 @@ export default function PerformMaintenancePage() {
             router.push(`/maintenance/${recordId}`);
             router.refresh();
           }}
-        />
+        /> : <p className="text-sm text-amber-300">Maintenance management permission is required.</p>}
       </div>
     </PageLayout>
+  );
+}
+
+export default function PerformMaintenancePage() {
+  return (
+    <Suspense>
+      <PerformMaintenancePageContent />
+    </Suspense>
   );
 }

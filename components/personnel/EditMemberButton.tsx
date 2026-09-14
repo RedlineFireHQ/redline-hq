@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { MEMBER_RANK_OPTIONS, type AppPermissionOption } from "@/lib/app-permissions";
+import SpecialPermissionsManager from "@/components/personnel/SpecialPermissionsManager";
 
 type EditMemberButtonProps = {
   memberId: string;
@@ -62,11 +63,6 @@ export default function EditMemberButton({
     specialPermissionsEnabled: initialSpecialPermissionsEnabled,
     permissionKeys: initialPermissionKeys,
   });
-
-  const sortedPermissionOptions = useMemo(
-    () => [...permissionOptions].sort((left, right) => left.sort_order - right.sort_order || left.label.localeCompare(right.label)),
-    [permissionOptions],
-  );
 
   function closeModal() {
     setIsOpen(false);
@@ -132,8 +128,8 @@ export default function EditMemberButton({
               <p className="mt-1 text-sm text-neutral-400">Update contact details, rank, active status, and special permissions.</p>
             </div>
 
-            <form onSubmit={handleSubmit} className="flex min-h-0 flex-col">
-              <div className="space-y-4">
+            <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
               <div className="grid gap-4 md:grid-cols-2">
                 <label className="text-sm text-neutral-300">
                   First name
@@ -231,43 +227,20 @@ export default function EditMemberButton({
                 </p>
               ) : null}
 
-              <label className="flex items-center gap-3 text-sm text-neutral-200">
-                <input
-                  type="checkbox"
-                  checked={formState.specialPermissionsEnabled}
-                  onChange={(event) =>
-                    setFormState((current) => ({
-                      ...current,
-                      specialPermissionsEnabled: event.target.checked,
-                      permissionKeys: event.target.checked ? current.permissionKeys : [],
-                    }))
-                  }
-                />
-                Enable special permissions
-              </label>
-
-              {formState.specialPermissionsEnabled ? (
-                <div className="rounded-lg border border-neutral-700 bg-neutral-950 p-3">
-                  <p className="mb-2 text-xs uppercase tracking-[0.16em] text-neutral-400">Permission Access</p>
-                  <div className="max-h-56 overflow-y-auto pr-1">
-                    <div className="grid gap-2 md:grid-cols-2">
-                    {sortedPermissionOptions.map((permission) => (
-                      <label key={permission.key} className="flex items-start gap-2 rounded border border-neutral-800 p-2 text-sm text-neutral-200">
-                        <input
-                          type="checkbox"
-                          checked={formState.permissionKeys.includes(permission.key)}
-                          onChange={() => togglePermission(permission.key)}
-                        />
-                        <span>
-                          <span className="font-semibold text-white">{permission.label}</span>
-                          {permission.description ? <span className="block text-xs text-neutral-400">{permission.description}</span> : null}
-                        </span>
-                      </label>
-                    ))}
-                    </div>
-                  </div>
-                </div>
-              ) : null}
+              <SpecialPermissionsManager
+                memberName={`${formState.firstName} ${formState.lastName}`.trim() || "Member"}
+                permissionOptions={permissionOptions}
+                specialPermissionsEnabled={formState.specialPermissionsEnabled}
+                selectedPermissionKeys={formState.permissionKeys}
+                onSpecialPermissionsEnabledChange={(enabled) =>
+                  setFormState((current) => ({
+                    ...current,
+                    specialPermissionsEnabled: enabled,
+                    permissionKeys: enabled ? current.permissionKeys : [],
+                  }))
+                }
+                onTogglePermission={togglePermission}
+              />
 
               {errorMessage ? (
                 <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-100">

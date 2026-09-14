@@ -1,11 +1,13 @@
 "use client";
 
+import { Suspense } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import PageLayout from "@/components/layout/PageLayout";
 import { getActiveApparatusOptions } from "@/lib/database";
 import { MAINTENANCE_TYPE_OPTIONS } from "@/lib/maintenance";
 import { supabase } from "@/lib/supabase";
+import { useMaintenancePermission } from "@/components/maintenance/useMaintenancePermission";
 
 type MaintenanceRow = {
   id: string;
@@ -91,7 +93,7 @@ function formatCurrency(value: number | null) {
   }).format(value);
 }
 
-export default function MaintenancePage() {
+function MaintenancePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [records, setRecords] = useState<MaintenanceRow[]>([]);
@@ -105,6 +107,7 @@ export default function MaintenancePage() {
   const [serviceDateFrom, setServiceDateFrom] = useState("");
   const [serviceDateTo, setServiceDateTo] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const { canManageMaintenance } = useMaintenancePermission();
 
   const linkedDeficiencyId = searchParams.get("deficiencyId");
   const shouldAutoOpenCreate = searchParams.get("create") === "1";
@@ -302,13 +305,15 @@ export default function MaintenancePage() {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => router.push(buildPerformMaintenanceHref())}
-            className="inline-flex items-center justify-center rounded-xl border border-red-500/30 bg-red-600 px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(184,18,18,0.25)] transition hover:bg-red-500"
-          >
-            Perform Maintenance
-          </button>
+          {canManageMaintenance ? (
+            <button
+              type="button"
+              onClick={() => router.push(buildPerformMaintenanceHref())}
+              className="inline-flex items-center justify-center rounded-xl border border-red-500/30 bg-red-600 px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(184,18,18,0.25)] transition hover:bg-red-500"
+            >
+              Perform Maintenance
+            </button>
+          ) : null}
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-[#111111] p-5 shadow-[0_14px_34px_rgba(0,0,0,0.25)]">
@@ -461,5 +466,13 @@ export default function MaintenancePage() {
       </div>
 
     </PageLayout>
+  );
+}
+
+export default function MaintenancePage() {
+  return (
+    <Suspense>
+      <MaintenancePageContent />
+    </Suspense>
   );
 }

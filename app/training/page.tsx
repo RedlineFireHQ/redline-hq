@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import TrainingWorkspace from "@/components/training/TrainingWorkspace";
+import TrainingDepartmentOverview from "@/components/training/TrainingDepartmentOverview";
 import { getCurrentMember } from "@/lib/current-member";
-import { hasDepartmentPermission } from "@/lib/member-permissions";
+import { hasAssignedDepartmentPermission } from "@/lib/member-permissions";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 type TrainingCategoryRow = {
@@ -140,6 +142,56 @@ type EmsCourseDefinitionRow = {
   active: boolean;
 };
 
+function calculateDepartmentTrainingHoursThisYear(input: {
+  events: Array<{ id: string; starts_at: string; hours_credit: number | string | null }>;
+  attendanceRows: Array<{ training_event_id: string; attendance_status: string }>;
+  outsideSubmissions: Array<{ training_date: string; hours: number | string | null; status: string }>;
+  assignments: Array<{ id: string; hours_credit: number | string | null }>;
+  assignmentMembers: Array<{
+    training_assignment_id: string;
+    completion_status: string;
+    completed_at: string | null;
+    updated_at: string;
+    created_at: string;
+    hours_earned: number | string | null;
+  }>;
+}) {
+  const currentYear = new Date().getFullYear();
+  const isInCurrentYear = (value: string | null | undefined) => {
+    if (!value) {
+      return false;
+    }
+
+    const parsed = new Date(value);
+    return !Number.isNaN(parsed.getTime()) && parsed.getFullYear() === currentYear;
+  };
+  const parseHoursValue = (value: number | string | null) => {
+    const parsed = typeof value === "number" ? value : Number.parseFloat(value ?? "");
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
+  const eventHoursById = new Map(input.events.map((event) => [event.id, event]));
+  const attendanceHours = input.attendanceRows
+    .filter((row) => row.attendance_status === "attending")
+    .reduce((total, row) => {
+      const event = eventHoursById.get(row.training_event_id);
+      return event && isInCurrentYear(event.starts_at) ? total + parseHoursValue(event.hours_credit) : total;
+    }, 0);
+  const outsideHours = input.outsideSubmissions
+    .filter((row) => row.status === "approved" && isInCurrentYear(row.training_date))
+    .reduce((total, row) => total + parseHoursValue(row.hours), 0);
+  const assignmentHoursById = new Map(input.assignments.map((assignment) => [assignment.id, assignment]));
+  const approvedAssignmentHours = input.assignmentMembers
+    .filter((row) => row.completion_status === "approved" && isInCurrentYear(row.completed_at ?? row.updated_at ?? row.created_at))
+    .reduce((total, row) => {
+      const assignment = assignmentHoursById.get(row.training_assignment_id);
+      const earnedHours = parseHoursValue(row.hours_earned);
+      return total + (earnedHours > 0 ? earnedHours : parseHoursValue(assignment?.hours_credit ?? null));
+    }, 0);
+
+  return attendanceHours + outsideHours + approvedAssignmentHours;
+}
+
 export default async function TrainingPage() {
   const supabase = await createSupabaseServerClient();
   const currentMember = await getCurrentMember(supabase);
@@ -149,18 +201,20 @@ export default async function TrainingPage() {
   }
 
   const [canManageTraining, canAssignHomework, canReviewTraining] = await Promise.all([
-    hasDepartmentPermission(supabase, currentMember.departmentId, currentMember.role, "training_management"),
-    hasDepartmentPermission(supabase, currentMember.departmentId, currentMember.role, "homework_assignment"),
-    hasDepartmentPermission(supabase, currentMember.departmentId, currentMember.role, "training_review"),
+    hasAssignedDepartmentPermission(supabase, currentMember.departmentId, "training_program_management")
+      || hasAssignedDepartmentPermission(supabase, currentMember.departmentId, "training_management"),
+    hasAssignedDepartmentPermission(supabase, currentMember.departmentId, "training_assignment_management")
+      || hasAssignedDepartmentPermission(supabase, currentMember.departmentId, "homework_assignment")
+      || hasAssignedDepartmentPermission(supabase, currentMember.departmentId, "training_management"),
+    hasAssignedDepartmentPermission(supabase, currentMember.departmentId, "training_review_management")
+      || hasAssignedDepartmentPermission(supabase, currentMember.departmentId, "training_review")
+      || hasAssignedDepartmentPermission(supabase, currentMember.departmentId, "training_management"),
   ]);
   const hasAnyManagementCapabilities =
     canManageTraining || canAssignHomework || canReviewTraining;
 
-  if (!hasAnyManagementCapabilities && currentMember.role !== "firefighter") {
-    redirect("/");
-  }
-
   if (!hasAnyManagementCapabilities) {
+    const departmentDataClient = createSupabaseAdminClient();
     const [
       { data: categoriesData, error: categoriesError },
       { data: outsideSubmissionData, error: outsideSubmissionError },
@@ -168,6 +222,11 @@ export default async function TrainingPage() {
       { data: assignmentMemberData, error: assignmentMemberError },
       { data: assignmentEvidenceData, error: assignmentEvidenceError },
       { data: emsCourseDefinitionsData, error: emsCourseDefinitionsError },
+      { data: departmentEventsData, error: departmentEventsError },
+      { data: departmentAttendanceData, error: departmentAttendanceError },
+      { data: departmentOutsideData, error: departmentOutsideError },
+      { data: departmentAssignmentsData, error: departmentAssignmentsError },
+      { data: departmentAssignmentMembersData, error: departmentAssignmentMembersError },
     ] = await Promise.all([
       supabase
         .from("training_categories")
@@ -206,6 +265,18 @@ export default async function TrainingPage() {
         .eq("department_id", currentMember.departmentId)
         .eq("active", true)
         .order("course_name", { ascending: true }),
+      departmentDataClient
+        .from("training_events")
+        .select("id, title, category_id, starts_at, hours_credit, instructor_name, location, status")
+        .eq("department_id", currentMember.departmentId)
+        .order("starts_at", { ascending: false }),
+      departmentDataClient
+        .from("training_event_attendance")
+        .select("training_event_id, member_id, attendance_status, completion_status")
+        .eq("department_id", currentMember.departmentId),
+      departmentDataClient.from("training_outside_submissions").select("training_date, hours, status").eq("department_id", currentMember.departmentId),
+      departmentDataClient.from("training_assignments").select("id, hours_credit").eq("department_id", currentMember.departmentId),
+      departmentDataClient.from("training_assignment_members").select("training_assignment_id, completion_status, completed_at, updated_at, created_at, hours_earned").eq("department_id", currentMember.departmentId),
     ]);
 
     if (categoriesError) {
@@ -231,6 +302,17 @@ export default async function TrainingPage() {
     if (emsCourseDefinitionsError) {
       throw new Error(emsCourseDefinitionsError.message || "Unable to load EMS course definitions.");
     }
+    if (departmentEventsError || departmentAttendanceError || departmentOutsideError || departmentAssignmentsError || departmentAssignmentMembersError) {
+      throw new Error("Unable to load department training totals.");
+    }
+
+    const departmentTrainingHoursThisYear = calculateDepartmentTrainingHoursThisYear({
+      events: (departmentEventsData ?? []) as Array<{ id: string; starts_at: string; hours_credit: number | string | null }>,
+      attendanceRows: (departmentAttendanceData ?? []) as Array<{ training_event_id: string; attendance_status: string }>,
+      outsideSubmissions: (departmentOutsideData ?? []) as Array<{ training_date: string; hours: number | string | null; status: string }>,
+      assignments: (departmentAssignmentsData ?? []) as Array<{ id: string; hours_credit: number | string | null }>,
+      assignmentMembers: (departmentAssignmentMembersData ?? []) as Array<{ training_assignment_id: string; completion_status: string; completed_at: string | null; updated_at: string; created_at: string; hours_earned: number | string | null }>,
+    });
 
     const categories: TrainingCategoryRow[] = (categoriesData ?? []).map((row) => ({
       id: String(row.id),
@@ -309,6 +391,47 @@ export default async function TrainingPage() {
       course_name: typeof row.course_name === "string" ? row.course_name : "",
       active: row.active === true,
     }));
+
+    const departmentEvents = (departmentEventsData ?? []) as Array<{
+      id: string;
+      title: string | null;
+      category_id: string | null;
+      starts_at: string;
+      hours_credit: number | string | null;
+      instructor_name: string | null;
+      location: string | null;
+      status: string | null;
+    }>;
+    const departmentEventAttendance = (departmentAttendanceData ?? []) as Array<{
+      training_event_id: string;
+      member_id: string;
+      attendance_status: string;
+      completion_status: string;
+    }>;
+    const departmentOverviewEvents = departmentEvents.map((event) => ({
+      id: event.id,
+      title: event.title ?? "Untitled Training",
+      categoryName: categories.find((category) => category.id === event.category_id)?.name ?? "Uncategorized",
+      startsAt: event.starts_at,
+      hoursCredit: typeof event.hours_credit === "string" ? Number.parseFloat(event.hours_credit) : event.hours_credit,
+      instructorName: event.instructor_name,
+      location: event.location,
+      status: event.status ?? "scheduled",
+      attendedCount: departmentEventAttendance.filter(
+        (row) => row.training_event_id === event.id && row.attendance_status === "attending",
+      ).length,
+    }));
+    const pendingReviews =
+      (departmentOutsideData ?? []).filter((row) => row.status === "pending_review").length +
+      (departmentAssignmentMembersData ?? []).filter(
+        (row) => row.completion_status === "pending_review",
+      ).length +
+      (departmentAttendanceData ?? []).filter((row) => row.completion_status === "pending_review").length;
+    const membersTrainedCount = new Set(
+      departmentEventAttendance
+        .filter((row) => row.attendance_status === "attending")
+        .map((row) => row.member_id),
+    ).size;
 
     const assignmentIds = Array.from(
       new Set(
@@ -404,7 +527,14 @@ export default async function TrainingPage() {
     }));
 
     return (
-      <TrainingWorkspace
+      <div className="space-y-6 pb-6">
+        <TrainingDepartmentOverview
+          departmentTrainingHoursThisYear={departmentTrainingHoursThisYear}
+          pendingReviews={pendingReviews}
+          events={departmentOverviewEvents}
+          membersTrainedCount={membersTrainedCount}
+        />
+        <TrainingWorkspace
         departmentId={currentMember.departmentId}
         currentMemberId={currentMember.id}
         currentMemberRole={currentMember.role}
@@ -416,14 +546,16 @@ export default async function TrainingPage() {
         attendanceRows={[]}
         members={[]}
         documents={documents}
-        pendingReviews={0}
+        pendingReviews={pendingReviews}
         outsideSubmissions={outsideSubmissions}
         outsideEvidenceRows={outsideEvidenceRows}
         assignments={assignments}
         assignmentMembers={assignmentMembers}
         assignmentEvidenceRows={assignmentEvidenceRows}
         emsCourseDefinitions={emsCourseDefinitions}
+        departmentTrainingHoursThisYear={departmentTrainingHoursThisYear}
       />
+      </div>
     );
   }
 
@@ -725,6 +857,13 @@ export default async function TrainingPage() {
     (pendingOutsideCount ?? 0) +
     (pendingAssignmentCount ?? 0) +
     (pendingAttendanceCount ?? 0);
+  const departmentTrainingHoursThisYear = calculateDepartmentTrainingHoursThisYear({
+    events,
+    attendanceRows,
+    outsideSubmissions,
+    assignments,
+    assignmentMembers,
+  });
 
   return (
     <TrainingWorkspace
@@ -746,6 +885,7 @@ export default async function TrainingPage() {
       assignmentMembers={assignmentMembers}
       assignmentEvidenceRows={assignmentEvidenceRows}
       emsCourseDefinitions={emsCourseDefinitions}
+      departmentTrainingHoursThisYear={departmentTrainingHoursThisYear}
     />
   );
 }

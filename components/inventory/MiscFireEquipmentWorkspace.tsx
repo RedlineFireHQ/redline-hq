@@ -558,14 +558,13 @@ export default function MiscFireEquipmentWorkspace({
 		}
 	};
 
-	const activeCount = rows.filter((row) => row.status === "Active").length;
 	const totalOpenDeficiencies = rows.reduce(
 		(sum, row) => sum + normalizeOpenDeficiencyCount(row.open_deficiency_count),
 		0,
 	);
 
 	return (
-		<main className="min-h-screen bg-[#090909] px-6 py-10 text-white">
+		<main className="min-h-screen px-6 py-10 text-white">
 			<div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
 				{toastMessage ? (
 					<div className="rounded-xl border border-red-500/30 bg-red-900/20 px-4 py-3 text-sm text-red-100">
@@ -582,27 +581,37 @@ export default function MiscFireEquipmentWorkspace({
 					</div>
 				) : null}
 
-				<div className="rounded-2xl border border-white/10 bg-[radial-gradient(circle_at_top_left,_rgba(225,24,27,0.14),_transparent_36%),linear-gradient(180deg,_rgba(255,255,255,0.02),_rgba(255,255,255,0.01))] p-5 shadow-[0_22px_60px_rgba(0,0,0,0.32)]">
-					<p className="text-xs font-semibold uppercase tracking-[0.24em] text-red-500">Inventory</p>
-					<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">Miscellaneous Fire Equipment</h1>
-					<p className="mt-2 text-sm text-zinc-400">General fire equipment and tools.</p>
-					{departmentName ? (
-						<p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">{departmentName}</p>
-					) : null}
+				<div className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-[#111111] p-6 shadow-[0_30px_90px_rgba(0,0,0,0.35)] lg:flex-row lg:items-start lg:justify-between">
+					<div className="space-y-3">
+						<p className="text-xs font-semibold uppercase tracking-[0.28em] text-red-500">Inventory</p>
+						<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">Miscellaneous Fire Equipment</h1>
+						<p className="max-w-2xl text-sm text-zinc-400">General fire equipment and tools.</p>
+						{departmentName ? (
+							<p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">{departmentName}</p>
+						) : null}
+						<div className="flex flex-wrap items-center gap-2">
+							<button
+								type="button"
+								onClick={openAddForm}
+								disabled={!canManageMiscFireEquipment}
+								className="rounded-lg border border-red-500/40 bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+							>
+								Add Equipment
+							</button>
+							<button
+								type="button"
+								onClick={launchDeficiencyReport}
+								disabled={!selectedItem}
+								className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50"
+							>
+								Report Deficiency
+							</button>
+						</div>
+					</div>
 
-					<div className="mt-4 grid gap-2 sm:grid-cols-3">
-						<div className="rounded-xl border border-white/10 bg-[#121212] px-3 py-2.5">
-							<p className="text-2xl font-black leading-none text-white">{rows.length}</p>
-							<p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">Tracked Equipment</p>
-						</div>
-						<div className="rounded-xl border border-white/10 bg-[#121212] px-3 py-2.5">
-							<p className="text-2xl font-black leading-none text-white">{activeCount}</p>
-							<p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">Active</p>
-						</div>
-						<div className="rounded-xl border border-white/10 bg-[#121212] px-3 py-2.5">
-							<p className="text-2xl font-black leading-none text-white">{totalOpenDeficiencies}</p>
-							<p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">Open Deficiencies</p>
-						</div>
+					<div className="rounded-2xl border border-white/10 bg-white/[0.02] px-4 py-3 lg:w-[220px] lg:shrink-0">
+						<p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Open Deficiencies</p>
+						<p className="mt-1 text-3xl font-black text-white">{totalOpenDeficiencies}</p>
 					</div>
 				</div>
 
@@ -629,14 +638,6 @@ export default function MiscFireEquipmentWorkspace({
 									className="w-full rounded-xl border border-white/10 bg-[#0c0c0c] px-4 py-3 text-sm text-white placeholder:text-zinc-500 focus:border-red-500/50 focus:outline-none"
 								/>
 							</div>
-							<button
-								type="button"
-								onClick={openAddForm}
-								disabled={!canManageMiscFireEquipment}
-								className="rounded-xl border border-red-500/40 bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
-							>
-								Add Equipment
-							</button>
 						</div>
 
 						<div className="mt-3 flex">
@@ -665,16 +666,7 @@ export default function MiscFireEquipmentWorkspace({
 									{rows.length === 0 ? (
 										<div className="px-4 py-10 text-sm text-zinc-400">
 											No miscellaneous equipment recorded.
-											<div className="mt-3">
-												<button
-													type="button"
-													onClick={openAddForm}
-													disabled={!canManageMiscFireEquipment}
-													className="rounded-xl border border-red-500/40 bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
-												>
-													Add Equipment
-												</button>
-											</div>
+
 										</div>
 									) : filteredRows.length === 0 ? (
 										<div className="px-4 py-10 text-sm text-zinc-400">No miscellaneous equipment found.</div>

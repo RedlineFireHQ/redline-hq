@@ -101,10 +101,12 @@ function normalizeDateValue(value: unknown): string | null {
 async function uploadPhoto({
 	supabase,
 	departmentId,
+	parentId,
 	upload,
 }: {
 	supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
 	departmentId: string;
+	parentId: string;
 	upload: UploadPayload;
 }): Promise<string> {
 	if (!upload.mimeType.toLowerCase().startsWith("image/")) {
@@ -112,7 +114,7 @@ async function uploadPhoto({
 	}
 
 	const sanitizedFileName = upload.fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
-	const storagePath = `${departmentId}/misc-fire-equipment/${Date.now()}-${sanitizedFileName}`;
+	const storagePath = `${departmentId}/inventory/misc-fire-equipment/${parentId}/${Date.now()}-${sanitizedFileName}`;
 	const binary = Buffer.from(upload.base64Data, "base64");
 
 	const { error } = await supabase.storage.from("department-documents").upload(storagePath, binary, {
@@ -310,6 +312,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 			const uploadedPath = await uploadPhoto({
 				supabase,
 				departmentId: currentMember.departmentId,
+				parentId: id,
 				upload: photoUpload,
 			});
 			nextPhotoPath = uploadedPath;

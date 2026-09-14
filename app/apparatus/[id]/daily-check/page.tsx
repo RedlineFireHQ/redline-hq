@@ -197,12 +197,17 @@ export default async function DailyCheckPage({
     mileage,
     engineHours,
   } = await searchParams;
-  const apparatus = await getApparatusById(id);
   const supabase = await createSupabaseServerClient();
-  const currentMember = await getCurrentMember(supabase);
+  const apparatus = await getApparatusById(id, supabase);
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  const currentMember = await getCurrentMember(supabase);
 
   let inspectorName = "Unknown Inspector";
   let currentMemberId: string | null = null;
@@ -429,6 +434,7 @@ export default async function DailyCheckPage({
       .from("members")
       .select("id, first_name, last_name")
       .eq("department_id", currentMember.departmentId)
+      .eq("active", true)
       .order("last_name", { ascending: true })
       .order("first_name", { ascending: true });
 

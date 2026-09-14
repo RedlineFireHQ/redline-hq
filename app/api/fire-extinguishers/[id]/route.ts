@@ -30,10 +30,6 @@ const ALLOWED_LOCATION_TYPES = new Set(["Apparatus", "Station Storage", "Station
 const ALLOWED_STATUS_VALUES = new Set(["Active", "Inactive", "Out of Service"]);
 const ALLOWED_TYPE_VALUES = new Set(["Water", "Foam", "Carbon Dioxide", "Dry Chemical", "Wet Chemical", "Clean Agent", "Other"]);
 
-function isElevatedRole(role: unknown): boolean {
-	return role === "administrator" || role === "officer";
-}
-
 function jsonResponse(payload: unknown, status = 200): Response {
 	return new Response(JSON.stringify(payload), {
 		status,
@@ -77,10 +73,12 @@ function parseUpload(value: unknown): UploadPayload | null {
 async function uploadPhoto({
 	supabase,
 	departmentId,
+	parentId,
 	upload,
 }: {
 	supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
 	departmentId: string;
+	parentId: string;
 	upload: UploadPayload;
 }): Promise<string> {
 	if (!upload.mimeType.toLowerCase().startsWith("image/")) {
@@ -88,7 +86,7 @@ async function uploadPhoto({
 	}
 
 	const sanitizedFileName = upload.fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
-	const storagePath = `${departmentId}/fire-extinguishers/${Date.now()}-${sanitizedFileName}`;
+	const storagePath = `${departmentId}/inventory/fire-extinguishers/${parentId}/${Date.now()}-${sanitizedFileName}`;
 	const binary = Buffer.from(upload.base64Data, "base64");
 
 	const { error } = await supabase.storage.from("department-documents").upload(storagePath, binary, {
@@ -225,10 +223,6 @@ export async function PATCH(request: Request, context: RouteContext) {
 			return jsonResponse({ ok: false, error: "Unauthorized" }, 401);
 		}
 
-		if (!isElevatedRole(currentMember.role)) {
-			return jsonResponse({ ok: false, error: "Forbidden" }, 403);
-		}
-
 		const { data: existingItem, error: existingError } = await supabase
 			.from("fire_extinguishers")
 			.select("id, photo_path")
@@ -300,6 +294,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 			const uploadedPath = await uploadPhoto({
 				supabase,
 				departmentId: currentMember.departmentId,
+				parentId: id,
 				upload: photoUpload,
 			});
 			nextPhotoPath = uploadedPath;
@@ -357,10 +352,6 @@ export async function DELETE(_: Request, context: RouteContext) {
 
 		if (!currentMember?.departmentId) {
 			return jsonResponse({ ok: false, error: "Unauthorized" }, 401);
-		}
-
-		if (!isElevatedRole(currentMember.role)) {
-			return jsonResponse({ ok: false, error: "Forbidden" }, 403);
 		}
 
 		const { data: existingItem, error: existingError } = await supabase

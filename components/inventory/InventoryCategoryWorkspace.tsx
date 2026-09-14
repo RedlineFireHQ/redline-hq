@@ -16,6 +16,7 @@ type ActionTone = "primary" | "secondary" | "danger";
 
 interface ReadinessItem {
 	label: string;
+	count?: number;
 	filter: "all" | "tests-due" | "deficiencies" | "out-of-service";
 	tone: ReadinessTone;
 }
@@ -49,6 +50,7 @@ interface InventoryCategoryWorkspaceProps {
 	departmentName?: string | null;
 	searchKeys?: string[];
 	initialError?: string | null;
+	canManageInventory?: boolean;
 	canDeleteHose?: boolean;
 }
 
@@ -1374,14 +1376,94 @@ export default function InventoryCategoryWorkspace({
 				</div>
 			)}
 
-			<div>
-				<p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">Inventory</p>
+			{title !== "Fire Hose" && (
+				<div>
+					<p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">Inventory</p>
 
-				<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">{title}</h1>
+					<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">{title}</h1>
 
-				<p className="mt-3 max-w-2xl text-lg text-neutral-400">{subtitle}</p>
-			</div>
+					<p className="mt-3 max-w-2xl text-lg text-neutral-400">{subtitle}</p>
+				</div>
+			)}
 
+			{title === "Fire Hose" && (
+				<section className="rounded-2xl border border-red-900 bg-[#242424] p-5 lg:col-span-2">
+					<div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+						<div className="min-w-0 flex-1">
+							<div className="mb-4">
+								<p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-red-500">Inventory</p>
+								<h1 className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white">{title}</h1>
+								<p className="mt-3 max-w-2xl text-lg text-neutral-400">{subtitle}</p>
+							</div>
+
+							<div className="flex flex-wrap items-center gap-2">
+								{actions.map((action) =>
+									action.label === "Report Deficiency" && action.href ? (
+										<Link
+											key={action.label}
+											href={action.href}
+											className="inline-flex rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+										>
+											{action.label}
+										</Link>
+									) : null,
+								)}
+								<Link
+									href="/inventory/fire-hose/testing-history"
+									className="inline-flex rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+								>
+									View Testing History →
+								</Link>
+								<button
+									type="button"
+									onClick={openTestingSession}
+									className="inline-flex rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+								>
+									Start Hose Test
+								</button>
+								{actions.some((action) => action.label === "+ Add Hose") && (
+									<button
+										type="button"
+										onClick={openAddModal}
+										className={`rounded-lg text-xs font-semibold transition ${quickActionClasses(
+											actions.find((action) => action.label === "+ Add Hose")?.tone ?? "primary",
+										)}`}
+									>
+										+ Add Hose
+									</button>
+								)}
+							</div>
+						</div>
+
+						<div className="flex w-full shrink-0 flex-wrap gap-2 lg:w-auto lg:max-w-[520px] lg:justify-end">
+							{readinessItems.map((item) => (
+								<button
+									key={item.label}
+									type="button"
+									aria-pressed={activeReadinessFilter === item.filter}
+									onClick={() =>
+										setActiveReadinessFilter((current) =>
+											current === item.filter ? "all" : item.filter,
+										)
+									}
+									className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold transition ${readinessRowClasses(item.tone)} ${
+										activeReadinessFilter === item.filter ? "ring-1 ring-white/30" : ""
+									}`}
+								>
+									<span>{item.label}</span>
+									{typeof item.count === "number" ? (
+										<span className="inline-flex min-w-6 items-center justify-center rounded-full bg-black/20 px-1.5 py-0.5 text-xs font-bold text-white">
+											{item.count}
+										</span>
+									) : null}
+								</button>
+							))}
+						</div>
+					</div>
+				</section>
+			)}
+
+			{title !== "Fire Hose" && (
 			<section className="rounded-2xl border border-red-900 bg-[#242424] p-5 lg:col-span-2">
 				<div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
 					<div className="min-w-0 flex-1">
@@ -1454,6 +1536,7 @@ export default function InventoryCategoryWorkspace({
 				</div>
 			</section>
 
+			)}
 			<section className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-5">
 				<div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
 					<div className="min-w-0 flex-1">
@@ -1543,6 +1626,7 @@ export default function InventoryCategoryWorkspace({
 					)}
 				</div>
 
+				{title !== "Fire Hose" && (
 				<div className="mt-4 flex flex-wrap gap-3">
 					{actions
 						.filter((action) => action.label !== "Report Deficiency")
@@ -1561,10 +1645,11 @@ export default function InventoryCategoryWorkspace({
 							</button>
 						))}
 				</div>
+				)}
 			</section>
 
 			<section className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-6">
-				<div className="overflow-x-auto">
+				<div className={title === "Fire Hose" ? "max-h-[700px] overflow-auto" : "overflow-x-auto"}>
 					<table className="min-w-full border-separate border-spacing-0 text-left">
 						<thead>
 							<tr>

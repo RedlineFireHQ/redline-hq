@@ -77,6 +77,8 @@ type EmsTrackProfileRow = {
   effective_end_date: string | null;
 };
 
+type EmsTrack = EmsTrackProfileRow["track"];
+
 function toDateKey(value: string | null | undefined) {
   if (typeof value !== "string" || value.length < 10) {
     return null;
@@ -121,7 +123,7 @@ export default function TrainingPanel() {
   const departmentId = typeof member?.department_id === "string" ? member.department_id : "";
 
   const [fireTrainingHours, setFireTrainingHours] = useState<number | null>(null);
-  const [iowaEmsHours, setIowaEmsHours] = useState<number | null>(null);
+  const [emsTraining, setEmsTraining] = useState<{ track: EmsTrack; hours: number } | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -130,7 +132,7 @@ export default function TrainingPanel() {
       if (!memberId || !departmentId) {
         if (isMounted) {
           setFireTrainingHours(null);
-          setIowaEmsHours(null);
+          setEmsTraining(null);
         }
         return;
       }
@@ -205,7 +207,7 @@ export default function TrainingPanel() {
       ) {
         if (isMounted) {
           setFireTrainingHours(null);
-          setIowaEmsHours(null);
+          setEmsTraining(null);
         }
         return;
       }
@@ -280,37 +282,49 @@ export default function TrainingPanel() {
         authoritativeCertification: authoritativeEmsCertifications.iowa,
       });
 
-      const iowaCycleStartKey = toDateKey(activeIowaProfile?.effective_start_date ?? null);
-      const iowaCycleEndKey = toDateKey(activeIowaProfile?.expiration_date ?? null);
+      const activeNremtProfile = applyAuthoritativeCertificationToTrackProfile({
+        track: "nremt",
+        profile: findCurrentTrackProfile(emsTrackProfiles, "nremt"),
+        authoritativeCertification: authoritativeEmsCertifications.nremt,
+      });
 
-      const iowaEmsRecords = [
+      const selectedEmsTrack: EmsTrack | null = activeIowaProfile
+        ? "iowa"
+        : activeNremtProfile?.maintain_track === true
+          ? "nremt"
+          : null;
+      const selectedEmsProfile = selectedEmsTrack === "iowa" ? activeIowaProfile : activeNremtProfile;
+      const emsCycleStartKey = toDateKey(selectedEmsProfile?.effective_start_date ?? null);
+      const emsCycleEndKey = toDateKey(selectedEmsProfile?.expiration_date ?? null);
+
+      const emsRecords = [
         ...attendedEvents
           .filter((row) => row.is_ems_training === true)
-          .filter((row) => isDateWithinInclusiveRange(toDateKey(row.starts_at), iowaCycleStartKey, iowaCycleEndKey))
+          .filter((row) => isDateWithinInclusiveRange(toDateKey(row.starts_at), emsCycleStartKey, emsCycleEndKey))
           .map((row) => ({
             id: `event-${row.id}`,
             occurredAt: row.starts_at,
             hours: parseHours(row.hours_credit),
             coreTopic: normalizeCoreTopic(row.ems_core_topic),
             needsReview: row.ems_needs_review === true,
-            eligibleForIowa: true,
-            eligibleForNremt: false,
+            eligibleForIowa: selectedEmsTrack === "iowa",
+            eligibleForNremt: selectedEmsTrack === "nremt",
           })),
         ...approvedOutside
           .filter((row) => row.is_ems_training === true)
-          .filter((row) => isDateWithinInclusiveRange(toDateKey(row.training_date), iowaCycleStartKey, iowaCycleEndKey))
+          .filter((row) => isDateWithinInclusiveRange(toDateKey(row.training_date), emsCycleStartKey, emsCycleEndKey))
           .map((row) => ({
             id: `outside-${row.id}`,
             occurredAt: row.training_date,
             hours: parseHours(row.hours),
             coreTopic: normalizeCoreTopic(row.ems_core_topic),
             needsReview: row.ems_needs_review === true,
-            eligibleForIowa: true,
-            eligibleForNremt: false,
+            eligibleForIowa: selectedEmsTrack === "iowa",
+            eligibleForNremt: selectedEmsTrack === "nremt",
           })),
       ];
 
-      const iowaReadiness = calculateEmsReadiness({
+      const emsReadiness = calculateEmsReadiness({
         iowaProfile: activeIowaProfile
           ? {
               level: activeIowaProfile.certification_level,
@@ -319,13 +333,27 @@ export default function TrainingPanel() {
               maintainTrack: activeIowaProfile.maintain_track === true,
             }
           : null,
-        nremtProfile: null,
-        trainingRecords: iowaEmsRecords,
+        nremtProfile: activeNremtProfile
+          ? {
+              level: activeNremtProfile.certification_level,
+              status: activeNremtProfile.track_status,
+              expirationDate: activeNremtProfile.expiration_date,
+              maintainTrack: activeNremtProfile.maintain_track === true,
+            }
+          : null,
+        trainingRecords: emsRecords,
       });
 
       if (isMounted) {
         setFireTrainingHours(fireTrainingHoursTotal);
-        setIowaEmsHours(activeIowaProfile ? iowaReadiness.iowa.totalCompleted : null);
+        setEmsTraining(
+          selectedEmsTrack
+            ? {
+                track: selectedEmsTrack,
+                hours: selectedEmsTrack === "iowa" ? emsReadiness.iowa.totalCompleted : emsReadiness.nremt.totalCompleted,
+              }
+            : null,
+        );
       }
     }
 
@@ -345,12 +373,14 @@ export default function TrainingPanel() {
   }, [fireTrainingHours]);
 
   const departmentHoursLabel = useMemo(() => {
-    if (iowaEmsHours === null) {
+    if (emsTraining === null) {
       return "--";
     }
 
-    return Number.isInteger(iowaEmsHours) ? String(iowaEmsHours) : iowaEmsHours.toFixed(1);
-  }, [iowaEmsHours]);
+    return Number.isInteger(emsTraining.hours) ? String(emsTraining.hours) : emsTraining.hours.toFixed(1);
+  }, [emsTraining]);
+
+  const emsTrainingLabel = emsTraining?.track === "nremt" ? "NREMT EMS" : emsTraining?.track === "iowa" ? "IOWA EMS" : "EMS TRAINING";
 
   return (
     <section className="relative overflow-hidden rounded-[22px] border border-white/10 bg-[#101010] shadow-[0_20px_60px_rgba(0,0,0,.45)]">
@@ -400,7 +430,7 @@ export default function TrainingPanel() {
           <div className="rounded-xl border border-white/10 bg-white/[0.03] p-2">
 
             <div className="text-[10px] uppercase tracking-[.12em] text-neutral-500">
-              IOWA EMS
+              {emsTrainingLabel}
             </div>
 
             <div className="mt-1 text-[34px] font-black leading-none tracking-[-0.05em] text-white">

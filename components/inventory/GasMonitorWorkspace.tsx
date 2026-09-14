@@ -1149,35 +1149,7 @@ export default function GasMonitorWorkspace({
 				return;
 			}
 
-			let nextStatus = calibrationRow.status;
-			if (!isProtectedMonitorStatus(calibrationRow.status)) {
-				if (values.result === "Failed") {
-					nextStatus = "Out of Service";
-				} else if (activeDeficiencyByMonitorId[calibrationRow.id] === true) {
-					nextStatus = "Out of Service";
-				} else {
-					const openAssignment = openAssignmentsByMonitorId.get(calibrationRow.id);
-					nextStatus =
-						openAssignment?.assignment_type === "Member" || openAssignment?.assignment_type === "Apparatus"
-							? "In Service"
-							: "Unassigned";
-				}
-			}
-
-			const updateResult = await supabase
-				.from("gas_monitors")
-				.update({ status: nextStatus })
-				.eq("id", calibrationRow.id)
-				.eq("department_id", departmentId)
-				.select("id")
-				.single();
-
 			setIsSavingCalibration(false);
-
-			if (updateResult.error || !updateResult.data) {
-				setCalibrationErrorMessage(updateResult.error?.message || "Unable to update monitor after calibration save.");
-				return;
-			}
 
 			await refreshMonitors();
 			await refreshLastCalibrationMap();
@@ -1292,38 +1264,6 @@ export default function GasMonitorWorkspace({
 				setIsSavingSessionCalibration(false);
 				setSessionCalibrationErrorMessage(
 					insertResult.error?.message || `Unable to save calibration for Monitor ${row.monitor_number}.`,
-				);
-				return false;
-			}
-
-			let nextStatus = row.status;
-			if (!isProtectedMonitorStatus(row.status)) {
-				if (result === "Failed") {
-					nextStatus = "Out of Service";
-				} else if (activeDeficiencyByMonitorId[row.id] === true) {
-					nextStatus = "Out of Service";
-				} else {
-					const openAssignment = openAssignmentsByMonitorId.get(row.id);
-					nextStatus =
-						openAssignment?.assignment_type === "Member" || openAssignment?.assignment_type === "Apparatus"
-							? "In Service"
-							: "Unassigned";
-				}
-			}
-
-			const updateResult = await supabase
-				.from("gas_monitors")
-				.update({ status: nextStatus })
-				.eq("id", row.id)
-				.eq("department_id", departmentId)
-				.select("id")
-				.single();
-
-			if (updateResult.error || !updateResult.data) {
-				await supabase.from("gas_monitor_calibration_sessions").delete().eq("id", sessionId);
-				setIsSavingSessionCalibration(false);
-				setSessionCalibrationErrorMessage(
-					updateResult.error?.message || `Unable to update Monitor ${row.monitor_number} after calibration save.`,
 				);
 				return false;
 			}

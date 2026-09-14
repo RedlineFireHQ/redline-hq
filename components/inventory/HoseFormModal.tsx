@@ -15,6 +15,7 @@ interface HoseFormModalProps {
 	isOpen: boolean;
 	mode: "add" | "edit";
 	initialValues?: HoseFormValues;
+	canManageHose?: boolean;
 	onClose: () => void;
 	onSave: (values: HoseFormValues) => void;
 	onViewTestingHistory?: () => void;
@@ -59,6 +60,7 @@ export default function HoseFormModal({
 	isOpen,
 	mode,
 	initialValues,
+	canManageHose = true,
 	onClose,
 	onSave,
 	onViewTestingHistory,
@@ -118,6 +120,7 @@ export default function HoseFormModal({
 		return null;
 	}
 
+	const isReadOnly = mode === "edit" && !canManageHose;
 	const displayLength = formValues.boosterReelHose
 		? "N/A (Booster Reel Hose)"
 		: formValues.length;
@@ -134,6 +137,7 @@ export default function HoseFormModal({
 				<div className="mt-4 grid gap-3 md:grid-cols-2">
 					<FormField label="Inventory Number">
 						<input
+							disabled={isReadOnly}
 							value={formValues.inventoryNumber}
 							onChange={(event) => {
 								setFormValues((current) => ({
@@ -147,6 +151,7 @@ export default function HoseFormModal({
 
 					<FormField label="Hose Size">
 						<select
+							disabled={isReadOnly}
 							value={formValues.hoseSize}
 							onChange={(event) => {
 								setFormValues((current) => ({
@@ -167,7 +172,7 @@ export default function HoseFormModal({
 					<FormField label="Length">
 						<select
 							value={displayLength}
-							disabled={formValues.boosterReelHose}
+							disabled={formValues.boosterReelHose || isReadOnly}
 							onChange={(event) => {
 								setFormValues((current) => ({
 									...current,
@@ -193,6 +198,7 @@ export default function HoseFormModal({
 					<FormField label="In Service Date">
 						<input
 							type="date"
+							disabled={isReadOnly}
 							value={formValues.inServiceDate}
 							onChange={(event) => {
 								setFormValues((current) => ({
@@ -208,6 +214,7 @@ export default function HoseFormModal({
 				<label className="mt-4 inline-flex items-center gap-2 text-sm text-neutral-300">
 					<input
 						type="checkbox"
+						disabled={isReadOnly}
 						checked={formValues.boosterReelHose}
 						onChange={(event) => {
 							setFormValues((current) => ({
@@ -243,7 +250,7 @@ export default function HoseFormModal({
 							</button>
 						)}
 
-						{mode === "edit" && onRetire && (
+						{mode === "edit" && onRetire && !isReadOnly && (
 							<button
 								type="button"
 								onClick={onRetire}
@@ -253,7 +260,7 @@ export default function HoseFormModal({
 							</button>
 						)}
 
-						{mode === "edit" && canDelete && onDelete && (
+						{mode === "edit" && canDelete && onDelete && !isReadOnly && (
 							<button
 								type="button"
 								onClick={onDelete}
@@ -273,13 +280,15 @@ export default function HoseFormModal({
 							Cancel
 						</button>
 
-						<button
-							type="button"
-							onClick={() => onSave(formValues)}
-							className="rounded-lg border border-red-500/40 bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700"
-						>
-							Save Hose
-						</button>
+						{!isReadOnly ? (
+							<button
+								type="button"
+								onClick={() => onSave(formValues)}
+								className="rounded-lg border border-red-500/40 bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700"
+							>
+								Save Hose
+							</button>
+						) : null}
 					</div>
 				</div>
 			</div>

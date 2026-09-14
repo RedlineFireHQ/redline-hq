@@ -32,8 +32,7 @@ export type LiveWeather = {
 };
 
 const WEATHER_API_URL = "https://api.weatherapi.com/v1/current.json";
-const ELLIOTT_IOWA_QUERY = "41.14916,-95.16388";
-const FALLBACK_LOCATION_LABEL = "Elliott, IA";
+const FALLBACK_LOCATION_LABEL = "Unavailable";
 
 const FALLBACK_WEATHER: LiveWeather = {
   locationName: FALLBACK_LOCATION_LABEL,
@@ -59,17 +58,23 @@ function normalizeNumber(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-export async function getElliottWeather(): Promise<LiveWeather> {
+export async function getWeatherForLocation(locationQuery: string | null | undefined): Promise<LiveWeather> {
   const apiKey = process.env.WEATHERAPI_KEY?.trim();
+  const query = typeof locationQuery === "string" ? locationQuery.trim() : "";
 
   if (!apiKey) {
     console.error("[weather] WEATHERAPI_KEY is missing.");
     return FALLBACK_WEATHER;
   }
 
+  if (!query) {
+    console.error("[weather] No location query was provided for the department.");
+    return FALLBACK_WEATHER;
+  }
+
   try {
     const response = await fetch(
-      `${WEATHER_API_URL}?key=${encodeURIComponent(apiKey)}&q=${encodeURIComponent(ELLIOTT_IOWA_QUERY)}`,
+      `${WEATHER_API_URL}?key=${encodeURIComponent(apiKey)}&q=${encodeURIComponent(query)}`,
       {
         next: { revalidate: 900 },
         signal: AbortSignal.timeout(8000),

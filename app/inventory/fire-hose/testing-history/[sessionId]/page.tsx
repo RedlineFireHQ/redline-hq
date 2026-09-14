@@ -205,9 +205,15 @@ export default async function FireHoseTestingHistorySessionPage({
 		deficiencySummaryByHoseId.set(row.fire_hose_id, existing);
 	}
 
+	const { data: departmentData } = await supabase
+		.from("departments")
+		.select("name")
+		.eq("id", departmentId)
+		.maybeSingle();
+
 	const passedCount = results.filter((row) => (row.result ?? "").trim().toLowerCase() === "pass").length;
 	const failedCount = results.filter((row) => (row.result ?? "").trim().toLowerCase() === "fail").length;
-	const departmentName = "Elliott Volunteer Fire Department";
+	const departmentName = typeof departmentData?.name === "string" && departmentData.name.trim() ? departmentData.name : "Unknown Department";
 	const printRows = results.map((row) => ({
 		inventoryNumber: row.inventory_number ?? hoseById.get(row.hose_id ?? "")?.inventory_number ?? row.hose_id ?? null,
 		hoseSize: row.hose_id ? formatHoseSize(hoseById.get(row.hose_id)?.hose_size ?? null) : "-",

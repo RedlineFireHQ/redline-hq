@@ -1,8 +1,8 @@
 import RopeWorkspace, { type RopeRow } from "@/components/inventory/RopeWorkspace";
 import type { RopeApparatusOption } from "@/components/inventory/RopeFormModal";
-import type { RopeInspectionMemberOption } from "@/components/inventory/RopeInspectionModal";
 import { getActiveApparatusOptions } from "@/lib/database";
 import { getCurrentMember } from "@/lib/current-member";
+import { hasDepartmentPermission } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 function compareNames(left: string | null | undefined, right: string | null | undefined) {
@@ -27,27 +27,26 @@ function compareNames(left: string | null | undefined, right: string | null | un
   });
 }
 
-function formatDisplayName(firstName: string | null | undefined, lastName: string | null | undefined, fallback: string | null | undefined) {
-  const first = typeof firstName === "string" ? firstName.trim() : "";
-  const last = typeof lastName === "string" ? lastName.trim() : "";
-  const fullName = `${first} ${last}`.trim();
-  return fullName || (typeof fallback === "string" ? fallback.trim() : "") || "Unknown";
-}
-
 export default async function RopeInventoryPage() {
   const supabase = await createSupabaseServerClient();
   const currentMember = await getCurrentMember(supabase);
   const departmentId = currentMember?.departmentId ?? null;
-  const canManageRope = currentMember?.role === "administrator" || currentMember?.role === "officer";
+  const canManageRope = departmentId
+    ? await hasDepartmentPermission(
+        supabase,
+        departmentId,
+        currentMember?.role,
+        "inventory_management",
+      )
+    : false;
 
   let departmentName: string | null = null;
   let initialRows: RopeRow[] = [];
   let apparatusOptions: RopeApparatusOption[] = [];
-  let inspectionMembers: RopeInspectionMemberOption[] = [];
   let initialError: string | null = null;
 
   if (departmentId) {
-    const [{ data: departmentData }, { data: ropeData, error }, { data: inspectionData }, apparatusData, { data: memberData }, { data: deficiencyStatusData }, { data: deficiencyData }] = await Promise.all([
+    const [{ data: departmentData }, { data: ropeData, error }, { data: inspectionData }, apparatusData, { data: deficiencyStatusData }, { data: deficiencyData }] = await Promise.all([
       supabase.from("departments").select("name").eq("id", departmentId).maybeSingle(),
       supabase
         .from("rope_items")
@@ -61,13 +60,6 @@ export default async function RopeInventoryPage() {
         .order("inspection_date", { ascending: false })
         .order("created_at", { ascending: false }),
       getActiveApparatusOptions({ client: supabase, departmentId }),
-      supabase
-        .from("members")
-        .select("id, first_name, last_name, email")
-        .eq("department_id", departmentId)
-        .eq("active", true)
-        .order("first_name", { ascending: true })
-        .order("last_name", { ascending: true }),
       supabase
         .from("deficiency_statuses")
         .select("id, name"),
@@ -91,17 +83,6 @@ export default async function RopeInventoryPage() {
     apparatusOptions = apparatusData.map((row) => ({
       id: row.id,
       name: typeof row.name === "string" ? row.name : null,
-    }));
-
-    inspectionMembers = ((memberData ?? []) as Record<string, unknown>[]).map((row) => ({
-      id: typeof row.id === "string" ? row.id : String(row.id ?? ""),
-      firstName: typeof row.first_name === "string" ? row.first_name : "",
-      lastName: typeof row.last_name === "string" ? row.last_name : "",
-      displayName: formatDisplayName(
-        typeof row.first_name === "string" ? row.first_name : null,
-        typeof row.last_name === "string" ? row.last_name : null,
-        typeof row.email === "string" ? row.email : null,
-      ),
     }));
 
     const latestInspectionByItemId = new Map<string, { date: string | null; result: string | null }>();
@@ -158,11 +139,11 @@ export default async function RopeInventoryPage() {
   return (
     
       <RopeWorkspace
+        departmentId={departmentId}
         departmentName={departmentName}
         canManageRope={canManageRope}
         initialRows={initialRows}
         apparatusOptions={apparatusOptions}
-        inspectionMembers={inspectionMembers}
         currentMemberId={currentMember?.id ?? ""}
         currentMemberName={currentMember?.name ?? ""}
         initialError={initialError}

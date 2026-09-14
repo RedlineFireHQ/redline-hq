@@ -94,10 +94,12 @@ function normalizeDateValue(value: unknown): string | null {
 async function uploadPhoto({
 	supabase,
 	departmentId,
+	parentId,
 	upload,
 }: {
 	supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
 	departmentId: string;
+	parentId: string;
 	upload: UploadPayload;
 }): Promise<string> {
 	if (!upload.mimeType.toLowerCase().startsWith("image/")) {
@@ -105,7 +107,7 @@ async function uploadPhoto({
 	}
 
 	const sanitizedFileName = upload.fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
-	const storagePath = `${departmentId}/misc-fire-equipment/${Date.now()}-${sanitizedFileName}`;
+	const storagePath = `${departmentId}/inventory/misc-fire-equipment/${parentId}/${Date.now()}-${sanitizedFileName}`;
 	const binary = Buffer.from(upload.base64Data, "base64");
 
 	const { error } = await supabase.storage.from("department-documents").upload(storagePath, binary, {
@@ -254,18 +256,12 @@ export async function POST(request: Request) {
 			return jsonResponse({ ok: false, error: "Location details do not match the selected location type." }, 400);
 		}
 
+		const parentId = crypto.randomUUID();
 		let photoPath: string | null = null;
-		if (photoUpload) {
-			photoPath = await uploadPhoto({
-				supabase,
-				departmentId: currentMember.departmentId,
-				upload: photoUpload,
-			});
-		}
-
-		const { data, error } = await supabase
+		const { data: createdItem, error: createError } = await supabase
 			.from("misc_fire_equipment")
 			.insert({
+				id: parentId,
 				department_id: currentMember.departmentId,
 				equipment_name: equipmentName,
 				asset_number: assetNumber,
@@ -277,26 +273,32 @@ export async function POST(request: Request) {
 				manufacturer,
 				model,
 				notes,
-				photo_path: photoPath,
+				photo_path: null,
 			})
 			.select("id, equipment_name, asset_number, location_type, apparatus_id, apparatus:apparatus_id(name), other_location, status, date_placed_in_service, manufacturer, model, notes, photo_path, created_at, updated_at")
 			.single();
 
-		if (error || !data) {
-			if (photoPath) {
-				await supabase.storage.from("department-documents").remove([photoPath]);
-			}
-
-			return jsonResponse({ ok: false, error: error?.message || "Unable to create miscellaneous fire equipment." }, 400);
+		if (createError || !createdItem) {
+			return jsonResponse({ ok: false, error: createError?.message || "Unable to create miscellaneous fire equipment." }, 400);
 		}
+		if (!photoUpload) return jsonResponse({ ok: true, item: { ...createdItem, apparatus_name: normalizeRelatedName((createdItem as Record<string, unknown>).apparatus) } });
 
-		return jsonResponse({
-			ok: true,
-			item: {
-				...data,
-				apparatus_name: normalizeRelatedName((data as Record<string, unknown>).apparatus),
-			},
-		});
+		try {
+			photoPath = await uploadPhoto({ supabase, departmentId: currentMember.departmentId, parentId, upload: photoUpload });
+			const { data, error } = await supabase
+				.from("misc_fire_equipment")
+				.update({ photo_path: photoPath })
+				.eq("id", parentId)
+				.eq("department_id", currentMember.departmentId)
+				.select("id, equipment_name, asset_number, location_type, apparatus_id, apparatus:apparatus_id(name), other_location, status, date_placed_in_service, manufacturer, model, notes, photo_path, created_at, updated_at")
+				.single();
+			if (error || !data) throw new Error(error?.message || "Unable to attach equipment photo.");
+			return jsonResponse({ ok: true, item: { ...data, apparatus_name: normalizeRelatedName((data as Record<string, unknown>).apparatus) } });
+		} catch (error) {
+			await supabase.from("misc_fire_equipment").delete().eq("id", parentId).eq("department_id", currentMember.departmentId);
+			if (photoPath) await supabase.storage.from("department-documents").remove([photoPath]);
+			throw error;
+		}
 	} catch (error) {
 		const message = error instanceof Error ? error.message : "Unable to create miscellaneous fire equipment.";
 		return jsonResponse({ ok: false, error: message }, 400);

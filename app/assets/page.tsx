@@ -1,28 +1,86 @@
+import { getCurrentMember } from "@/lib/current-member";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
 import PageLayout from "@/components/layout/PageLayout";
 import Link from "next/link";
 
-const inventoryCategories = [
+type InventoryCategory = {
+	name: string;
+	detail: string;
+	href: string;
+	countLabel?: string;
+	countTables?: string[];
+};
+
+const inventoryCategories: InventoryCategory[] = [
 	{ name: "EMS Inventory", detail: "Supplies and equipment", href: "/inventory/ems-supplies" },
-	{ name: "Fire Hose", detail: "148 sections", href: "/inventory/fire-hose" },
-	{ name: "SCBA Packs", detail: "24 tracked units", href: "/inventory/scba-packs" },
-	{ name: "SCBA Cylinders", detail: "62 tracked cylinders", href: "/inventory/scba-cylinders" },
-	{ name: "Portable Radios", detail: "39 assigned radios", href: "/inventory/portable-radios" },
+	{ name: "Fire Hose", detail: "148 sections", href: "/inventory/fire-hose", countLabel: "sections", countTables: ["fire_hose"] },
+	{ name: "SCBA Packs", detail: "24 tracked units", href: "/inventory/scba-packs", countLabel: "tracked units", countTables: ["scba_packs"] },
+	{ name: "SCBA Cylinders", detail: "62 tracked cylinders", href: "/inventory/scba-cylinders", countLabel: "tracked cylinders", countTables: ["scba_cylinders"] },
+	{ name: "Portable Radios", detail: "39 assigned radios", href: "/inventory/portable-radios", countLabel: "assigned radios", countTables: ["portable_radios"] },
 	{ name: "Fire Extinguishers", detail: "Tracked extinguisher inventory", href: "/inventory/fire-extinguishers" },
 	{
 		name: "Thermal Imaging Cameras",
 		detail: "7 assigned cameras",
 		href: "/inventory/thermal-cameras",
+		countLabel: "assigned cameras",
+		countTables: ["thermal_imaging_cameras"],
 	},
-	{ name: "Gas Monitors", detail: "12 calibrated monitors", href: "/inventory/gas-monitors" },
-	{ name: "PPE", detail: "92 stocked items", href: "/inventory/ppe" },
+	{ name: "Gas Monitors", detail: "12 calibrated monitors", href: "/inventory/gas-monitors", countLabel: "calibrated monitors", countTables: ["gas_monitors"] },
+	{ name: "PPE", detail: "92 stocked items", href: "/inventory/ppe", countLabel: "stocked items", countTables: ["ppe_items"] },
 	{ name: "Rope", detail: "Inspection-ready rope inventory", href: "/inventory/rope" },
 	{ name: "Miscellaneous Fire Equipment", detail: "General fire equipment and tools", href: "/inventory/misc-fire-equipment" },
-	{ name: "Batteries", detail: "61 on hand", href: "/inventory/batteries" },
-	{ name: "Power & Industrial Equipment", detail: "14 tracked units", href: "/inventory/pie" },
-	{ name: "Ground Ladders", detail: "18 inspection records", href: "/inventory/ground-ladders" },
+	{ name: "Batteries", detail: "61 on hand", href: "/inventory/batteries", countLabel: "on hand", countTables: ["batteries"] },
+	{ name: "Power & Industrial Equipment", detail: "14 tracked units", href: "/inventory/pie", countLabel: "tracked units", countTables: ["pie_equipment"] },
+	{ name: "Ground Ladders", detail: "18 inspection records", href: "/inventory/ground-ladders", countLabel: "inspection records", countTables: ["ground_ladders"] },
 ];
 
-export default function AssetsPage() {
+async function loadDepartmentCounts(departmentId: string) {
+	const supabase = await createSupabaseServerClient();
+	const uniqueTables = Array.from(
+		new Set(inventoryCategories.flatMap((category) => category.countTables ?? [])),
+	);
+
+	const counts = await Promise.all(
+		uniqueTables.map(async (table) => {
+			const { count, error } = await supabase
+				.from(table)
+				.select("*", { count: "exact", head: true })
+				.eq("department_id", departmentId);
+
+			return [table, error ? null : (count ?? 0)] as const;
+		}),
+	);
+
+	return new Map(counts);
+}
+
+export default async function AssetsPage() {
+	const supabase = await createSupabaseServerClient();
+	const currentMember = await getCurrentMember(supabase);
+	const countByTable = currentMember?.departmentId
+		? await loadDepartmentCounts(currentMember.departmentId)
+		: null;
+
+	const categories = inventoryCategories.map((category) => {
+		if (!countByTable || !category.countLabel || !category.countTables?.length) {
+			return category;
+		}
+
+		let total = 0;
+		for (const table of category.countTables) {
+			const count = countByTable.get(table);
+			if (typeof count !== "number") {
+				return category;
+			}
+			total += count;
+		}
+
+		return {
+			...category,
+			detail: `${total} ${category.countLabel}`,
+		};
+	});
+
 	return (
 		<PageLayout
 			environmentBackgroundUrl="/branding/images/inventorypage.png"
@@ -81,7 +139,7 @@ export default function AssetsPage() {
 					</div>
 
 					<div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-						{inventoryCategories.map((category) => (
+						{categories.map((category) => (
 							<Link
 								key={category.name}
 								href={category.href}

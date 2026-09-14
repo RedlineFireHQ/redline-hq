@@ -234,7 +234,7 @@ export default async function DepartmentDocumentsLandingPage({
               Add Reference Category
             </Link>
             <Link
-              href="/documents/department-documents/new"
+                href="/documents/department-documents/new"
               className="inline-flex items-center justify-center rounded-xl border border-red-500/30 bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-red-500"
             >
               Add Department Document

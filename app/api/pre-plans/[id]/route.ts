@@ -1,4 +1,6 @@
 import { getCurrentMember } from "@/lib/current-member";
+import { canManagePrePlans } from "@/lib/member-permissions";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 type UpdatePrePlanPayload = {
@@ -188,11 +190,13 @@ async function createRevisionFromUpload({
   departmentId: string;
   memberId: string;
 }) {
+  void supabase;
   const sanitizedFileName = upload.fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
   const storagePath = `${departmentId}/pre-plans/${Date.now()}-${sanitizedFileName}`;
   const binary = Buffer.from(upload.base64Data, "base64");
+  const admin = createSupabaseAdminClient();
 
-  const { error: uploadError } = await supabase.storage
+  const { error: uploadError } = await admin.storage
     .from("department-documents")
     .upload(storagePath, binary, {
       contentType: upload.mimeType,
@@ -205,7 +209,7 @@ async function createRevisionFromUpload({
 
   const effectiveDate = new Date().toISOString().slice(0, 10);
 
-  const { data: documentRecord, error: documentInsertError } = await supabase
+  const { data: documentRecord, error: documentInsertError } = await admin
     .from("documents")
     .insert({
       department_id: departmentId,
@@ -223,10 +227,11 @@ async function createRevisionFromUpload({
     .single();
 
   if (documentInsertError || !documentRecord) {
+    await admin.storage.from("department-documents").remove([storagePath]);
     throw new Error(documentInsertError?.message || "Unable to create document record.");
   }
 
-  const { data: revisionRecord, error: revisionInsertError } = await supabase
+  const { data: revisionRecord, error: revisionInsertError } = await admin
     .from("document_revisions")
     .insert({
       department_id: departmentId,
@@ -247,15 +252,20 @@ async function createRevisionFromUpload({
     .single();
 
   if (revisionInsertError || !revisionRecord) {
+    await admin.from("documents").delete().eq("id", documentRecord.id).eq("department_id", departmentId);
+    await admin.storage.from("department-documents").remove([storagePath]);
     throw new Error(revisionInsertError?.message || "Unable to create document revision.");
   }
 
-  const { error: attachRevisionError } = await supabase
+  const { error: attachRevisionError } = await admin
     .from("documents")
     .update({ current_revision_id: revisionRecord.id })
     .eq("id", documentRecord.id);
 
   if (attachRevisionError) {
+    await admin.from("document_revisions").delete().eq("id", revisionRecord.id).eq("department_id", departmentId);
+    await admin.from("documents").delete().eq("id", documentRecord.id).eq("department_id", departmentId);
+    await admin.storage.from("department-documents").remove([storagePath]);
     throw new Error(attachRevisionError.message || "Unable to attach document revision.");
   }
 
@@ -367,6 +377,55 @@ interface RouteContext {
   }>;
 }
 
+export async function POST(_request: Request, context: RouteContext) {
+  try {
+    const { id } = await context.params;
+    const supabase = await createSupabaseServerClient();
+    const currentMember = await getCurrentMember(supabase);
+
+    if (!currentMember?.departmentId) {
+      return jsonResponse({ ok: false, error: "Unauthorized" }, 401);
+    }
+
+    const hasPermission = await canManagePrePlans(
+      supabase,
+      currentMember.departmentId,
+      currentMember.role,
+    );
+
+    if (!hasPermission) {
+      return jsonResponse({ ok: false, error: "Forbidden" }, 403);
+    }
+
+    const { data, error } = await supabase
+      .from("pre_plans")
+      .update({
+        lifecycle_status: "archived",
+        archived_at: new Date().toISOString(),
+        archived_by: currentMember.id,
+        updated_by: currentMember.id,
+      })
+      .eq("id", id)
+      .eq("department_id", currentMember.departmentId)
+      .eq("lifecycle_status", "active")
+      .select("id")
+      .maybeSingle();
+
+    if (error) {
+      return jsonResponse({ ok: false, error: error.message || "Unable to archive pre-plan." }, 400);
+    }
+
+    if (!data) {
+      return jsonResponse({ ok: false, error: "Pre-plan not found or already archived." }, 404);
+    }
+
+    return jsonResponse({ ok: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to archive pre-plan.";
+    return jsonResponse({ ok: false, error: message }, 400);
+  }
+}
+
 export async function PATCH(request: Request, context: RouteContext) {
   try {
     const { id } = await context.params;
@@ -380,6 +439,16 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     if (!currentMember?.departmentId) {
       return jsonResponse({ ok: false, error: "Unauthorized" }, 401);
+    }
+
+    const hasPermission = await canManagePrePlans(
+      supabase,
+      currentMember.departmentId,
+      currentMember.role,
+    );
+
+    if (!hasPermission) {
+      return jsonResponse({ ok: false, error: "Forbidden" }, 403);
     }
 
     const businessName = normalizeRequiredString(payload.businessName);
@@ -398,8 +467,8 @@ export async function PATCH(request: Request, context: RouteContext) {
         upload: sitePlanUpload,
         title: `${businessName || "Pre-Plan"} Site Plan`,
         category: "Department Documents",
-        supabase,
         departmentId: currentMember.departmentId,
+          supabase,
         memberId: currentMember.id,
       })
       : normalizeOptionalString(payload.sitePlanDocumentRevisionId);
@@ -513,8 +582,8 @@ export async function PATCH(request: Request, context: RouteContext) {
           upload: hydrant.photoUpload,
           title: `${businessName || "Pre-Plan"} Hydrant Photo`,
           category: "Department Documents",
-          supabase,
           departmentId: currentMember.departmentId,
+            supabase,
           memberId: currentMember.id,
         })
         : hydrant.photoDocumentRevisionId;
@@ -593,8 +662,8 @@ export async function PATCH(request: Request, context: RouteContext) {
           upload: hazard.supportingDocumentUpload,
           title: `${businessName || "Pre-Plan"} Hazard Support`,
           category: "Department Documents",
-          supabase,
           departmentId: currentMember.departmentId,
+            supabase,
           memberId: currentMember.id,
         })
         : (hazard.sdsDocumentRevisionId || hazard.attachmentDocumentRevisionId);
@@ -684,8 +753,8 @@ export async function PATCH(request: Request, context: RouteContext) {
           upload: row.photoUpload,
           title: `${businessName || "Pre-Plan"} Photo`,
           category: "Department Documents",
-          supabase,
           departmentId: currentMember.departmentId,
+            supabase,
           memberId: currentMember.id,
         })
         : row.documentRevisionId;

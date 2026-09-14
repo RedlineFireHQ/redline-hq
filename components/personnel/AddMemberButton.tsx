@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MEMBER_RANK_OPTIONS, type AppPermissionOption } from "@/lib/app-permissions";
+import SpecialPermissionsManager from "@/components/personnel/SpecialPermissionsManager";
 import {
   applyCredentialRequirementStatus,
   buildMemberCredentials,
@@ -223,14 +224,6 @@ export default function AddMemberButton({
   const [accountResult, setAccountResult] = useState<{ kind: "success" | "error"; message: string } | null>(null);
 
   const orderedRoles = useMemo(() => sortRoles(departmentRoles), [departmentRoles]);
-  const sortedPermissionOptions = useMemo(
-    () =>
-      [...permissionOptions].sort(
-        (left, right) => left.sort_order - right.sort_order || left.label.localeCompare(right.label),
-      ),
-    [permissionOptions],
-  );
-
   const activeCertificationOptions = useMemo(
     () => certificationTypes.filter((item) => item.active).sort((left, right) => left.name.localeCompare(right.name)),
     [certificationTypes],
@@ -1110,46 +1103,20 @@ export default function AddMemberButton({
                   </p>
                 ) : null}
 
-                <label className="flex items-center gap-3 text-sm text-neutral-200">
-                  <input
-                    type="checkbox"
-                    checked={formState.specialPermissionsEnabled}
-                    onChange={(event) =>
-                      setFormState((current) => ({
-                        ...current,
-                        specialPermissionsEnabled: event.target.checked,
-                        permissionKeys: event.target.checked ? current.permissionKeys : [],
-                      }))
-                    }
-                  />
-                  Enable special permissions
-                </label>
-
-                {formState.specialPermissionsEnabled ? (
-                  <div className="rounded-lg border border-neutral-700 bg-neutral-950 p-3">
-                    <p className="mb-2 text-xs uppercase tracking-[0.16em] text-neutral-400">Permission Access</p>
-                    <div className="grid gap-2 md:grid-cols-2">
-                      {sortedPermissionOptions.map((permission) => (
-                        <label
-                          key={permission.key}
-                          className="flex items-start gap-2 rounded border border-neutral-800 p-2 text-sm text-neutral-200"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={formState.permissionKeys.includes(permission.key)}
-                            onChange={() => togglePermission(permission.key)}
-                          />
-                          <span>
-                            <span className="font-semibold text-white">{permission.label}</span>
-                            {permission.description ? (
-                              <span className="block text-xs text-neutral-400">{permission.description}</span>
-                            ) : null}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
+                <SpecialPermissionsManager
+                  memberName={`${formState.firstName} ${formState.lastName}`.trim() || "New Member"}
+                  permissionOptions={permissionOptions}
+                  specialPermissionsEnabled={formState.specialPermissionsEnabled}
+                  selectedPermissionKeys={formState.permissionKeys}
+                  onSpecialPermissionsEnabledChange={(enabled) =>
+                    setFormState((current) => ({
+                      ...current,
+                      specialPermissionsEnabled: enabled,
+                      permissionKeys: enabled ? current.permissionKeys : [],
+                    }))
+                  }
+                  onTogglePermission={togglePermission}
+                />
 
                 <div className="flex justify-end gap-3 pt-2">
                   <button

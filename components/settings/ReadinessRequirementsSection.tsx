@@ -234,7 +234,8 @@ export default function ReadinessRequirementsSection({
     if (
       (formState.editorType === "annual_hours" ||
         formState.editorType === "category_hours" ||
-        formState.editorType === "topic") &&
+        formState.editorType === "topic" ||
+        formState.editorType === "recurring") &&
       (!Number.isFinite(minimumHoursValue) || minimumHoursValue <= 0)
     ) {
       setSaveError("Minimum hours is required and must be greater than 0.");
@@ -285,7 +286,8 @@ export default function ReadinessRequirementsSection({
       minimum_hours:
         formState.editorType === "annual_hours" ||
         formState.editorType === "category_hours" ||
-        formState.editorType === "topic"
+        formState.editorType === "topic" ||
+        formState.editorType === "recurring"
           ? minimumHoursValue
           : null,
       category_id: formState.editorType === "category_hours" ? formState.categoryId : null,
@@ -526,7 +528,8 @@ export default function ReadinessRequirementsSection({
 
                 {(formState.editorType === "annual_hours" ||
                   formState.editorType === "category_hours" ||
-                  formState.editorType === "topic") ? (
+                  formState.editorType === "topic" ||
+                  formState.editorType === "recurring") ? (
                   <label className="block">
                     <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Minimum Hours *</span>
                     <input

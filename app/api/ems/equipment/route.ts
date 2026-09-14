@@ -1,5 +1,5 @@
 import { getCurrentMember } from "@/lib/current-member";
-import { hasDepartmentPermission } from "@/lib/member-permissions";
+import { hasInventoryPermission } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 type UploadPayload = {
@@ -104,10 +104,12 @@ function mapCreateEquipmentErrorMessage(error: { code?: string; message?: string
 async function uploadEquipmentPhoto({
   supabase,
   departmentId,
+  parentId,
   upload,
 }: {
   supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
   departmentId: string;
+  parentId: string;
   upload: UploadPayload;
 }): Promise<string> {
   if (!upload.mimeType.toLowerCase().startsWith("image/")) {
@@ -115,7 +117,7 @@ async function uploadEquipmentPhoto({
   }
 
   const sanitizedFileName = upload.fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const storagePath = `${departmentId}/ems-equipment/${Date.now()}-${sanitizedFileName}`;
+  const storagePath = `${departmentId}/inventory/ems-equipment/${parentId}/${Date.now()}-${sanitizedFileName}`;
   const binary = Buffer.from(upload.base64Data, "base64");
 
   const { error } = await supabase.storage
@@ -171,11 +173,11 @@ export async function POST(request: Request) {
       return jsonResponse({ ok: false, error: "Unauthorized" }, 401);
     }
 
-    const canManageInventory = await hasDepartmentPermission(
+    const canManageInventory = await hasInventoryPermission(
       supabase,
       currentMember.departmentId,
       currentMember.role,
-      "inventory_management",
+      "ems_equipment_management",
     );
 
     if (!canManageInventory) {
@@ -202,18 +204,12 @@ export async function POST(request: Request) {
       return jsonResponse({ ok: false, error: "Status must be Active, Inactive, or Out of Service." }, 400);
     }
 
+    const parentId = crypto.randomUUID();
     let photoPath: string | null = null;
-    if (photoUpload) {
-      photoPath = await uploadEquipmentPhoto({
-        supabase,
-        departmentId: currentMember.departmentId,
-        upload: photoUpload,
-      });
-    }
-
-    const { data, error } = await supabase
+    const { data: createdItem, error: createError } = await supabase
       .from("ems_equipment")
       .insert({
+        id: parentId,
         department_id: currentMember.departmentId,
         equipment_name: equipmentName,
         manufacturer,
@@ -224,22 +220,34 @@ export async function POST(request: Request) {
         location,
         status,
         notes,
-        photo_path: photoPath,
+        photo_path: null,
       })
       .select(
         "id, equipment_name, manufacturer, model, serial_number, equipment_number, placed_in_service_date, location, status, notes, photo_path, created_at, updated_at",
       )
       .single();
 
-    if (error || !data) {
-      if (photoPath) {
-        await supabase.storage.from("department-documents").remove([photoPath]);
-      }
-
-      return jsonResponse({ ok: false, error: mapCreateEquipmentErrorMessage(error) }, 400);
+    if (createError || !createdItem) {
+      return jsonResponse({ ok: false, error: mapCreateEquipmentErrorMessage(createError) }, 400);
     }
+    if (!photoUpload) return jsonResponse({ ok: true, item: createdItem });
 
-    return jsonResponse({ ok: true, item: data });
+    try {
+      photoPath = await uploadEquipmentPhoto({ supabase, departmentId: currentMember.departmentId, parentId, upload: photoUpload });
+      const { data, error } = await supabase
+        .from("ems_equipment")
+        .update({ photo_path: photoPath })
+        .eq("id", parentId)
+        .eq("department_id", currentMember.departmentId)
+        .select("id, equipment_name, manufacturer, model, serial_number, equipment_number, placed_in_service_date, location, status, notes, photo_path, created_at, updated_at")
+        .single();
+      if (error || !data) throw new Error(error?.message || "Unable to attach equipment photo.");
+      return jsonResponse({ ok: true, item: data });
+    } catch (error) {
+      await supabase.from("ems_equipment").delete().eq("id", parentId).eq("department_id", currentMember.departmentId);
+      if (photoPath) await supabase.storage.from("department-documents").remove([photoPath]);
+      throw error;
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to create EMS equipment.";
     return jsonResponse({ ok: false, error: message }, 400);

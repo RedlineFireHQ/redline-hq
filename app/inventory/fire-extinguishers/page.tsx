@@ -34,7 +34,7 @@ export default async function FireExtinguishersInventoryPage() {
 	const supabase = await createSupabaseServerClient();
 	const currentMember = await getCurrentMember(supabase);
 	const departmentId = currentMember?.departmentId ?? null;
-	const canManageFireExtinguishers = currentMember?.role === "administrator" || currentMember?.role === "officer";
+	const canManageFireExtinguishers = Boolean(departmentId);
 
 	let departmentName: string | null = null;
 	let initialRows: FireExtinguisherRow[] = [];

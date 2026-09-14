@@ -16,7 +16,7 @@ import {
   resolveCertificationStatusFromTrack,
 } from "@/lib/ems/authoritative-certifications";
 import { getCurrentMember } from "@/lib/current-member";
-import { canManagePersonnel } from "@/lib/member-permissions";
+import { canManagePersonnel, hasDepartmentPermission } from "@/lib/member-permissions";
 import {
   buildMemberReadinessScore,
   getCertificationStatus,
@@ -426,8 +426,16 @@ export default async function PersonnelProfilePage({
     currentMember.departmentId,
     currentMember.role,
   );
+  const isSelfProfile = id === currentMember.id;
+  const canManageOwnProfile = isSelfProfile && hasPersonnelAccess;
+  const canManageOwnCertifications = isSelfProfile && (await hasDepartmentPermission(
+    supabase,
+    currentMember.departmentId,
+    currentMember.role,
+    "certification_management",
+  ));
 
-  if (!hasPersonnelAccess) {
+  if (!isSelfProfile && !hasPersonnelAccess) {
     redirect("/");
   }
 
@@ -883,7 +891,7 @@ export default async function PersonnelProfilePage({
     completedAt: event.starts_at,
     startTimeValue: event.starts_at,
     hoursCredit: parseHours(event.hours_credit),
-    trainingMethod: event.training_type,
+    trainingMethod: event.training_type?.replaceAll(" | ", " • ") ?? null,
     instructorName: event.instructor_name,
     location: event.location,
   }));
@@ -1161,59 +1169,67 @@ export default async function PersonnelProfilePage({
             </p>
           </div>
 
-          <div className="mt-5 flex flex-wrap gap-3">
-            <EditMemberButton
-              memberId={String(member.id)}
-              initialFirstName={firstName}
-              initialLastName={lastName}
-              initialEmail={email === "-" ? "" : email}
-              initialPhone={phone === "-" ? "" : phone}
-              initialRank={rank === "Unassigned" ? "Firefighter" : rank}
-              initialActive={memberActive}
-              initialHireStartDate={hireStartDate ?? ""}
-              initialInactiveDate={inactiveDate ?? ""}
-              initialSpecialPermissionsEnabled={specialPermissionsEnabled}
-              initialPermissionKeys={memberPermissionKeys}
-              permissionOptions={permissionOptions}
-            />
+          {!isSelfProfile || canManageOwnProfile ? (
+            <>
+              <div className="mt-5 flex flex-wrap gap-3">
+                <EditMemberButton
+                  memberId={String(member.id)}
+                  initialFirstName={firstName}
+                  initialLastName={lastName}
+                  initialEmail={email === "-" ? "" : email}
+                  initialPhone={phone === "-" ? "" : phone}
+                  initialRank={rank === "Unassigned" ? "Firefighter" : rank}
+                  initialActive={memberActive}
+                  initialHireStartDate={hireStartDate ?? ""}
+                  initialInactiveDate={inactiveDate ?? ""}
+                  initialSpecialPermissionsEnabled={specialPermissionsEnabled}
+                  initialPermissionKeys={memberPermissionKeys}
+                  permissionOptions={permissionOptions}
+                />
 
-            <CreateAuthAccountButton
-              memberId={String(member.id)}
-              memberEmail={email === "-" ? "" : email}
-              hasAuthAccount={hasAuthAccount}
-            />
-          </div>
+                <CreateAuthAccountButton
+                  memberId={String(member.id)}
+                  memberEmail={email === "-" ? "" : email}
+                  hasAuthAccount={hasAuthAccount}
+                />
+              </div>
 
-          <DepartmentRoleSelector
-            departmentId={currentMember.departmentId}
-            memberId={String(member.id)}
-            currentMemberId={currentMember.id}
-            selectedRoleId={typeof member.department_role_id === "string" ? member.department_role_id : null}
-            departmentRoles={departmentRoles}
-          />
+              <DepartmentRoleSelector
+                departmentId={currentMember.departmentId}
+                memberId={String(member.id)}
+                currentMemberId={currentMember.id}
+                selectedRoleId={typeof member.department_role_id === "string" ? member.department_role_id : null}
+                departmentRoles={departmentRoles}
+              />
+            </>
+          ) : null}
         </div>
       </div>
 
-      <div className="mt-6">
-        <PersonnelCertificationsSection
-          editorMemberId={currentMember.id}
-          departmentId={currentMember.departmentId}
-          memberId={String(member.id)}
-          warningDays={department.settings.certificationWarningDays}
-          certificationTypes={certificationTypes}
-          memberCertifications={canonicalMemberCertificationRows}
-          departmentDocuments={departmentDocuments}
-        />
-      </div>
+      {!isSelfProfile || canManageOwnCertifications ? (
+        <>
+          <div className="mt-6">
+            <PersonnelCertificationsSection
+              editorMemberId={currentMember.id}
+              departmentId={currentMember.departmentId}
+              memberId={String(member.id)}
+              warningDays={department.settings.certificationWarningDays}
+              certificationTypes={certificationTypes}
+              memberCertifications={canonicalMemberCertificationRows}
+              departmentDocuments={departmentDocuments}
+            />
+          </div>
 
-      <div className="mt-6">
-        <PersonnelEmsTracksSection
-          departmentId={currentMember.departmentId}
-          memberId={String(member.id)}
-          editorMemberId={currentMember.id}
-          trackRows={emsTrackProfiles}
-        />
-      </div>
+          <div className="mt-6">
+            <PersonnelEmsTracksSection
+              departmentId={currentMember.departmentId}
+              memberId={String(member.id)}
+              editorMemberId={currentMember.id}
+              trackRows={emsTrackProfiles}
+            />
+          </div>
+        </>
+      ) : null}
 
       <div className="mt-6 rounded-xl border border-neutral-800 bg-neutral-900 p-6">
         <div className="flex flex-col gap-3 border-b border-neutral-800 pb-5 md:flex-row md:items-end md:justify-between">

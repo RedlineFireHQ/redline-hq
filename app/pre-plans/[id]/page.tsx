@@ -14,7 +14,9 @@ import type { ReactNode } from "react";
 import PageLayout from "@/components/layout/PageLayout";
 import QuickViewBuildingIdentity from "@/components/pre-plans/QuickViewBuildingIdentity";
 import QuickViewFindBar from "@/components/pre-plans/QuickViewFindBar";
+import ArchivePrePlanControls from "@/components/pre-plans/ArchivePrePlanControls";
 import { getCurrentMember } from "@/lib/current-member";
+import { canManagePrePlans } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 type PrePlanRecord = {
@@ -290,6 +292,11 @@ export default async function PrePlanDetailPage({ params }: PrePlanDetailPagePro
   }
 
   const record = data as PrePlanRecord;
+  const canManagePrePlansForDepartment = await canManagePrePlans(
+    supabase,
+    departmentId,
+    currentMember?.role,
+  );
 
   const [hydrantResult, hazardResult, documentLinkResult] = await Promise.all([
     supabase
@@ -666,6 +673,11 @@ export default async function PrePlanDetailPage({ params }: PrePlanDetailPagePro
               </p>
             </div>
 
+              <ArchivePrePlanControls
+                prePlanId={record.id}
+                prePlanName={record.business_name}
+                canManage={canManagePrePlansForDepartment}
+              />
             <QuickViewFindBar />
           </div>
         </section>
