@@ -570,38 +570,7 @@ export default async function DailyCheckPage({
   const showConfirmationDialog = confirm === "1" && canCompleteInspection;
   const showDeficiencyConfirmDialog = deficiencyConfirm === "1" && selectedPendingResult !== null;
 
-  console.log("[daily-check] completion gate values", {
-    submit,
-    confirm,
-    result,
-    selectedResult,
-    requiresDeficiency,
-    checklistRequired,
-    checklistSubmissionAllowed,
-    checklistRequiredCount: checklistProgress.requiredCount,
-    checklistCompletedRequiredCount: checklistProgress.completedRequired,
-    deficiencyCount,
-    hasRequiredDeficiency,
-    inspectionAlreadyCompleted,
-    canCompleteInspection,
-    id,
-    mappedStatus,
-    activeCheckSessionId,
-    checkSessionErrorMessage,
-  });
-
   if (submit === "1" && canCompleteInspection && selectedResult && mappedStatus && activeCheckSessionId) {
-    console.log("ENTERED COMPLETION BRANCH");
-    console.log("========================================\nCOMPLETE INSPECTION ACTION STARTED\nApparatus ID:", id, "\n========================================");
-    console.log("[daily-check] mappedStatus before save_apparatus_inspection", {
-      apparatusId: id,
-      selectedResult,
-      mappedStatus,
-      activeCheckSessionId,
-    });
-
-    console.log("CALLING complete_apparatus_check");
-
     const { error: completionErrorResult } = await supabase.rpc("complete_apparatus_check", {
       p_session_id: activeCheckSessionId,
       p_final_status: mappedStatus,
@@ -609,8 +578,6 @@ export default async function DailyCheckPage({
       p_mileage: parsedMileage,
       p_engine_hours: parsedEngineHours,
     });
-
-    console.log("completionErrorResult", completionErrorResult);
 
     if (completionErrorResult) {
       const encodedError = encodeURIComponent(

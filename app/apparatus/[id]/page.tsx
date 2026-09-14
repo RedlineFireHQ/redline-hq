@@ -2,7 +2,6 @@ import PageLayout from "@/components/layout/PageLayout";
 import PerformMaintenanceButton from "@/components/maintenance/PerformMaintenanceButton";
 import ApparatusHistoryCards from "@/components/apparatus/ApparatusHistoryCards";
 import AssignedInventoryPanel from "@/components/apparatus/AssignedInventoryPanel";
-import { getCurrentMember } from "@/lib/current-member";
 import { getApparatusImagePath } from "@/lib/apparatus-images";
 import { getApparatusById } from "@/lib/database";
 import { calculateApparatusReadinessForApparatusId } from "@/lib/readiness/apparatus-readiness-data";
@@ -66,59 +65,8 @@ export default async function ApparatusDetailPage({
   }
 
   const apparatusImageUrl = getApparatusImagePath(truck.name);
-  const currentMember = await getCurrentMember(supabase);
   const readinessEvaluation = await calculateApparatusReadinessForApparatusId(truck.id);
   const readiness = readinessEvaluation?.readiness ?? null;
-
-  console.log("[apparatus-detail] deficiency history diagnostics", {
-    routeApparatusId: id,
-    databaseApparatusId: truck.id,
-    currentMemberId: currentMember?.id ?? null,
-    currentMemberName: currentMember?.name ?? null,
-    currentMemberRole: currentMember?.role ?? null,
-  });
-
-  const { data: deficiencyMinimalData, error: deficiencyMinimalError } = await supabase
-    .from("deficiencies")
-    .select("id, apparatus_id, created_at")
-    .eq("apparatus_id", truck.id)
-    .order("created_at", { ascending: false })
-    .limit(10);
-
-  console.log("[apparatus-detail] deficiency minimal query result", {
-    error: deficiencyMinimalError ?? null,
-    length: deficiencyMinimalData?.length ?? 0,
-    firstRecord: deficiencyMinimalData?.[0] ?? null,
-  });
-
-  const { data: deficiencyDiagnosticsData, error: deficiencyDiagnosticsError } = await supabase
-    .from("deficiencies")
-    .select("apparatus_id, department_id, status, priority, description, created_at")
-    .eq("apparatus_id", truck.id)
-    .order("created_at", { ascending: false })
-    .limit(1);
-
-  console.log("[apparatus-detail] deficiency diagnostics query", {
-    table: "deficiencies",
-    filters: ["apparatus_id = truck.id", "order created_at desc", "limit 1"],
-    currentApparatusId: truck.id,
-    returnedCount: deficiencyDiagnosticsData?.length ?? 0,
-    firstReturnedRecord: deficiencyDiagnosticsData?.[0] ?? null,
-    error: deficiencyDiagnosticsError ?? null,
-  });
-
-  const { data: newestDeficiencyData, error: newestDeficiencyError } = await supabase
-    .from("deficiencies")
-    .select("apparatus_id, department_id, status, priority, description, created_at")
-    .order("created_at", { ascending: false })
-    .limit(1);
-
-  console.log("[apparatus-detail] newest deficiency comparison", {
-    newestDeficiency: newestDeficiencyData?.[0] ?? null,
-    error: newestDeficiencyError ?? null,
-    matchesCurrentApparatus:
-      (newestDeficiencyData?.[0] as Record<string, unknown> | undefined)?.apparatus_id === truck.id,
-  });
 
   const { data: inspectionHistoryData } = await supabase
     .from("apparatus_inspections")
@@ -221,7 +169,7 @@ export default async function ApparatusDetailPage({
     );
   }
 
-  const { data: deficiencyHistoryData, error: deficiencyHistoryError } = await supabase
+  const { data: deficiencyHistoryData } = await supabase
     .from("deficiencies")
     .select(
       "id, apparatus_id, department_id, description, reported_at, created_at, reported_by, priority, status"
@@ -229,13 +177,6 @@ export default async function ApparatusDetailPage({
     .eq("apparatus_id", truck.id)
     .order("created_at", { ascending: false })
     .limit(10);
-
-  console.log("[apparatus-detail] deficiency history query result", {
-    error: deficiencyHistoryError ?? null,
-    data: deficiencyHistoryData ?? null,
-    length: deficiencyHistoryData?.length ?? 0,
-    apparatusIdFilter: truck.id,
-  });
 
   const deficiencyHistory = (deficiencyHistoryData ?? []) as DeficiencyHistoryRow[];
   const deficiencyReporterMemberIds = Array.from(
@@ -298,15 +239,6 @@ export default async function ApparatusDetailPage({
       result: row.result,
       notes: row.notes,
     };
-  });
-
-  console.log("[apparatus-detail] deficiency history render source", {
-    usesVariable: "deficiencyHistory",
-    isArray: Array.isArray(deficiencyHistory),
-    length: deficiencyHistory.length,
-    willRenderEmptyState: deficiencyHistory.length === 0,
-    willRenderTable: deficiencyHistory.length > 0,
-    firstRecord: deficiencyHistory[0] ?? null,
   });
 
   const deficiencyPriorityIds = Array.from(

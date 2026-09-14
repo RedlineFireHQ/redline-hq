@@ -107,7 +107,6 @@ export default async function FireHoseInventoryPage() {
 		)
 		: false;
 	const canDeleteHose = currentMember?.role === "administrator";
-	console.log("[fire-hose][trace] departmentId", departmentId);
 	let departmentName: string | null = null;
 
 	let rows: Array<Record<string, string>> = [];
@@ -133,21 +132,6 @@ export default async function FireHoseInventoryPage() {
 			)
 			.eq("department_id", departmentId)
 			.order("created_at", { ascending: false });
-
-		console.log("[fire-hose][trace] supabase response", { data, error });
-		console.log("[fire-hose][trace] data.length", Array.isArray(data) ? data.length : null);
-		console.log(
-			"[fire-hose][trace] raw next_test_date values",
-			JSON.stringify(
-				Array.isArray(data)
-					? data.map((row) => ({
-						id: row.id,
-						inventory_number: row.inventory_number,
-						next_test_date: row.next_test_date,
-					}))
-					: null,
-			),
-		);
 
 		if (error) {
 			console.error("[fire-hose] initial load failed", {
@@ -243,27 +227,6 @@ export default async function FireHoseInventoryPage() {
 		const activeCount = activeRows.length;
 		readinessScore = activeCount > 0 ? Math.round((readyCount / activeCount) * 100) : 100;
 
-		for (const row of rows) {
-			console.log("[fire-hose][deficiency-state]", {
-				inventoryNumber: row.inventoryNumber,
-				fireHoseId: row.id,
-				linkedDeficiencyCount: linkedDeficiencyCountByHoseId[row.id] ?? 0,
-				activeDeficiencyCount: activeDeficiencyCountByHoseId[row.id] ?? 0,
-				hasActiveDeficiency: row.hasActiveDeficiency === "true",
-			});
-		}
-
-		console.log("[fire-hose][trace] mapped rows", rows);
-		console.log(
-			"[fire-hose][trace] mapped nextTestDate values",
-			JSON.stringify(
-				rows.map((row) => ({
-					id: row.id,
-					inventoryNumber: row.inventoryNumber,
-					nextTestDate: row.nextTestDate,
-				})),
-			),
-		);
 	}
 
 	const readinessItems = [

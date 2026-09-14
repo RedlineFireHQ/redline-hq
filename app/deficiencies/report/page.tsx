@@ -1113,15 +1113,6 @@ function ReportDeficiencyPageContent() {
       misc_fire_equipment_id: isMiscFireEquipmentDeficiency && inventoryItemId ? inventoryItemId : null,
     };
 
-    console.log("[fire-hose][deficiency-create] payload", JSON.stringify(payload, null, 2));
-    console.log("[fire-hose][deficiency-create] context", {
-      inventoryCategory,
-      inventoryItemId,
-      isFireHoseDeficiency,
-      currentUrl: typeof window !== "undefined" ? window.location.href : null,
-      searchParams: searchParams.toString(),
-    });
-
     const insertResult = await supabase.from("deficiencies").insert(payload).select("id").single();
 
     if (insertResult.error) {

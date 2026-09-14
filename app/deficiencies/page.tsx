@@ -550,9 +550,6 @@ async function fetchDeficiencies() {
 		)
 		.order("reported_at", { ascending: false });
 
-	console.log("fetchDeficiencies data:", result.data);
-	console.log("fetchDeficiencies error:", result.error);
-
 	if (result.error) {
 		console.error("fetchDeficiencies error message:", result.error.message);
 		console.error("fetchDeficiencies error details:", result.error.details);
@@ -730,12 +727,6 @@ function DeficienciesPageContent() {
 		async function loadDeficiencyStatuses() {
 			const { data, error } = await fetchDeficiencyStatuses();
 
-			console.log("RAW STATUS DATA:", JSON.stringify(data, null, 2));
-			console.log("STATUS ERROR:", JSON.stringify(error, null, 2));
-
-			console.log("Raw data from fetchDeficiencyStatuses:", data);
-			console.table(data ?? []);
-
 			if (!isMounted) {
 				return;
 			}
@@ -757,30 +748,11 @@ function DeficienciesPageContent() {
 				return { id, name };
 			});
 
-			console.log("Mapped statuses:");
-			console.table(statuses);
-
 			const { data: directQueryOpenStatus, error: openStatusError } = await supabase
 				.from("deficiency_statuses")
 				.select("id, name")
 				.eq("name", "Open")
 				.maybeSingle();
-
-			console.log(
-				"DIRECT OPEN QUERY:",
-				JSON.stringify(directQueryOpenStatus, null, 2)
-			);
-
-			console.log(
-				"DIRECT OPEN ERROR:",
-				JSON.stringify(openStatusError, null, 2)
-			);
-
-			console.log("Direct query Open:");
-			console.log(directQueryOpenStatus);
-
-			console.log("Direct query error:");
-			console.log(openStatusError);
 
 			if (openStatusError) {
 				console.error("Failed querying Open status directly:", openStatusError);
@@ -791,18 +763,10 @@ function DeficienciesPageContent() {
 				(status) => status.name.trim().toLowerCase() === "open"
 			);
 
-			console.log(
-				"Normalized lookup:",
-				JSON.stringify(normalizedLookupOpenStatus, null, 2)
-			);
-
 			const resolvedOpenStatusId =
 				typeof directQueryOpenStatus?.id === "string" && directQueryOpenStatus.id
 					? directQueryOpenStatus.id
 					: normalizedLookupOpenStatus?.id;
-
-			console.log("Resolved Open Status ID:");
-			console.log(resolvedOpenStatusId);
 
 			if (!resolvedOpenStatusId) {
 				console.error('Unable to find "Open" record in deficiency_statuses.');
@@ -824,9 +788,6 @@ function DeficienciesPageContent() {
 		setErrorMessage(null);
 
 		const { data, error } = await fetchDeficiencies();
-
-		console.log("fetchDeficiencies data:", data);
-		console.log("fetchDeficiencies error:", error);
 
 		if (error) {
 			console.error("Code:", error.code);
@@ -890,9 +851,6 @@ function DeficienciesPageContent() {
 
 			const { data, error } = await fetchDeficiencies();
 
-			console.log("fetchDeficiencies data:", data);
-			console.log("fetchDeficiencies error:", error);
-
 			if (error) {
 				console.error("Code:", error.code);
 				console.error("Message:", error.message);
@@ -935,13 +893,6 @@ function DeficienciesPageContent() {
 
 			const { categoriesResult, prioritiesResult, activeApparatusOptions } =
 				await fetchModalOptions();
-
-			console.log("Categories:", categoriesResult);
-			console.log("Priorities:", prioritiesResult);
-			console.log("Apparatus:", activeApparatusOptions);
-			console.log(categoriesResult.data);
-			console.log(prioritiesResult.data);
-			console.log(activeApparatusOptions);
 
 			if (!isMounted) {
 				return;
@@ -1001,30 +952,6 @@ function DeficienciesPageContent() {
 			return;
 		}
 
-		const formStateWithOptionalPhoto = formState as ReportFormState & {
-			photo?: File | null | string;
-		};
-
-		console.log("Validation values:", {
-			categoryId: formState.categoryId,
-			priorityId: formState.priorityId,
-			apparatusId: formState.apparatusId,
-			description: formState.description,
-			location: formState.location,
-			openStatusId,
-			photo: formStateWithOptionalPhoto.photo,
-		});
-
-		console.log("Validation booleans:", {
-			missingCategory: !formState.categoryId,
-			missingPriority: !formState.priorityId,
-			missingApparatus: !formState.apparatusId,
-			missingDescription: !formState.description.trim(),
-			missingLocation: !formState.location.trim(),
-			missingOpenStatus: !openStatusId,
-			missingPhoto: !formStateWithOptionalPhoto.photo,
-		});
-
 		if (
 			!formState.categoryId ||
 			!formState.priorityId ||
@@ -1041,18 +968,11 @@ function DeficienciesPageContent() {
 
 		const deficiencyId = crypto.randomUUID();
 		let uploadedPhotoPath: string | null = null;
-		let didPhotoUploadSucceed = false;
 
 		if (formState.photo) {
 			const originalName = formState.photo.name || "photo.jpg";
 			const sanitizedName = originalName.replace(/[^a-zA-Z0-9.-]/g, "_");
 			const photoPath = `${deficiencyId}/${Date.now()}-${sanitizedName}`;
-
-			const { data: sessionData } = await supabase.auth.getSession();
-			console.log("SESSION:", sessionData);
-
-			const { data: userData } = await supabase.auth.getUser();
-			console.log("USER:", userData);
 
 			const { error: uploadError } = await supabase.storage
 				.from("deficiency-photos")
@@ -1061,20 +981,10 @@ function DeficienciesPageContent() {
 					upsert: false,
 				});
 
-			console.log("uploadError:", uploadError);
-			console.log("uploadError?.message:", uploadError?.message);
-			console.log("uploadError?.statusCode:", uploadError?.statusCode);
-			console.log("uploadError?.error:", (uploadError as any)?.error);
-			console.log("photoPath:", photoPath);
-			console.log("formState.photo?.name:", formState.photo?.name);
-			console.log("formState.photo?.size:", formState.photo?.size);
-			console.log("formState.photo?.type:", formState.photo?.type);
-
 			if (uploadError) {
 				console.error("Deficiency photo upload error:", uploadError);
 			} else {
 				uploadedPhotoPath = photoPath;
-				didPhotoUploadSucceed = true;
 			}
 		}
 
@@ -1093,12 +1003,6 @@ function DeficienciesPageContent() {
 			reported_by: reporter.memberId,
 		};
 
-		console.log("Deficiency insert payload:", payload);
-		console.log("INSERT PRE-CALL payload object:", payload);
-		console.log("INSERT PRE-CALL payload id:", payload.id);
-		console.log("INSERT PRE-CALL payload photo_path:", payload.photo_path);
-		console.log("INSERT PRE-CALL upload success:", didPhotoUploadSucceed);
-
 		let insertResult;
 
 		try {
@@ -1111,12 +1015,6 @@ function DeficienciesPageContent() {
 			console.error("INSERT threw exception (full):", insertException);
 			throw insertException;
 		}
-
-		console.log("INSERT POST-CALL Supabase result:", insertResult);
-		console.log("INSERT POST-CALL data:", insertResult.data);
-		console.log("INSERT POST-CALL error:", insertResult.error);
-		console.log("INSERT POST-CALL status:", insertResult.status);
-		console.log("INSERT POST-CALL statusText:", insertResult.statusText);
 
 		const { error } = insertResult;
 
