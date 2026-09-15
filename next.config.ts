@@ -5,6 +5,11 @@ const nextConfig: NextConfig = {
     "http://127.0.0.1:3000",
     "http://localhost:3000",
   ],
+  experimental: {
+    instantInsights: {
+      validationLevel: "warning",
+    },
+  },
   serverExternalPackages: ["pdf-parse"],
 };
 
