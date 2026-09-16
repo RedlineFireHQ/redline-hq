@@ -2,6 +2,9 @@ import { redirect } from "next/navigation";
 import PageLayout from "@/components/layout/PageLayout";
 import { getDepartmentReadinessDataForCurrentMember } from "@/lib/readiness/department-readiness";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 function formatPercent(value: number | null) {
   if (value === null) {
     return "--";
@@ -61,6 +64,7 @@ export default async function DepartmentReadinessPage() {
           <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
             {result.participationLimitation}
           </div>
+
         </section>
 
         <section className="rounded-2xl border border-white/10 bg-[#0b0b0b] p-6 shadow-[0_20px_60px_rgba(0,0,0,.45)]">

@@ -24,6 +24,11 @@ import {
   type ReadinessFactor,
   type RequirementInput,
 } from "@/lib/readiness/member-readiness";
+import {
+  buildAuthoritativeCoachActions,
+  computeAuthoritativeMemberReadiness,
+  getAuthoritativeCoachSummary,
+} from "@/lib/readiness/authoritative-member-readiness";
 import { buildScoredCertificationStatuses } from "@/lib/readiness/scored-certifications";
 import { calculateComplianceBucketHours, getTrainingComplianceBucketByCategoryId } from "@/lib/training/compliance-buckets";
 import {
@@ -35,6 +40,9 @@ import {
   type RoleRequiredQualificationRow,
 } from "@/lib/role-requirements";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 type DepartmentRoleRow = {
   id: string;
@@ -910,22 +918,6 @@ export default async function MyReadinessPage() {
     memberCertifications,
     memberQualifications,
   });
-  const qualificationReadinessAdapter = buildQualificationReadinessAdapter({
-    memberDepartmentRoleId,
-    certificationTypes: certificationCatalog,
-    qualificationTypes,
-    roleRequiredCertifications,
-    roleRequiredQualifications,
-    memberCertifications,
-    memberQualifications,
-  });
-  const qualificationReadiness: QualificationReadinessInput = {
-    hasAssignedRole: memberDepartmentRoleId !== null,
-    roleName: selectedDepartmentRole?.name ?? null,
-    requiredQualifications: qualificationReadinessAdapter.requiredQualifications,
-    completedQualifications: qualificationReadinessAdapter.completedQualifications,
-    missingQualifications: qualificationReadinessAdapter.missingQualifications,
-  };
   const assignmentById = new Map(assignments.map((row) => [row.id, row]));
   const approvedHomeworkMembers = assignmentMembers.filter((row) => row.completion_status === "approved");
   const requiredOutstandingHomework = assignmentMembers
@@ -958,30 +950,25 @@ export default async function MyReadinessPage() {
 
   const currentCalendarYear = new Date().getUTCFullYear();
 
-  const complianceBucketHours = calculateComplianceBucketHours(
-    [
-      ...attendedEvents.map((event) => ({
-        categoryId: event.category_id,
-        hours: event.hours_credit,
-      })),
-      ...approvedOutside.map((submission) => ({
-        categoryId: submission.category_id,
-        hours: submission.hours,
-      })),
-      ...approvedHomeworkMembers.map((approvedHomework) => {
-        const assignment = assignmentById.get(approvedHomework.training_assignment_id);
-        const assignmentHours = assignment ? parseHours(assignment.hours_credit) : 0;
-        const rowHours = parseHours(approvedHomework.hours_earned);
-        return {
-          categoryId: assignment?.category_id ?? null,
-          hours: rowHours > 0 ? rowHours : assignmentHours,
-        };
-      }),
-    ],
-    categoryNameById,
-  );
-
-  const fireAnnualTrainingHours = complianceBucketHours.fireAnnualHours;
+  const fireAnnualComplianceRows = [
+    ...attendedEvents.map((event) => ({
+      categoryId: event.category_id,
+      hours: event.hours_credit,
+    })),
+    ...approvedOutside.map((submission) => ({
+      categoryId: submission.category_id,
+      hours: submission.hours,
+    })),
+    ...approvedHomeworkMembers.map((approvedHomework) => {
+      const assignment = assignmentById.get(approvedHomework.training_assignment_id);
+      const assignmentHours = assignment ? parseHours(assignment.hours_credit) : 0;
+      const rowHours = parseHours(approvedHomework.hours_earned);
+      return {
+        categoryId: assignment?.category_id ?? null,
+        hours: rowHours > 0 ? rowHours : assignmentHours,
+      };
+    }),
+  ];
 
   const categoryHoursMap = new Map<string, { categoryId: string | null; name: string; hours: number }>();
 
@@ -1093,27 +1080,75 @@ export default async function MyReadinessPage() {
   const fireTrainingBreakdown = Array.from(fireTrainingByCategoryMap.values()).sort((a, b) => b.hours - a.hours);
   const emsTrainingBreakdown = Array.from(emsTrainingByCategoryMap.values()).sort((a, b) => b.hours - a.hours);
 
-  const authoritativeEmsCertifications = resolveAuthoritativeEmsCertificationsForMember({
-    memberCertifications: memberCertifications.map((row) => ({
-      member_id: currentMember.id,
-      certification_id: row.certification_id,
-      certificate_number: row.certificate_number,
-      expires_at: row.expires_at,
-      issued_at: row.issued_at,
-    })),
-    certificationTypeById,
-  });
+  const assignedDeficiencyIds = assignedDeficiencies.map((row) => row.id).filter((id) => typeof id === "string" && id.length > 0);
+  let assignmentHistoryRows: DeficiencyAssignmentHistoryRow[] = [];
 
-  const activeIowaProfile = applyAuthoritativeCertificationToTrackProfile({
-    track: "iowa",
-    profile: findCurrentTrackProfile(emsTrackProfiles, "iowa"),
-    authoritativeCertification: authoritativeEmsCertifications.iowa,
+  if (assignedDeficiencyIds.length > 0) {
+    const { data: assignmentRows, error: assignmentRowsError } = await supabase
+      .from("deficiency_history")
+      .select("deficiency_id, member_id, event_type, created_at")
+      .in("deficiency_id", assignedDeficiencyIds)
+      .eq("member_id", currentMember.id)
+      .eq("event_type", "Assigned")
+      .order("created_at", { ascending: false });
+
+    if (assignmentRowsError) {
+      throw new Error(assignmentRowsError.message || "Unable to load deficiency assignment history.");
+    }
+
+    assignmentHistoryRows = (assignmentRows ?? []) as DeficiencyAssignmentHistoryRow[];
+  }
+
+  const personalAssignmentStartedAtByDeficiencyId = new Map<string, string>();
+  for (const row of assignmentHistoryRows) {
+    if (!row.deficiency_id || !row.created_at) {
+      continue;
+    }
+
+    if (!personalAssignmentStartedAtByDeficiencyId.has(row.deficiency_id)) {
+      personalAssignmentStartedAtByDeficiencyId.set(row.deficiency_id, row.created_at);
+    }
+  }
+
+  const authoritativeReadiness = computeAuthoritativeMemberReadiness({
+    currentMemberId: currentMember.id,
+    memberStartDate: memberRequirementStartDate,
+    memberDepartmentRoleId,
+    roleName: selectedDepartmentRole?.name ?? null,
+    canonicalMemberCertifications: memberCertifications,
+    certificationNameById,
+    certificationTypeById,
+    emsTrackProfiles,
+    roleRequiredCertifications,
+    certificationCatalog,
+    qualificationCatalog: qualificationTypes,
+    roleRequiredQualifications,
+    memberQualifications,
+    requirements,
+    categoryNameById,
+    fireAnnualComplianceRows,
+    categoryHours: Array.from(categoryHoursMap.values()).map((row) => ({ categoryId: row.categoryId, categoryName: row.name, hours: row.hours })),
+    trainingAssignments: assignments,
+    assignmentMembers,
+    deficiencyItems: assignedDeficiencies.map((row) => {
+      const status = normalizeDeficiencyStatus(row.status_info);
+      const priority = normalizeDeficiencyPriority(row.priority_info);
+
+      return {
+        id: row.id,
+        deficiencyNumber: row.deficiency_number,
+        description: row.description,
+        priorityName: priority.name,
+        assignedToMemberId: row.assigned_to,
+        statusName: status.name,
+        statusActive: status.active,
+        createdAt: row.created_at,
+        reportedAt: row.reported_at,
+        personalAssignedAt: personalAssignmentStartedAtByDeficiencyId.get(row.id) ?? null,
+      };
+    }),
   });
-  const activeNremtProfile = applyAuthoritativeCertificationToTrackProfile({
-    track: "nremt",
-    profile: findCurrentTrackProfile(emsTrackProfiles, "nremt"),
-    authoritativeCertification: authoritativeEmsCertifications.nremt,
-  });
+  const { activeIowaProfile, activeNremtProfile, fireAnnualTrainingHours } = authoritativeReadiness;
 
   const certificationCards = memberCertifications.map((row) => {
     const name = certificationNameById.get(row.certification_id) ?? "Unknown Certification";
@@ -1148,54 +1183,8 @@ export default async function MyReadinessPage() {
     };
   });
 
-  const scoredCertificationStatuses = buildScoredCertificationStatuses({
-    memberDepartmentRoleId,
-    certificationStatuses: certificationCards.map((row) => ({
-      certificationId: row.certificationId,
-      certificationName: row.name,
-      status: row.status,
-      authority: certificationTypeById.get(row.certificationId)?.authority ?? null,
-      expiresAt: row.expiresAt,
-    })),
-    roleRequiredCertifications,
-    includeIowaAuthority: activeIowaProfile !== null,
-    includeNremtAuthority: activeNremtProfile?.maintain_track === true,
-    includeNonExpiringRoleRequirements: true,
-    certificationNameById,
-  });
-
   const generalCertificationCards = certificationCards.filter((row) => !row.isEmsCertification);
   const emsCertificationCards = certificationCards.filter((row) => row.isEmsCertification);
-
-  const assignedDeficiencyIds = assignedDeficiencies.map((row) => row.id).filter((id) => typeof id === "string" && id.length > 0);
-  let assignmentHistoryRows: DeficiencyAssignmentHistoryRow[] = [];
-
-  if (assignedDeficiencyIds.length > 0) {
-    const { data: assignmentRows, error: assignmentRowsError } = await supabase
-      .from("deficiency_history")
-      .select("deficiency_id, member_id, event_type, created_at")
-      .in("deficiency_id", assignedDeficiencyIds)
-      .eq("member_id", currentMember.id)
-      .eq("event_type", "Assigned")
-      .order("created_at", { ascending: false });
-
-    if (assignmentRowsError) {
-      throw new Error(assignmentRowsError.message || "Unable to load deficiency assignment history.");
-    }
-
-    assignmentHistoryRows = (assignmentRows ?? []) as DeficiencyAssignmentHistoryRow[];
-  }
-
-  const personalAssignmentStartedAtByDeficiencyId = new Map<string, string>();
-  for (const row of assignmentHistoryRows) {
-    if (!row.deficiency_id || !row.created_at) {
-      continue;
-    }
-
-    if (!personalAssignmentStartedAtByDeficiencyId.has(row.deficiency_id)) {
-      personalAssignmentStartedAtByDeficiencyId.set(row.deficiency_id, row.created_at);
-    }
-  }
 
   const currentGeneralCertifications = generalCertificationCards.filter((row) => row.status === "current").length;
   const expiringSoonGeneralCertifications = generalCertificationCards.filter((row) => row.status === "expiring_soon").length;
@@ -1272,62 +1261,19 @@ export default async function MyReadinessPage() {
     // Persistence should not block readiness rendering.
   }
 
-  const readinessScore = buildMemberReadinessScore({
-    requirementRows: requirements,
-    departmentHours: fireAnnualTrainingHours,
-    categoryHours: categoryBreakdown.map((row) => ({ categoryId: row.categoryId, categoryName: row.name, hours: row.hours })),
-    categoryNameById,
-    trainingAssignments: assignments,
-    assignmentMembers,
-    certificationStatuses: certificationCards.map((row) => ({
-      certificationId: row.certificationId,
-      certificationName: row.name,
-      status: row.status,
-    })),
-    scoredCertificationStatuses,
-    qualificationReadiness,
-    currentMemberId: currentMember.id,
-    memberStartDate: memberRequirementStartDate,
-    deficiencyItems: assignedDeficiencies.map((row) => {
-      const status = normalizeDeficiencyStatus(row.status_info);
-      const priority = normalizeDeficiencyPriority(row.priority_info);
-
-      return {
-        id: row.id,
-        deficiencyNumber: row.deficiency_number,
-        description: row.description,
-        priorityName: priority.name,
-        assignedToMemberId: row.assigned_to,
-        statusName: status.name,
-        statusActive: status.active,
-        createdAt: row.created_at,
-        reportedAt: row.reported_at,
-        personalAssignedAt: personalAssignmentStartedAtByDeficiencyId.get(row.id) ?? null,
-      };
-    }),
-  });
+  const readinessScore = authoritativeReadiness.readiness;
 
   const readinessPercentDisplay = readinessScore.scorePercent;
   const remainingPercentDisplay = readinessScore.remainingPercent;
-  const actionableCoachFactors = readinessScore.factors
-    .filter((factor) => !factor.completed)
-    .filter((factor) => isActionableCoachMessage(factor.actionNeeded))
-    .sort((left, right) => {
-      const urgencyDelta = coachUrgencyScore(right) - coachUrgencyScore(left);
-      if (urgencyDelta !== 0) {
-        return urgencyDelta;
-      }
-
-      const completionDelta = left.completionPercent - right.completionPercent;
-      if (completionDelta !== 0) {
-        return completionDelta;
-      }
-
-      return left.title.localeCompare(right.title);
-    });
-  const actionableCoachExplanations = actionableCoachFactors.map((factor) => factor.actionNeeded);
-  const primaryCoachSentence = buildPrimaryCoachSentence(readinessScore, actionableCoachExplanations);
-  const hasAdditionalCoachItems = actionableCoachFactors.length > 2;
+  const formattedCoachActions = buildAuthoritativeCoachActions({
+    readinessState: readinessScore,
+    isSelf: true,
+  });
+  const coachSummary = getAuthoritativeCoachSummary({
+    readinessState: readinessScore,
+    isSelf: true,
+  });
+  const hasAdditionalCoachItems = formattedCoachActions.length > 2;
 
    const historyItems: HistoryItem[] = [];
 
@@ -1467,24 +1413,34 @@ export default async function MyReadinessPage() {
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_82%_24%,rgba(239,43,45,.09),transparent_52%)]" />
               <div className="pointer-events-none absolute inset-y-4 left-0 w-px bg-gradient-to-b from-transparent via-red-500/45 to-transparent" />
               <div className="relative">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-red-400">REDLINE READINESS COACH™</p>
-              <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-red-300">NEXT BEST ACTION</p>
-              <p className="mt-2 text-base font-semibold leading-6 text-white md:text-lg">
-                {primaryCoachSentence}
-              </p>
-              {readinessScore.configured && actionableCoachFactors.length > 0 ? (
-                <div className={`mt-3 space-y-2 ${hasAdditionalCoachItems ? "max-h-[10.75rem] overflow-y-auto pr-1" : ""}`}>
-                  {actionableCoachFactors.map((factor) => (
-                    <div key={factor.id} className="min-h-[5rem] rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-red-200">{factor.title}</p>
-                        <span className="text-xs text-neutral-400">{factor.completionPercent}%</span>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-red-400">REDLINE READINESS COACH™</p>
+                <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-red-300">{coachSummary.label}</p>
+                <p className="mt-2 text-base font-semibold leading-6 text-white md:text-lg">
+                  {coachSummary.sentence}
+                </p>
+                {readinessScore.configured && formattedCoachActions.length > 0 ? (
+                  <div className={`mt-3 space-y-2.5 ${hasAdditionalCoachItems ? "max-h-[14rem] overflow-y-auto pr-1" : ""}`}>
+                    {formattedCoachActions.map((item) => (
+                      <div key={item.id} className="rounded-lg border border-white/10 bg-white/[0.03] p-3">
+                        <p className="text-xs font-bold uppercase tracking-[0.12em] text-red-300">{item.categoryLabel}</p>
+                        <p className="mt-1 text-sm font-medium text-white">{item.actionText}</p>
+                        <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
+                          {item.gainLabel ? (
+                            <span className="inline-flex items-center rounded bg-emerald-500/15 px-2 py-0.5 text-xs font-bold text-emerald-300">
+                              {item.gainLabel}
+                            </span>
+                          ) : <span />}
+                          <Link
+                            href={item.href}
+                            className="inline-flex items-center text-xs font-semibold text-red-300 underline decoration-red-400/50 underline-offset-4 hover:text-red-200"
+                          >
+                            {item.actionButtonLabel}
+                          </Link>
+                        </div>
                       </div>
-                      <p className="mt-1 text-xs leading-5 text-neutral-200">{factor.actionNeeded}</p>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>

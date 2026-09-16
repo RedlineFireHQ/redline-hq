@@ -481,6 +481,25 @@ test("TP20. Training components normalize across the active 20/10/6/4 model", ()
   assert.equal(weightedTrainingPercent, 75);
 });
 
+test("TP27. Incomplete annual category training creates a direct training action", () => {
+  const score = buildPaceScore({
+    asOfDate: "2026-09-15",
+    departmentHours: 0,
+    categoryNameById: new Map([["fire-suppression", "Fire Suppression"]]),
+    requirementRows: [{
+      ...annualRequirement(24),
+      category_id: "fire-suppression",
+    }],
+  });
+
+  const action = score.coachItems.find((item) => item.factorId === "annual-fire");
+
+  assert.ok(action);
+  assert.equal(action?.href, "/training");
+  assert.match(action?.explanation ?? "", /Complete 24\.00 hours of Fire Suppression training/);
+  assert.equal(action?.currentValue, "0.00 hrs");
+});
+
 test("TP21. Annual-only configuration keeps inactive training components neutral", () => {
   const score = buildPaceScore({
     asOfDate: "2026-12-31",

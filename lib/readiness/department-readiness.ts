@@ -1,30 +1,26 @@
 import { getCurrentMember, type CurrentMember } from "@/lib/current-member";
 import {
-  applyAuthoritativeCertificationToTrackProfile,
   buildCertificationTypeMetaById,
-  findCurrentTrackProfile,
-  resolveAuthoritativeEmsCertificationsForMember,
-  resolveCertificationStatusFromTrack,
   type EmsTrackProfileAuthorityRow,
 } from "@/lib/ems/authoritative-certifications";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import {
-  buildMemberReadinessScore,
   calculateOverallReadinessScorePercent,
-  getCertificationStatus,
   getDeficiencyImpactPenaltyPercent,
   getDeficiencyImpactState,
   parseHours,
   type DeficiencyReadinessInput,
-  type QualificationReadinessInput,
   type ReadinessFactor,
   type ReadinessScoreState,
   type RequirementInput,
 } from "@/lib/readiness/member-readiness";
-import { buildScoredCertificationStatuses } from "@/lib/readiness/scored-certifications";
+import {
+  computeAuthoritativeMemberReadiness,
+  formatAuthoritativeCoachAction,
+  simulateMemberScoreForResolvedCoachFactor,
+} from "@/lib/readiness/authoritative-member-readiness";
 import {
   buildCanonicalMemberCertificationRows,
-  buildQualificationReadinessAdapter,
   type CatalogRow,
   type RoleRequiredCertificationRow,
   type RoleRequiredQualificationRow,
@@ -38,7 +34,6 @@ import {
   calculateMaintenanceServiceBucketScore,
   type ApparatusMaintenanceRequirementEvaluation,
 } from "@/lib/readiness/apparatus-readiness";
-import { calculateComplianceBucketHours } from "@/lib/training/compliance-buckets";
 import { department } from "@/lib/department";
 
 const PERSONNEL_WEIGHT = 0.65;
@@ -372,152 +367,7 @@ function getHighestDeficiencyPenaltyForMember(deficiencyItems: DeficiencyReadine
   return highestPenalty;
 }
 
-function getAverageFactorCompletionForCategory(
-  factors: ReadinessFactor[],
-  category: ReadinessFactor["category"],
-  overrideFactorId: string | null,
-  overrideCompletionPercent: number,
-) {
-  const categoryFactors = factors.filter((factor) => factor.category === category);
-  if (categoryFactors.length === 0) {
-    return 0;
-  }
-
-  const total = categoryFactors.reduce((sum, factor) => {
-    if (overrideFactorId && factor.id === overrideFactorId) {
-      return sum + clamp(overrideCompletionPercent, 0, 100);
-    }
-
-    return sum + clamp(factor.completionPercent, 0, 100);
-  }, 0);
-
-  return clamp(total / categoryFactors.length, 0, 100);
-}
-
-export function simulateMemberScoreForResolvedCoachFactor(input: {
-  readinessState: ReadinessScoreState;
-  factorId: string;
-  highestDeficiencyPenaltyPercent: number;
-  resolvedQualificationName?: string;
-}) {
-  const { readinessState, factorId, highestDeficiencyPenaltyPercent, resolvedQualificationName } = input;
-  const factor = readinessState.factors.find((item) => item.id === factorId);
-
-  if (!factor) {
-    return readinessState.scorePercent;
-  }
-
-  let certificationsCategoryPercent = getAverageFactorCompletionForCategory(
-    readinessState.factors,
-    "certification",
-    null,
-    0,
-  );
-
-  let trainingCategoryPercent = getAverageFactorCompletionForCategory(
-    readinessState.factors,
-    "training",
-    null,
-    0,
-  );
-
-  let qualificationsCategoryPercent =
-    readinessState.qualificationsScore === null
-      ? null
-      : clamp(
-          (readinessState.qualificationsScore / readinessState.qualificationsMaxScore) * 100,
-          0,
-          100,
-        );
-
-  let deficienciesCategoryPercent = clamp(
-    ((MEMBER_DEFICIENCIES_BUCKET_MAX - readinessState.deficiencyPenaltyPercent) /
-      MEMBER_DEFICIENCIES_BUCKET_MAX) *
-      100,
-    0,
-    100,
-  );
-
-  if (factor.category === "certification") {
-    certificationsCategoryPercent = getAverageFactorCompletionForCategory(
-      readinessState.factors,
-      "certification",
-      factor.id,
-      100,
-    );
-  } else if (factor.category === "training") {
-    trainingCategoryPercent = getAverageFactorCompletionForCategory(
-      readinessState.factors,
-      "training",
-      factor.id,
-      100,
-    );
-  } else if (factor.category === "qualification") {
-    const normalizedResolvedQualification = (resolvedQualificationName ?? "").trim().toLowerCase();
-    const missingQualifications = readinessState.missingQualifications;
-    const hasMatchingQualification =
-      normalizedResolvedQualification.length > 0 &&
-      missingQualifications.some(
-        (qualificationName) => qualificationName.trim().toLowerCase() === normalizedResolvedQualification,
-      );
-
-    if (!hasMatchingQualification) {
-      return readinessState.scorePercent;
-    }
-
-    const missingCount = missingQualifications.length;
-    if (missingCount <= 0) {
-      return readinessState.scorePercent;
-    }
-
-    if (readinessState.qualificationsScore === null) {
-      return readinessState.scorePercent;
-    }
-
-    const currentQualificationsPercent = clamp(
-      (readinessState.qualificationsScore / readinessState.qualificationsMaxScore) * 100,
-      0,
-      100,
-    );
-    const incompleteRatio = 1 - currentQualificationsPercent / 100;
-
-    if (incompleteRatio <= 0) {
-      return readinessState.scorePercent;
-    }
-
-    const estimatedTotalRequired = missingCount / incompleteRatio;
-    const totalRequired = Math.max(1, Math.round(estimatedTotalRequired));
-    const reconstructedMissing = totalRequired * incompleteRatio;
-
-    if (Math.abs(reconstructedMissing - missingCount) > 0.01) {
-      return readinessState.scorePercent;
-    }
-
-    const completedCount = totalRequired - missingCount;
-    const nextCompletedCount = clamp(completedCount + 1, 0, totalRequired);
-    qualificationsCategoryPercent = clamp((nextCompletedCount / totalRequired) * 100, 0, 100);
-  } else if (factor.id === "deficiencies-current-responsibility") {
-    const reducedPenalty = Math.max(0, readinessState.deficiencyPenaltyPercent - highestDeficiencyPenaltyPercent);
-    deficienciesCategoryPercent = clamp(
-      ((MEMBER_DEFICIENCIES_BUCKET_MAX - reducedPenalty) / MEMBER_DEFICIENCIES_BUCKET_MAX) * 100,
-      0,
-      100,
-    );
-  }
-
-  if (qualificationsCategoryPercent === null) {
-    return null;
-  }
-
-  return roundToTenths(
-    calculateOverallReadinessScorePercent({
-      certificationsCategoryPercent,
-      trainingCategoryPercent,
-      qualificationsCategoryPercent,
-      deficienciesCategoryPercent,
-    }),
-  );
-}
+export { simulateMemberScoreForResolvedCoachFactor };
 
 function computeMemberActionImpact(input: {
   departmentScore: number | null;
@@ -813,8 +663,9 @@ export function sortCoachActions(actions: DepartmentReadinessCoachAction[]) {
 export function filterCoachActionsForRole(
   actions: DepartmentReadinessCoachAction[],
   role: CurrentMember["role"],
+  hasFullDepartmentPermissions = false,
 ) {
-  if (role === "firefighter") {
+  if (role === "firefighter" && !hasFullDepartmentPermissions) {
     return actions.filter((action) => action.audience === "all");
   }
 
@@ -1225,51 +1076,12 @@ export async function getDepartmentReadinessData(
       memberCertifications: rawMemberCertifications,
       memberQualifications,
     }).map((row) => ({
-      member_id: row.member_id ?? memberId,
+      id: row.id ?? row.certification_id,
       certification_id: row.certification_id,
       certificate_number: row.certificate_number ?? null,
       issued_at: row.issued_at ?? "",
       expires_at: row.expires_at,
     }));
-
-    const authoritativeEmsCertifications = resolveAuthoritativeEmsCertificationsForMember({
-      memberCertifications,
-      certificationTypeById,
-    });
-
-    const memberProfiles = emsProfilesByMember.get(memberId) ?? [];
-    const effectiveIowaProfile = applyAuthoritativeCertificationToTrackProfile({
-      track: "iowa",
-      profile: findCurrentTrackProfile(memberProfiles, "iowa"),
-      authoritativeCertification: authoritativeEmsCertifications.iowa,
-    });
-    const effectiveNremtProfile = applyAuthoritativeCertificationToTrackProfile({
-      track: "nremt",
-      profile: findCurrentTrackProfile(memberProfiles, "nremt"),
-      authoritativeCertification: authoritativeEmsCertifications.nremt,
-    });
-
-    const certificationStatuses = memberCertifications.map((record) => {
-      const certMeta = certificationTypeById.get(record.certification_id);
-      const genericStatus = getCertificationStatus(record.expires_at, CERTIFICATION_WARNING_DAYS);
-      const sourceTrack = certMeta?.authority === "iowa"
-        ? effectiveIowaProfile
-        : certMeta?.authority === "nremt"
-          ? effectiveNremtProfile
-          : null;
-
-      const status = resolveCertificationStatusFromTrack({
-        track: sourceTrack,
-        warningDays: CERTIFICATION_WARNING_DAYS,
-        genericStatus,
-      });
-
-      return {
-        certificationId: record.certification_id,
-        certificationName: certificationNameById.get(record.certification_id) ?? "Certification",
-        status,
-      };
-    });
 
     const memberDepartmentRoleId =
       typeof member.department_role_id === "string" ? member.department_role_id : null;
@@ -1278,43 +1090,6 @@ export async function getDepartmentReadinessData(
     const selectedDepartmentRole = memberDepartmentRoleId
       ? departmentRoleById.get(memberDepartmentRoleId) ?? null
       : null;
-
-    const qualificationReadinessAdapter = buildQualificationReadinessAdapter({
-      memberDepartmentRoleId,
-      certificationTypes: certificationCatalog,
-      qualificationTypes,
-      roleRequiredCertifications,
-      roleRequiredQualifications,
-      memberCertifications: memberCertifications.map((record) => ({
-        certification_id: record.certification_id,
-        expires_at: record.expires_at,
-      })),
-      memberQualifications: memberQualifications.map((record) => ({
-        qualification_id: record.qualification_id,
-      })),
-    });
-
-    const qualificationReadiness: QualificationReadinessInput = {
-      hasAssignedRole: memberDepartmentRoleId !== null,
-      roleName: selectedDepartmentRole?.name ?? null,
-      requiredQualifications: qualificationReadinessAdapter.requiredQualifications,
-      completedQualifications: qualificationReadinessAdapter.completedQualifications,
-      missingQualifications: qualificationReadinessAdapter.missingQualifications,
-    };
-    const scoredCertificationStatuses = buildScoredCertificationStatuses({
-      memberDepartmentRoleId,
-      certificationStatuses: certificationStatuses.map((row) => ({
-        certificationId: row.certificationId,
-        certificationName: row.certificationName,
-        status: row.status,
-        authority: certificationTypeById.get(row.certificationId)?.authority ?? null,
-        expiresAt: memberCertifications.find((record) => record.certification_id === row.certificationId)?.expires_at ?? null,
-      })),
-      roleRequiredCertifications,
-      includeIowaAuthority: effectiveIowaProfile !== null,
-      includeNremtAuthority: effectiveNremtProfile?.maintain_track === true,
-      certificationNameById,
-    });
 
     const memberAttendance = attendanceByMember.get(memberId) ?? [];
     const memberOutside = outsideByMember.get(memberId) ?? [];
@@ -1393,8 +1168,6 @@ export async function getDepartmentReadinessData(
       categoryHoursMap.set(categoryKey, current);
     }
 
-    const departmentHours = calculateComplianceBucketHours(complianceRows, categoryNameById).fireAnnualHours;
-
     const deficiencyRows = deficienciesByMember.get(memberId) ?? [];
     const assignedAtByDeficiency = personalAssignedAtByMember.get(memberId) ?? new Map<string, string>();
 
@@ -1416,19 +1189,28 @@ export async function getDepartmentReadinessData(
       };
     });
 
-    const readinessState = buildMemberReadinessScore({
-      requirementRows: requirements,
-      departmentHours,
-      categoryHours: Array.from(categoryHoursMap.values()),
-      categoryNameById,
-      certificationStatuses,
-      scoredCertificationStatuses,
-      qualificationReadiness,
-      deficiencyItems,
+    const authoritativeResult = computeAuthoritativeMemberReadiness({
       currentMemberId: memberId,
       memberStartDate: memberRequirementStartDate,
+      memberDepartmentRoleId,
+      roleName: selectedDepartmentRole?.name ?? null,
+      canonicalMemberCertifications: memberCertifications,
+      certificationNameById,
+      certificationTypeById,
+      emsTrackProfiles: emsProfilesByMember.get(memberId) ?? [],
+      roleRequiredCertifications,
+      certificationCatalog,
+      qualificationCatalog,
+      roleRequiredQualifications,
+      memberQualifications,
+      requirements,
+      categoryNameById,
+      fireAnnualComplianceRows: complianceRows,
+      categoryHours: Array.from(categoryHoursMap.values()),
+      deficiencyItems,
     });
 
+    const readinessState = authoritativeResult.readiness;
     const highestDeficiencyPenaltyPercent = getHighestDeficiencyPenaltyForMember(deficiencyItems, memberId);
 
     memberResults.push({
@@ -1503,15 +1285,34 @@ export async function getDepartmentReadinessData(
       });
 
       const qualificationLabel = qualificationTarget ? `: ${qualificationTarget}` : "";
+      const formatted = factor
+        ? formatAuthoritativeCoachAction({
+            factor,
+            readinessState: member.readinessState,
+            highestDeficiencyPenaltyPercent: member.highestDeficiencyPenaltyPercent,
+            isSelf: member.memberId === viewer.id,
+            memberId: member.memberId,
+          })
+        : null;
+
+      if (formatted && !formatted.isActionable && !qualificationTarget) {
+        continue;
+      }
+
       const actionDescription = qualificationTarget
-        ? `Complete required qualification '${qualificationTarget}'. ${coachItem.explanation}`
-        : coachItem.explanation;
+        ? `Complete required qualification '${qualificationTarget}'.`
+        : formatted?.actionText ?? coachItem.explanation;
 
       coachActions.push({
         id: `member-${member.memberId}-${coachItem.factorId}${qualificationTarget ? `-${qualificationTarget}` : ""}`,
         title: `${member.memberName} - ${coachItem.title}${qualificationLabel}`,
         description: actionDescription,
-        href: member.memberId === viewer.id ? "/my-readiness" : `/personnel/${member.memberId}`,
+        href:
+          factor?.category === "training"
+            ? "/training"
+            : member.memberId === viewer.id
+              ? "/my-readiness"
+              : `/personnel/${member.memberId}`,
         ownerLabel: member.memberName,
         category: "personnel",
         audience: member.memberId === viewer.id ? "all" : "officer_admin",
@@ -1556,7 +1357,34 @@ export async function getDepartmentReadinessData(
     }
   }
 
-  const visibleActions = filterCoachActionsForRole(coachActions, viewer.role);
+  const [{ data: activePermissionRows }, { data: viewerPermissionRows }] = await Promise.all([
+    supabase.from("app_permissions").select("key").eq("active", true),
+    supabase
+      .from("member_app_permissions")
+      .select("permission_key")
+      .eq("department_id", departmentId)
+      .eq("member_id", viewer.id),
+  ]);
+  const activePermissionKeys = new Set(
+    (activePermissionRows ?? [])
+      .map((row) => (typeof row.key === "string" ? row.key : ""))
+      .filter((key) => key.length > 0),
+  );
+  const viewerPermissionKeys = new Set(
+    (viewerPermissionRows ?? [])
+      .map((row) => (typeof row.permission_key === "string" ? row.permission_key : ""))
+      .filter((key) => key.length > 0),
+  );
+  const hasFullDepartmentPermissions =
+    viewer.role !== "firefighter" ||
+    (activePermissionKeys.size > 0 &&
+      [...activePermissionKeys].every((key) => viewerPermissionKeys.has(key)));
+
+  const visibleActions = filterCoachActionsForRole(
+    coachActions,
+    viewer.role,
+    hasFullDepartmentPermissions,
+  );
   const sortedActions = sortCoachActions(visibleActions);
   const topCoachActions = sortedActions.slice(0, 5);
   const remainingCoachActions = sortedActions.slice(5);

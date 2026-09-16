@@ -8,32 +8,23 @@ import RoleRequirementsSection from "@/components/personnel/RoleRequirementsSect
 import CreateAuthAccountButton from "@/components/personnel/CreateAuthAccountButton";
 import type { AppPermissionOption } from "@/lib/app-permissions";
 import { department } from "@/lib/department";
-import {
-  applyAuthoritativeCertificationToTrackProfile,
-  buildCertificationTypeMetaById,
-  findCurrentTrackProfile,
-  resolveAuthoritativeEmsCertificationsForMember,
-  resolveCertificationStatusFromTrack,
-} from "@/lib/ems/authoritative-certifications";
+import { buildCertificationTypeMetaById } from "@/lib/ems/authoritative-certifications";
 import { getCurrentMember } from "@/lib/current-member";
 import { canManagePersonnel, hasDepartmentPermission } from "@/lib/member-permissions";
 import {
-  buildMemberReadinessScore,
-  getCertificationStatus,
   type DeficiencyReadinessInput,
-  type ReadinessCoachItem,
-  type ReadinessFactor,
-  type QualificationReadinessInput,
   type RequirementInput,
 } from "@/lib/readiness/member-readiness";
-import { buildScoredCertificationStatuses } from "@/lib/readiness/scored-certifications";
+import {
+  buildAuthoritativeCoachActions,
+  computeAuthoritativeMemberReadiness,
+  getAuthoritativeCoachSummary,
+} from "@/lib/readiness/authoritative-member-readiness";
 import {
   buildCanonicalMemberCertificationRows,
-  buildQualificationReadinessAdapter,
   type CatalogRow,
 } from "@/lib/role-requirements";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { calculateComplianceBucketHours } from "@/lib/training/compliance-buckets";
 import { notFound, redirect } from "next/navigation";
 
 type CertificationTypeRow = {
@@ -296,112 +287,6 @@ function normalizeDeficiencyPriority(value: DeficiencyAssignedRow["priority_info
   return {
     name: typeof relation?.name === "string" ? relation.name : null,
   };
-}
-
-type CoachActionViewModel = {
-  id: string;
-  title: string;
-  needsAttention: string;
-  action: string;
-  impactPercent: number | null;
-};
-
-const CATEGORY_WEIGHT_PERCENT: Partial<Record<ReadinessFactor["category"], number>> = {
-  certification: 40,
-  training: 40,
-  qualification: 10,
-  other: 10,
-};
-
-function roundToTenths(value: number) {
-  return Math.round(value * 10) / 10;
-}
-
-function parseCoachNeedsAndAction(item: ReadinessCoachItem) {
-  const explanation = item.explanation.trim();
-  const detailedMatch = explanation.match(/What is wrong:\s*([\s\S]*?)\s*Action:\s*([\s\S]+)$/i);
-
-  if (detailedMatch) {
-    const needsAttention = detailedMatch[1].replace(/\s*Why it matters:[\s\S]*$/i, "").trim();
-    const action = detailedMatch[2].trim();
-    return {
-      needsAttention: needsAttention || `${item.title} is not currently meeting the readiness target.`,
-      action: action || "Complete the recommended corrective action.",
-    };
-  }
-
-  return {
-    needsAttention: `${item.currentValue} (target: ${item.targetValue}).`,
-    action: explanation,
-  };
-}
-
-function calculateCoachImpactPercent(input: {
-  scorePercent: number | null;
-  factorId: string;
-  factors: ReadinessFactor[];
-}) {
-  if (input.scorePercent === null) {
-    return null;
-  }
-
-  const factor = input.factors.find((row) => row.id === input.factorId);
-  if (!factor || factor.completed) {
-    return null;
-  }
-
-  const categoryWeight = CATEGORY_WEIGHT_PERCENT[factor.category];
-  if (typeof categoryWeight !== "number" || categoryWeight <= 0) {
-    return null;
-  }
-
-  const categoryFactors = input.factors.filter((row) => row.category === factor.category);
-  const totalCategoryWeight = categoryFactors.reduce((total, row) => {
-    const weight = row.weightPercent ?? 1;
-    return weight > 0 ? total + weight : total;
-  }, 0);
-  const factorWeight = factor.weightPercent ?? 1;
-
-  if (totalCategoryWeight <= 0 || factorWeight <= 0) {
-    return null;
-  }
-
-  const completionGap = Math.max(0, 100 - factor.completionPercent);
-  if (completionGap <= 0) {
-    return null;
-  }
-
-  const categoryLift = (completionGap * factorWeight) / totalCategoryWeight;
-  const scoreLift = (categoryLift * categoryWeight) / 100;
-  const maxPossibleLift = Math.max(0, 100 - input.scorePercent);
-  const safeLift = Math.min(scoreLift, maxPossibleLift);
-
-  if (!Number.isFinite(safeLift) || safeLift <= 0) {
-    return null;
-  }
-
-  return roundToTenths(safeLift);
-}
-
-function buildCoachActionViewModels(input: {
-  scorePercent: number | null;
-  coachItems: ReadinessCoachItem[];
-  factors: ReadinessFactor[];
-}) {
-  return input.coachItems.slice(0, 3).map((item) => {
-    const parsed = parseCoachNeedsAndAction(item);
-    return {
-      id: item.factorId,
-      title: item.title,
-      needsAttention: parsed.needsAttention,
-      action: parsed.action,
-      impactPercent: calculateCoachImpactPercent({
-        scorePercent: input.scorePercent,
-        factorId: item.factorId,
-        factors: input.factors,
-      }),
-    } satisfies CoachActionViewModel;
-  });
 }
 
 interface PersonnelProfilePageProps {
@@ -948,78 +833,8 @@ export default async function PersonnelProfilePage({
       ems_certification_level: row.ems_certification_level,
     })),
   );
-  const authoritativeEmsCertifications = resolveAuthoritativeEmsCertificationsForMember({
-    memberCertifications: canonicalMemberCertificationRows.map((row) => ({
-      member_id: row.member_id,
-      certification_id: row.certification_id,
-      certificate_number: row.certificate_number,
-      expires_at: row.expires_at,
-      issued_at: row.issued_at,
-    })),
-    certificationTypeById,
-  });
-  const activeIowaProfile = applyAuthoritativeCertificationToTrackProfile({
-    track: "iowa",
-    profile: findCurrentTrackProfile(emsTrackProfiles, "iowa"),
-    authoritativeCertification: authoritativeEmsCertifications.iowa,
-  });
-  const activeNremtProfile = applyAuthoritativeCertificationToTrackProfile({
-    track: "nremt",
-    profile: findCurrentTrackProfile(emsTrackProfiles, "nremt"),
-    authoritativeCertification: authoritativeEmsCertifications.nremt,
-  });
-  const certificationStatuses = canonicalMemberCertificationRows.map((row) => {
-    const genericStatus = getCertificationStatus(row.expires_at, department.settings.certificationWarningDays);
-    const certMeta = certificationTypeById.get(row.certification_id);
-    const sourceTrack = certMeta?.authority === "iowa"
-      ? activeIowaProfile
-      : certMeta?.authority === "nremt"
-        ? activeNremtProfile
-        : null;
-
-    return {
-      certificationId: row.certification_id,
-      certificationName: certificationNameById.get(row.certification_id) ?? "Certification",
-      status: resolveCertificationStatusFromTrack({
-        track: sourceTrack,
-        warningDays: department.settings.certificationWarningDays,
-        genericStatus,
-      }),
-    };
-  });
-
   const memberDepartmentRoleId = typeof member.department_role_id === "string" ? member.department_role_id : null;
   const departmentRoleById = new Map(departmentRoles.map((row) => [row.id, row.name]));
-  const qualificationReadinessAdapter = buildQualificationReadinessAdapter({
-    memberDepartmentRoleId,
-    certificationTypes: certificationTypes.map((row) => ({ id: row.id, name: row.name, active: row.active } satisfies CatalogRow)),
-    qualificationTypes: qualificationTypes.map((row) => ({ id: row.id, name: row.name, active: row.active } satisfies CatalogRow)),
-    roleRequiredCertifications,
-    roleRequiredQualifications,
-    memberCertifications: canonicalMemberCertificationRows.map((row) => ({ certification_id: row.certification_id, expires_at: row.expires_at })),
-    memberQualifications: memberQualifications.map((row) => ({ qualification_id: row.qualification_id })),
-  });
-  const qualificationReadiness: QualificationReadinessInput = {
-    hasAssignedRole: memberDepartmentRoleId !== null,
-    roleName: memberDepartmentRoleId ? departmentRoleById.get(memberDepartmentRoleId) ?? null : null,
-    requiredQualifications: qualificationReadinessAdapter.requiredQualifications,
-    completedQualifications: qualificationReadinessAdapter.completedQualifications,
-    missingQualifications: qualificationReadinessAdapter.missingQualifications,
-  };
-  const scoredCertificationStatuses = buildScoredCertificationStatuses({
-    memberDepartmentRoleId,
-    certificationStatuses: certificationStatuses.map((row) => ({
-      certificationId: row.certificationId,
-      certificationName: row.certificationName,
-      status: row.status,
-      authority: certificationTypeById.get(row.certificationId)?.authority ?? null,
-      expiresAt: canonicalMemberCertificationRows.find((record) => record.certification_id === row.certificationId)?.expires_at ?? null,
-    })),
-    roleRequiredCertifications,
-    includeIowaAuthority: activeIowaProfile !== null,
-    includeNremtAuthority: activeNremtProfile?.maintain_track === true,
-    certificationNameById,
-  });
 
   const assignmentById = new Map(trainingAssignments.map((row) => [row.id, row]));
   const complianceRows: Array<{ categoryId: string | null; hours: number | string | null }> = [
@@ -1035,8 +850,6 @@ export default async function PersonnelProfilePage({
       };
     }),
   ];
-  const complianceTotals = calculateComplianceBucketHours(complianceRows, trainingCategoryLookup);
-  const fireAnnualTrainingHours = complianceTotals.fireAnnualHours;
   const categoryHoursMap = new Map<string, { categoryId: string | null; categoryName: string; hours: number }>();
   for (const row of complianceRows) {
     const hours = parseHours(row.hours) ?? 0;
@@ -1097,25 +910,39 @@ export default async function PersonnelProfilePage({
     };
   });
 
-  const readinessScore = buildMemberReadinessScore({
-    requirementRows: readinessRequirements,
-    departmentHours: fireAnnualTrainingHours,
-    categoryHours: Array.from(categoryHoursMap.values()).map((row) => ({ categoryId: row.categoryId, categoryName: row.categoryName, hours: row.hours })),
-    categoryNameById: trainingCategoryLookup,
-    certificationStatuses,
-    scoredCertificationStatuses,
-    qualificationReadiness,
-    deficiencyItems,
+  const authoritativeReadiness = computeAuthoritativeMemberReadiness({
     currentMemberId: id,
     memberStartDate: memberRequirementStartDate,
+    memberDepartmentRoleId,
+    roleName: memberDepartmentRoleId ? departmentRoleById.get(memberDepartmentRoleId) ?? null : null,
+    canonicalMemberCertifications: canonicalMemberCertificationRows,
+    certificationNameById,
+    certificationTypeById,
+    emsTrackProfiles,
+    roleRequiredCertifications,
+    certificationCatalog: certificationTypes.map((row) => ({ id: row.id, name: row.name, active: row.active } satisfies CatalogRow)),
+    qualificationCatalog: qualificationTypes.map((row) => ({ id: row.id, name: row.name, active: row.active } satisfies CatalogRow)),
+    roleRequiredQualifications,
+    memberQualifications: memberQualifications.map((row) => ({ qualification_id: row.qualification_id })),
+    requirements: readinessRequirements,
+    categoryNameById: trainingCategoryLookup,
+    fireAnnualComplianceRows: complianceRows,
+    categoryHours: Array.from(categoryHoursMap.values()).map((row) => ({ categoryId: row.categoryId, categoryName: row.categoryName, hours: row.hours })),
+    deficiencyItems,
   });
+  const readinessScore = authoritativeReadiness.readiness;
   const readinessMessage = readinessScore.scorePercent === null
     ? readinessScore.configurationMessage
     : `${Math.round(readinessScore.remainingPercent ?? 0)}% to reach 100%`;
-  const coachActions = buildCoachActionViewModels({
-    scorePercent: readinessScore.scorePercent,
-    coachItems: readinessScore.coachItems,
-    factors: readinessScore.factors,
+  const coachActions = buildAuthoritativeCoachActions({
+    readinessState: readinessScore,
+    isSelf: isSelfProfile,
+    memberId: id,
+    limit: 3,
+  });
+  const coachSummary = getAuthoritativeCoachSummary({
+    readinessState: readinessScore,
+    isSelf: isSelfProfile,
   });
 
   return (
@@ -1139,6 +966,7 @@ export default async function PersonnelProfilePage({
             score={readinessScore.scorePercent}
             message={readinessMessage}
             coachActions={coachActions}
+            coachSummary={coachSummary}
           />
         </div>
 

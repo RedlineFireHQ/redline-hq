@@ -361,6 +361,37 @@ test("DR16. Firefighter view filters to audience='all' actions", () => {
   assert.deepEqual(officerActions.map((action) => action.id), ["all", "officer"]);
 });
 
+test("DR16A. Full permission coverage allows firefighter-role managers to see department actions", () => {
+  const actions: DepartmentReadinessCoachAction[] = [
+    {
+      id: "all",
+      title: "All audience",
+      description: "All members can see this.",
+      href: "/my-readiness",
+      ownerLabel: "Member",
+      category: "personnel",
+      audience: "all",
+      potentialDepartmentImpactPercent: 1,
+    },
+    {
+      id: "officer",
+      title: "Department action",
+      description: "Managers can see this.",
+      href: "/training",
+      ownerLabel: "Member",
+      category: "personnel",
+      audience: "officer_admin",
+      potentialDepartmentImpactPercent: 2,
+    },
+  ];
+
+  const normalFirefighterActions = filterCoachActionsForRole(actions, "firefighter");
+  const grantAllActions = filterCoachActionsForRole(actions, "firefighter", true);
+
+  assert.deepEqual(normalFirefighterActions.map((action) => action.id), ["all"]);
+  assert.deepEqual(grantAllActions.map((action) => action.id), ["all", "officer"]);
+});
+
 test("DR17. One qualification action resolves only that qualification and does not over-credit", () => {
   const readinessState = {
     configured: true,

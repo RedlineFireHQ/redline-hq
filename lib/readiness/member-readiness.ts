@@ -844,6 +844,17 @@ export function buildMemberReadinessScore(input: {
       ? annualRequirement.requirementName
       : "Annual Training Pace";
     const annualRequirementAppliesTo = annualTrainingRequirements[0].appliesTo;
+    const annualCategoryNames = Array.from(
+      new Set(
+        annualTrainingRequirements
+          .map((requirement) => requirement.row.category_id)
+          .filter((categoryId): categoryId is string => Boolean(categoryId))
+          .map((categoryId) => input.categoryNameById.get(categoryId) ?? "Category"),
+      ),
+    );
+    const annualCategoryLabel = annualCategoryNames.length > 0
+      ? ` of ${annualCategoryNames.join(", ")}`
+      : "";
 
     const annualCompleted = annualProgress.completed;
     if (annualCompleted) {
@@ -868,7 +879,7 @@ export function buildMemberReadinessScore(input: {
       completed: annualCompleted,
       actionNeeded: annualCompleted
         ? "On pace for annual training requirement."
-        : `Pace target is ${formatHours(annualProgress.monthlyPaceHours)} per month (${formatHours(annualProgress.expectedHoursToDate)} expected by now). Complete ${formatHours(annualProgress.shortfallHours)} more training hours to get back on pace. This requirement is worth ${annualProgress.pointsPerApplicableHour.toFixed(2)} readiness points per applicable hour.`,
+        : `Complete ${annualRequiredHours.toFixed(2)} hours${annualCategoryLabel} training. You have ${formatHours(input.departmentHours)} of ${formatHours(annualRequiredHours)} required hours recorded. Pace target is ${formatHours(annualProgress.monthlyPaceHours)} per month (${formatHours(annualProgress.expectedHoursToDate)} expected by now). Complete ${formatHours(annualProgress.shortfallHours)} more training hours to get back on pace. This requirement is worth ${annualProgress.pointsPerApplicableHour.toFixed(2)} readiness points per applicable hour.`,
     });
   }
 
@@ -1272,7 +1283,7 @@ export function buildMemberReadinessScore(input: {
         currentValue: factor.currentValue,
         targetValue: factor.requiredValue,
         remainingValue,
-        href: "/my-readiness",
+        href: factor.category === "training" ? "/training" : "/my-readiness",
       };
     })
     .sort((a, b) => a.title.localeCompare(b.title));

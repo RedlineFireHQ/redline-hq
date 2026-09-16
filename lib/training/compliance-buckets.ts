@@ -14,7 +14,11 @@ type TrainingHoursInput = {
   hours: number | string | null | undefined;
 };
 
-const FIRE_ANNUAL_CATEGORY_NAMES = new Set([
+// Keywords, not exact names: a category matches if it contains one of these
+// tokens (or vice versa), so department-specific naming like "Wildland
+// Firefighting" still matches the "wildland" fire-annual keyword instead of
+// silently falling through to "other".
+const FIRE_ANNUAL_CATEGORY_KEYWORDS = [
   "communications",
   "dive training",
   "driver/operator",
@@ -27,7 +31,7 @@ const FIRE_ANNUAL_CATEGORY_NAMES = new Set([
   "swift water",
   "technical rescue",
   "wildland",
-]);
+];
 
 function normalizeCategoryName(value: string | null | undefined) {
   return (value ?? "").trim().toLowerCase();
@@ -53,7 +57,11 @@ export function getTrainingComplianceBucketByCategoryName(categoryName: string |
     return "other";
   }
 
-  if (FIRE_ANNUAL_CATEGORY_NAMES.has(normalized)) {
+  const matchesFireAnnual = FIRE_ANNUAL_CATEGORY_KEYWORDS.some(
+    (keyword) => normalized.includes(keyword) || keyword.includes(normalized),
+  );
+
+  if (matchesFireAnnual) {
     return "fire_annual";
   }
 
