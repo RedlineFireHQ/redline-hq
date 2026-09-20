@@ -85,6 +85,8 @@ export default async function MobilePrePlanDetailPage({ params }: { params: Prom
   }));
   const primaryPhoto = linksWithUrls.find((entry) =>
     entry.link?.link_type === "photo" && entry.link.related_component?.trim().toLowerCase() === "building_front" && entry.url,
+  ) ?? linksWithUrls.find((entry) =>
+    entry.link?.link_type === "photo" && entry.revision?.mime_type?.startsWith("image/") && entry.url,
   );
   const address = `${plan.address}, ${plan.city}, ${plan.state} ${plan.zip}`;
 

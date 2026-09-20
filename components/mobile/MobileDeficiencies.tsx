@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Camera, CheckCircle2, ChevronLeft, FilePlus2, Search, X } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { supabase } from "@/lib/supabase";
 import { useMobileWorkflow } from "@/components/mobile/MobileShell";
@@ -160,6 +160,8 @@ export default function MobileDeficiencies({
   initialError,
 }: Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const detailDeficiencyId = searchParams.get("deficiencyId");
   const [view, setView] = useState<View>("list");
   const setWorkflowFocused = useMobileWorkflow();
 
@@ -169,6 +171,17 @@ export default function MobileDeficiencies({
   }, [setWorkflowFocused, view]);
   const [rows, setRows] = useState(deficiencies);
   const [selectedDeficiency, setSelectedDeficiency] = useState<Deficiency | null>(null);
+
+  useEffect(() => {
+    if (!detailDeficiencyId) return;
+
+    const deficiency = rows.find((row) => row.id === detailDeficiencyId);
+    if (deficiency) {
+      setSelectedDeficiency(deficiency);
+      setView("detail");
+    }
+  }, [detailDeficiencyId, rows]);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [description, setDescription] = useState("");
   const [categoryId, setCategoryId] = useState("");
@@ -556,7 +569,7 @@ function DetailView({ deficiency, onBack }: { deficiency: Deficiency; onBack: ()
         {deficiency.location ? <DetailRow label="Location" value={deficiency.location} /> : null}
       </dl>
       {photoUrl ? <img src={photoUrl} alt="Deficiency photo" className="mt-5 max-h-80 w-full rounded-2xl border border-white/12 object-cover" /> : null}
-      <Link href={`/operations/deficiencies/${deficiency.id}`} className="mt-5 flex min-h-12 items-center justify-center rounded-2xl border border-white/15 px-4 text-sm font-black uppercase text-white/70">
+      <Link href={`/mobile/deficiencies?deficiencyId=${encodeURIComponent(deficiency.id)}`} className="mt-5 flex min-h-12 items-center justify-center rounded-2xl border border-white/15 px-4 text-sm font-black uppercase text-white/70">
         Open Full Record
       </Link>
     </section>

@@ -2,20 +2,27 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Camera, CheckCircle2, FileText, Paperclip, Search, Wrench, X } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { Camera, CheckCircle2, ChevronLeft, FileText, Paperclip, Search, Wrench, X } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMobileWorkflow } from "@/components/mobile/MobileShell";
+import { MAINTENANCE_ATTACHMENTS_BUCKET, MAINTENANCE_PHOTOS_BUCKET } from "@/lib/maintenance";
+import { supabase } from "@/lib/supabase";
 
 type MaintenanceRecord = {
   id: string;
   maintenanceNumber: string | null;
   apparatusId: string;
   apparatusName: string;
+  linkedDeficiencyNumber: string | null;
   maintenanceType: string;
   completedBy: string;
   serviceDate: string;
   description: string;
   partsUsed: string | null;
+  laborHours: number | null;
+  mileage: number | null;
+  engineHours: number | null;
+  cost: number | null;
   notes: string | null;
   photos: string[];
   attachments: string[];
@@ -51,7 +58,7 @@ type Props = {
   initialError: string | null;
 };
 
-type View = "list" | "form" | "success";
+type View = "list" | "detail" | "form" | "success";
 
 const serviceSpecFields: Array<{ key: ServiceSpecKey; label: string }> = [
   { key: "oil_type", label: "Oil Type" },
@@ -96,6 +103,16 @@ function fileNames(files: File[]) {
   return files.map((file) => file.name).join(", ");
 }
 
+function formatCurrency(value: number | null) {
+  return typeof value === "number"
+    ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 }).format(value)
+    : "Not set";
+}
+
+function storageAssetUrl(bucket: string, path: string) {
+  return /^https?:\/\//i.test(path) ? path : supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+}
+
 export default function MobileMaintenance({
   departmentId,
   memberId,
@@ -106,6 +123,8 @@ export default function MobileMaintenance({
   initialError,
 }: Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const detailMaintenanceId = searchParams.get("maintenanceId");
   const [view, setView] = useState<View>("list");
   const setWorkflowFocused = useMobileWorkflow();
 
@@ -114,6 +133,18 @@ export default function MobileMaintenance({
     return () => setWorkflowFocused?.(false);
   }, [setWorkflowFocused, view]);
   const [rows, setRows] = useState(records);
+  const [selectedRecord, setSelectedRecord] = useState<MaintenanceRecord | null>(null);
+
+  useEffect(() => {
+    if (!detailMaintenanceId) return;
+
+    const record = rows.find((row) => row.id === detailMaintenanceId);
+    if (record) {
+      setSelectedRecord(record);
+      setView("detail");
+    }
+  }, [detailMaintenanceId, rows]);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [apparatusId, setApparatusId] = useState("");
   const [maintenanceType, setMaintenanceType] = useState(maintenanceTypes[0] ?? "Repair");
@@ -223,11 +254,16 @@ export default function MobileMaintenance({
         maintenanceNumber: result.record.maintenance_number ?? null,
         apparatusId,
         apparatusName,
+        linkedDeficiencyNumber: null,
         maintenanceType,
         completedBy: memberName,
         serviceDate: payload.service_date,
         description: payload.description,
         partsUsed: payload.parts_used,
+        laborHours: payload.labor_hours,
+        mileage: payload.mileage,
+        engineHours: payload.engine_hours,
+        cost: payload.cost,
         notes: payload.notes,
         photos: photoFiles.map((file) => file.name),
         attachments: attachmentFiles.map((file) => file.name),
@@ -284,6 +320,8 @@ export default function MobileMaintenance({
             </section>
           </>
         ) : null}
+
+        {view === "detail" && selectedRecord ? <MaintenanceDetailView record={selectedRecord} /> : null}
 
         {isSpecsOpen ? (
           <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/75 p-3 sm:items-center">
@@ -442,7 +480,7 @@ function NumberField({ label, value, onChange, step }: { label: string; value: s
 
 function MaintenanceCard({ record }: { record: MaintenanceRecord }) {
   return (
-    <Link href={`/maintenance/${record.id}`} className="block rounded-2xl border border-white/12 bg-[#121212] p-4 shadow-[0_12px_30px_rgba(0,0,0,0.22)]">
+    <Link href={`/mobile/maintenance?maintenanceId=${encodeURIComponent(record.id)}`} className="block rounded-2xl border border-white/12 bg-[#121212] p-4 shadow-[0_12px_30px_rgba(0,0,0,0.22)]">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-black uppercase tracking-[0.16em] text-white/45">{record.maintenanceNumber ?? "Maintenance"}</p>
@@ -458,4 +496,53 @@ function MaintenanceCard({ record }: { record: MaintenanceRecord }) {
       </div>
     </Link>
   );
+}
+
+function MaintenanceDetailView({ record }: { record: MaintenanceRecord }) {
+  const detailRows = [
+    ["Apparatus", record.apparatusName],
+    ["Linked Deficiency", record.linkedDeficiencyNumber ?? "Not linked"],
+    ["Completed By", record.completedBy],
+    ["Service Date", formatDate(record.serviceDate)],
+    ["Labor Hours", typeof record.laborHours === "number" ? String(record.laborHours) : "Not set"],
+    ["Cost", formatCurrency(record.cost)],
+    ["Mileage", typeof record.mileage === "number" ? String(record.mileage) : "Not set"],
+    ["Engine Hours", typeof record.engineHours === "number" ? String(record.engineHours) : "Not set"],
+  ];
+
+  return (
+    <section className="rounded-[24px] border border-white/12 bg-[#111111] p-5 shadow-[0_20px_44px_rgba(0,0,0,0.36)]">
+      <Link href="/mobile/maintenance" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/12 px-3 text-sm font-bold text-white/75">
+        <ChevronLeft className="h-4 w-4" />
+        Back to History
+      </Link>
+      <div className="mt-5 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-white/45">Maintenance Record</p>
+          <h1 className="mt-2 text-2xl font-black">{record.maintenanceNumber ?? "Pending"}</h1>
+        </div>
+        <span className="shrink-0 rounded-full border border-red-400/25 bg-red-500/12 px-2.5 py-1 text-[11px] font-black uppercase text-red-100">{record.maintenanceType}</span>
+      </div>
+      <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
+        {detailRows.map(([label, value]) => <DetailRow key={label} label={label} value={value} />)}
+      </dl>
+      <DetailSection label="Work Performed" value={record.description} />
+      <DetailSection label="Parts Used" value={record.partsUsed ?? "Not provided."} />
+      <DetailSection label="Notes" value={record.notes ?? "Not provided."} />
+      <AssetList label="Photos" paths={record.photos} bucket={MAINTENANCE_PHOTOS_BUCKET} />
+      <AssetList label="Attachments" paths={record.attachments} bucket={MAINTENANCE_ATTACHMENTS_BUCKET} />
+    </section>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3"><dt className="text-xs font-black uppercase tracking-[0.14em] text-white/35">{label}</dt><dd className="mt-1 font-bold text-white/80">{value}</dd></div>;
+}
+
+function DetailSection({ label, value }: { label: string; value: string }) {
+  return <section className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4"><h2 className="text-xs font-black uppercase tracking-[0.16em] text-white/50">{label}</h2><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/80">{value}</p></section>;
+}
+
+function AssetList({ label, paths, bucket }: { label: string; paths: string[]; bucket: string }) {
+  return <section className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4"><h2 className="text-xs font-black uppercase tracking-[0.16em] text-white/50">{label}</h2>{paths.length ? <div className="mt-3 space-y-2">{paths.map((path, index) => <a key={`${path}-${index}`} href={storageAssetUrl(bucket, path)} target="_blank" rel="noreferrer" className="block rounded-xl border border-white/10 bg-[#080808] px-3 py-3 text-sm font-bold text-white/80">{path}</a>)}</div> : <p className="mt-2 text-sm text-white/45">No {label.toLowerCase()} attached.</p>}</section>;
 }

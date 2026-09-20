@@ -12,16 +12,22 @@ type MaintenanceRow = {
   id: string;
   maintenance_number: string | null;
   apparatus_id: string;
+  deficiency_id: string | null;
   maintenance_type: string;
   completed_by: string | null;
   service_date: string;
   description: string;
   parts_used: string | null;
+  labor_hours: number | null;
+  mileage: number | null;
+  engine_hours: number | null;
+  cost: number | null;
   notes: string | null;
   photos: string[] | null;
   attachments: string[] | null;
   apparatus: { name: string | null } | { name: string | null }[] | null;
   completed_by_member: { first_name: string | null; last_name: string | null } | { first_name: string | null; last_name: string | null }[] | null;
+  deficiency: { deficiency_number: string | null } | { deficiency_number: string | null }[] | null;
 };
 
 type ApparatusRow = {
@@ -71,7 +77,7 @@ export default async function MobileMaintenancePage() {
   const [recordsResult, apparatusResult] = await Promise.all([
     supabase
       .from("maintenance_records")
-      .select("id, maintenance_number, apparatus_id, maintenance_type, completed_by, service_date, description, parts_used, notes, photos, attachments, apparatus:apparatus_id(name), completed_by_member:completed_by(first_name, last_name)")
+      .select("id, maintenance_number, apparatus_id, deficiency_id, maintenance_type, completed_by, service_date, description, parts_used, labor_hours, mileage, engine_hours, cost, notes, photos, attachments, apparatus:apparatus_id(name), completed_by_member:completed_by(first_name, last_name), deficiency:deficiency_id(deficiency_number)")
       .eq("department_id", departmentId)
       .order("service_date", { ascending: false })
       .limit(50),
@@ -88,11 +94,16 @@ export default async function MobileMaintenancePage() {
     maintenanceNumber: row.maintenance_number,
     apparatusId: row.apparatus_id,
     apparatusName: firstRelation(row.apparatus)?.name ?? "Unknown Apparatus",
+    linkedDeficiencyNumber: firstRelation(row.deficiency)?.deficiency_number ?? null,
     maintenanceType: row.maintenance_type,
     completedBy: memberName(row),
     serviceDate: row.service_date,
     description: row.description,
     partsUsed: row.parts_used,
+    laborHours: row.labor_hours,
+    mileage: row.mileage,
+    engineHours: row.engine_hours,
+    cost: row.cost,
     notes: row.notes,
     photos: row.photos ?? [],
     attachments: row.attachments ?? [],

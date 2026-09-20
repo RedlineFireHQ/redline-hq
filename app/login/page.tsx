@@ -1,5 +1,6 @@
 "use client";
 
+import { Capacitor } from "@capacitor/core";
 import Image from "next/image";
 import { Lock, Mail } from "lucide-react";
 import { Eye, EyeOff } from "lucide-react";
@@ -11,7 +12,7 @@ import { supabase } from "@/lib/supabase";
 type AuthView = "sign_in" | "recovery";
 
 function getPostLoginDestination() {
-	return window.matchMedia("(max-width: 767px)").matches ? "/mobile" : "/";
+	return Capacitor.isNativePlatform() || window.matchMedia("(max-width: 767px)").matches ? "/mobile" : "/";
 }
 
 export default function LoginPage() {
