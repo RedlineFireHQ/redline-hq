@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Redline HQ</string>
+    <string name="title_activity_main">Redline HQ</string>
+    <string name="package_name">com.redlinehq.app</string>
+    <string name="custom_url_scheme">com.redlinehq.app</string>
+</resources>
