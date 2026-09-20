@@ -21,6 +21,7 @@ type DeficiencyRow = {
   created_at: string | null;
   photo_path: string | null;
   reported_by: string | null;
+  reported_by_member: DeficiencyRelation;
   apparatus_id: string | null;
   fire_hose_id: string | null;
   scba_cylinder_id: string | null;
@@ -102,6 +103,14 @@ function relatedLabel(row: DeficiencyRow) {
   return null;
 }
 
+function reportedByName(row: DeficiencyRow) {
+  const relation = Array.isArray(row.reported_by_member) ? row.reported_by_member[0] : row.reported_by_member;
+  const record = relation as { first_name?: unknown; last_name?: unknown } | null;
+  const firstName = typeof record?.first_name === "string" ? record.first_name.trim() : "";
+  const lastName = typeof record?.last_name === "string" ? record.last_name.trim() : "";
+  return `${firstName} ${lastName}`.trim() || null;
+}
+
 function mapDeficiency(row: DeficiencyRow) {
   return {
     id: row.id,
@@ -111,6 +120,7 @@ function mapDeficiency(row: DeficiencyRow) {
     reportedAt: row.reported_at ?? row.created_at,
     photoPath: row.photo_path,
     reportedBy: row.reported_by,
+    reportedByName: reportedByName(row),
     category: relationName(row.category),
     priority: relationName(row.priority_info),
     status: relationName(row.status_info),
@@ -167,7 +177,7 @@ export default async function MobileDeficienciesPage() {
   ] = await Promise.all([
     supabase
       .from("deficiencies")
-      .select("id, deficiency_number, description, location, reported_at, created_at, photo_path, reported_by, apparatus_id, fire_hose_id, scba_cylinder_id, scba_pack_id, portable_radio_id, portable_radio_mic_id, thermal_imaging_camera_id, gas_monitor_id, battery_id, pie_equipment_id, ground_ladder_id, ems_equipment_id, ppe_item_id, rope_item_id, fire_extinguisher_id, misc_fire_equipment_id, category:deficiency_categories!fk_deficiencies_category(name), priority_info:deficiency_priorities!fk_deficiencies_priority(name), status_info:deficiency_statuses!fk_deficiencies_status(name), apparatus:apparatus_id(name), fire_hose:fire_hose_id(inventory_number), scba_cylinder:scba_cylinder_id(cylinder_number), scba_pack:scba_pack_id(pack_number), portable_radio:portable_radio_id(radio_number), portable_radio_mic:portable_radio_mic_id(mic_number), thermal_imaging_camera:thermal_imaging_camera_id(camera_number), gas_monitor:gas_monitor_id(monitor_number), battery:battery_id(battery_number), pie_equipment:pie_equipment_id(equipment_number, equipment_category, equipment_type), ground_ladder:ground_ladder_id(ladder_number), ems_equipment:ems_equipment_id(equipment_name), ppe_item:ppe_item_id(item_name), rope_item:rope_item_id(rope_name, rope_identifier), fire_extinguisher:fire_extinguisher_id(extinguisher_number), misc_fire_equipment:misc_fire_equipment_id(equipment_name, asset_number)")
+      .select("id, deficiency_number, description, location, reported_at, created_at, photo_path, reported_by, apparatus_id, fire_hose_id, scba_cylinder_id, scba_pack_id, portable_radio_id, portable_radio_mic_id, thermal_imaging_camera_id, gas_monitor_id, battery_id, pie_equipment_id, ground_ladder_id, ems_equipment_id, ppe_item_id, rope_item_id, fire_extinguisher_id, misc_fire_equipment_id, category:deficiency_categories!fk_deficiencies_category(name), priority_info:deficiency_priorities!fk_deficiencies_priority(name), status_info:deficiency_statuses!fk_deficiencies_status(name), reported_by_member:reported_by(first_name, last_name), apparatus:apparatus_id(name), fire_hose:fire_hose_id(inventory_number), scba_cylinder:scba_cylinder_id(cylinder_number), scba_pack:scba_pack_id(pack_number), portable_radio:portable_radio_id(radio_number), portable_radio_mic:portable_radio_mic_id(mic_number), thermal_imaging_camera:thermal_imaging_camera_id(camera_number), gas_monitor:gas_monitor_id(monitor_number), battery:battery_id(battery_number), pie_equipment:pie_equipment_id(equipment_number, equipment_category, equipment_type), ground_ladder:ground_ladder_id(ladder_number), ems_equipment:ems_equipment_id(equipment_name), ppe_item:ppe_item_id(item_name), rope_item:rope_item_id(rope_name, rope_identifier), fire_extinguisher:fire_extinguisher_id(extinguisher_number), misc_fire_equipment:misc_fire_equipment_id(equipment_name, asset_number)")
       .eq("department_id", departmentId)
       .order("reported_at", { ascending: false }),
     supabase.from("deficiency_categories").select("id, name").eq("active", true).order("display_order"),

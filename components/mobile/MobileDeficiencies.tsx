@@ -22,6 +22,7 @@ type Deficiency = {
   priority: string | null;
   status: string | null;
   relatedItem: string | null;
+  reportedByName?: string | null;
 };
 
 type RelatedItem = {
@@ -45,7 +46,7 @@ type Props = {
   initialError: string | null;
 };
 
-type View = "list" | "form" | "detail" | "success";
+type View = "list" | "form" | "detail" | "full" | "success";
 
 const relatedItemTypes = [
   { type: "apparatus_id", label: "Apparatus" },
@@ -178,7 +179,7 @@ export default function MobileDeficiencies({
     const deficiency = rows.find((row) => row.id === detailDeficiencyId);
     if (deficiency) {
       setSelectedDeficiency(deficiency);
-      setView("detail");
+      setView("full");
     }
   }, [detailDeficiencyId, rows]);
 
@@ -405,6 +406,16 @@ export default function MobileDeficiencies({
           <DetailView deficiency={selectedDeficiency} onBack={() => setView("list")} />
         ) : null}
 
+        {view === "full" && selectedDeficiency ? (
+          <FullRecordView
+            deficiency={selectedDeficiency}
+            onBack={() => {
+              router.push("/mobile/deficiencies");
+              setView("detail");
+            }}
+          />
+        ) : null}
+
         {view === "form" ? (
           <section className="rounded-[24px] border border-white/12 bg-[#111111] p-5 shadow-[0_20px_44px_rgba(0,0,0,0.36)]">
             <div className="flex items-start justify-between gap-4">
@@ -572,6 +583,35 @@ function DetailView({ deficiency, onBack }: { deficiency: Deficiency; onBack: ()
       <Link href={`/mobile/deficiencies?deficiencyId=${encodeURIComponent(deficiency.id)}`} className="mt-5 flex min-h-12 items-center justify-center rounded-2xl border border-white/15 px-4 text-sm font-black uppercase text-white/70">
         Open Full Record
       </Link>
+    </section>
+  );
+}
+
+function FullRecordView({ deficiency, onBack }: { deficiency: Deficiency; onBack: () => void }) {
+  const photoUrl = deficiency.photoPath ? supabase.storage.from("deficiency-photos").getPublicUrl(deficiency.photoPath).data.publicUrl : null;
+  return (
+    <section className="rounded-[24px] border border-white/12 bg-[#111111] p-5 shadow-[0_20px_44px_rgba(0,0,0,0.36)]">
+      <button type="button" onClick={onBack} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-white/12 px-3 text-sm font-bold text-white/75">
+        <ChevronLeft className="h-4 w-4" />
+        Back to Detail
+      </button>
+      <p className="mt-5 text-xs font-black uppercase tracking-[0.22em] text-[#ef2b2d]">Full Record</p>
+      <div className="mt-2 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-white/45">{deficiency.deficiencyNumber ?? "Deficiency"}</p>
+          <h1 className="mt-2 text-2xl font-black">{deficiency.description ?? "No description"}</h1>
+        </div>
+        <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-black uppercase ${statusClasses(deficiency.status)}`}>{deficiency.status ?? "Unknown"}</span>
+      </div>
+      <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
+        <DetailRow label="Category" value={deficiency.category ?? "Uncategorized"} />
+        <DetailRow label="Priority" value={deficiency.priority ?? "Not set"} />
+        <DetailRow label="Related Item" value={deficiency.relatedItem ?? "None"} />
+        <DetailRow label="Reported By" value={deficiency.reportedByName ?? "Unknown"} />
+        <DetailRow label="Reported" value={formatDate(deficiency.reportedAt)} />
+        {deficiency.location ? <DetailRow label="Location" value={deficiency.location} /> : null}
+      </dl>
+      {photoUrl ? <img src={photoUrl} alt="Deficiency photo" className="mt-5 max-h-80 w-full rounded-2xl border border-white/12 object-cover" /> : null}
     </section>
   );
 }
