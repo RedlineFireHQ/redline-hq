@@ -38,6 +38,7 @@ export type SimpleMaintenanceRequirementDraft = {
 export type SimpleApparatusConfigurationDraft = {
   checkFrequency: CheckFrequencyOption | "";
   customCheckFrequency: string;
+  checklistRequiredOverride: boolean | null;
   maintenanceRequirements: SimpleMaintenanceRequirementDraft[];
 };
 
@@ -66,6 +67,7 @@ export function createBlankApparatusConfiguration(): SimpleApparatusConfiguratio
   return {
     checkFrequency: "",
     customCheckFrequency: "",
+    checklistRequiredOverride: null,
     maintenanceRequirements: [],
   };
 }

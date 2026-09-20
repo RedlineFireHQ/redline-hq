@@ -96,6 +96,7 @@ type TrainingEventRow = {
 
 type OutsideSubmissionRow = {
   id: string;
+  status: string;
   title: string;
   training_date: string;
   hours: number | string | null;
@@ -642,22 +643,18 @@ async function loadMemberEmsSources(
     });
   }
 
-  const { data: outsideData, error: outsideError } = await supabase
-    .from("training_outside_submissions")
-    .select(
-      "id, title, training_date, hours, category_id, is_ems_training, ems_core_topic, ems_needs_review, ems_provider_name, ems_course_definition_id",
-    )
-    .eq("department_id", departmentId)
-    .eq("member_id", memberId)
-    .eq("status", "approved")
-    .eq("is_ems_training", true);
+  const { data: outsideData, error: outsideError } = await supabase.rpc(
+    "get_member_training_outside_submissions",
+    { p_department_id: departmentId, p_member_id: memberId },
+  );
 
   if (outsideError) {
     throw new Error(outsideError.message || "Unable to load approved outside EMS training.");
   }
 
-  const outsideRows = (outsideData ?? []).map((row) => ({
+  const outsideRows = ((outsideData ?? []) as OutsideSubmissionRow[]).filter((row) => row.status === "approved" && row.is_ems_training === true).map((row) => ({
     id: String(row.id),
+    status: row.status,
     title: typeof row.title === "string" ? row.title : "Self-Reported Training",
     training_date: typeof row.training_date === "string" ? row.training_date : "",
     hours: typeof row.hours === "number" || typeof row.hours === "string" ? row.hours : null,

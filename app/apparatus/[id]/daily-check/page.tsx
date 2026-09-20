@@ -540,7 +540,10 @@ export default async function DailyCheckPage({
       : Promise.resolve({ data: [], error: null }),
   ]);
 
-  const checklistRequired = checklistSettingRow?.require_checklist === true;
+  const checklistRequired =
+    typeof apparatus?.checklist_required_override === "boolean"
+      ? apparatus.checklist_required_override
+      : checklistSettingRow?.require_checklist === true;
   const checklistItems = ((checklistItemRowsData ?? []) as Array<{ id: string; is_required: boolean }>).map(
     (row) => ({
       id: row.id,

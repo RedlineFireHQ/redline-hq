@@ -29,6 +29,7 @@ export const APP_PERMISSION_KEYS = [
   "apparatus_checks_management",
   "pump_testing_management",
   "maintenance_management",
+  "maintenance_field_entry",
   "deficiency_edit_any",
   "deficiency_resolve",
   "deficiency_management",
@@ -112,7 +113,7 @@ export type AppPermissionOption = {
 
 export function getAppPermissionCategory(permissionKey: string): string {
   if (permissionKey.startsWith("training_") || permissionKey === "homework_assignment") return "Training";
-  if (permissionKey.startsWith("apparatus_") || permissionKey === "maintenance_management" || permissionKey === "pump_testing_management") return "Apparatus";
+  if (permissionKey.startsWith("apparatus_") || permissionKey === "maintenance_management" || permissionKey === "maintenance_field_entry" || permissionKey === "pump_testing_management") return "Apparatus";
   if (permissionKey.startsWith("deficiency_")) return "Deficiencies";
   if (permissionKey.includes("fire_hose")) return "Fire Hose";
   if (permissionKey.includes("scba_pack")) return "SCBA Packs";

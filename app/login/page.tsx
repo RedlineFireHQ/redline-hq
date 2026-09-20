@@ -10,6 +10,10 @@ import { supabase } from "@/lib/supabase";
 
 type AuthView = "sign_in" | "recovery";
 
+function getPostLoginDestination() {
+	return window.matchMedia("(max-width: 767px)").matches ? "/mobile" : "/";
+}
+
 export default function LoginPage() {
 	const router = useRouter();
 	const [email, setEmail] = useState("");
@@ -20,7 +24,6 @@ export default function LoginPage() {
 	const [infoMessage, setInfoMessage] = useState<string | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [isSendingReset, setIsSendingReset] = useState(false);
-	const [isReady, setIsReady] = useState(false);
 	const [showPassword, setShowPassword] = useState(false);
 	const [showRecoveryPassword, setShowRecoveryPassword] = useState(false);
 	const [view, setView] = useState<AuthView>("sign_in");
@@ -37,19 +40,9 @@ export default function LoginPage() {
 
 	useEffect(() => {
 		if (!isLoading && session && view !== "recovery") {
-			router.replace("/");
+			router.replace(getPostLoginDestination());
 		}
 	}, [isLoading, router, session, view]);
-
-	useEffect(() => {
-		const animationFrame = window.requestAnimationFrame(() => {
-			setIsReady(true);
-		});
-
-		return () => {
-			window.cancelAnimationFrame(animationFrame);
-		};
-	}, []);
 
 	async function handleSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
@@ -73,7 +66,7 @@ export default function LoginPage() {
 		} = await supabase.auth.getUser();
 		const mustChangePassword = signedInUser?.user_metadata?.must_change_password === true;
 
-		router.replace(mustChangePassword ? "/change-password?first=1" : "/");
+		router.replace(mustChangePassword ? "/change-password?first=1" : getPostLoginDestination());
 		router.refresh();
 	}
 
@@ -137,7 +130,7 @@ export default function LoginPage() {
 	return (
 		<main className="min-h-screen bg-[#050608] text-white">
 			<div className="grid min-h-screen lg:grid-cols-[1.4fr_0.96fr]">
-				<section className="relative min-h-[34vh] overflow-hidden border-b border-white/10 bg-black lg:min-h-screen lg:border-b-0 lg:border-r lg:border-white/10">
+				<section className="relative hidden overflow-hidden border-b border-white/10 bg-black lg:block lg:min-h-screen lg:border-b-0 lg:border-r lg:border-white/10">
 					<Image
 						src="/branding/images/redlineloginpage.png"
 						alt="Firefighter standing in front of engine"
@@ -151,22 +144,18 @@ export default function LoginPage() {
 					<div className="absolute inset-x-0 bottom-0 h-[34%] bg-[linear-gradient(180deg,rgba(0,0,0,0)_0%,rgba(0,0,0,0.58)_100%)]" />
 				</section>
 
-				<section className="relative flex min-h-[66vh] items-center bg-[#0a0c0f] px-6 py-10 sm:px-8 lg:min-h-screen lg:items-start lg:px-12 lg:py-12 xl:px-16 xl:py-14">
+				<section className="relative flex min-h-screen items-center bg-[#0a0c0f] px-6 py-10 sm:px-8 lg:min-h-screen lg:items-start lg:px-12 lg:py-12 xl:px-16 xl:py-14">
 					<div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.015)_0%,rgba(255,255,255,0)_18%),radial-gradient(circle_at_top,rgba(239,43,45,0.06),transparent_30%)]" />
 					<div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.02)_0%,rgba(255,255,255,0)_28%)]" />
-					<div
-						className={`relative z-10 mx-auto w-full max-w-[460px] transition-all duration-500 ease-out ${
-							isReady ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
-						}`}
-					>
+					<div className="relative z-10 mx-auto w-full max-w-[460px]">
 						<div className="mb-8 sm:mb-10 lg:mt-4">
-							<div className="relative ml-[50px] h-[126px] w-[270px] max-w-full sm:h-[152px] sm:w-[340px] lg:h-[166px] lg:w-[372px]">
+							<div className="relative mx-auto h-[126px] w-[270px] max-w-full sm:h-[152px] sm:w-[340px] lg:ml-[50px] lg:h-[166px] lg:w-[372px]">
 								<Image
 								src="/branding/images/redlinesidebarlogo.png"
 									alt="Redline HQ"
 									fill
 									priority
-									className="object-contain object-left"
+									className="object-contain object-center lg:object-left"
 									sizes="(max-width: 640px) 270px, (max-width: 1023px) 340px, 372px"
 								/>
 							</div>
@@ -314,10 +303,10 @@ export default function LoginPage() {
 
 									<button
 										type="submit"
-										disabled={isSubmitting || isLoading}
+										disabled={isSubmitting}
 										className="flex h-[58px] w-full items-center justify-center rounded-xl bg-[#ef2b2d] text-[1.05rem] font-semibold uppercase tracking-[0.05em] text-white transition hover:bg-[#ff383a] disabled:cursor-not-allowed disabled:opacity-60"
 									>
-										{isSubmitting || isLoading ? "Signing In..." : "Sign In"}
+										{isSubmitting ? "Signing In..." : "Sign In"}
 									</button>
 
 									<div className="flex items-center justify-between gap-4 pt-1 text-sm text-zinc-400">

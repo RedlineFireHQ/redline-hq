@@ -496,19 +496,14 @@ export default async function MyReadinessPage() {
       .eq("department_id", currentMember.departmentId)
       .eq("member_id", currentMember.id)
       .eq("attendance_status", "attending"),
-    supabase
-      .from("training_outside_submissions")
-      .select("id, title, category_id, training_date, hours, is_ems_training, ems_core_topic, ems_needs_review, status, created_at")
-      .eq("department_id", currentMember.departmentId)
-      .eq("member_id", currentMember.id)
-      .eq("status", "approved")
-      .order("training_date", { ascending: false }),
-    supabase
-      .from("training_outside_submissions")
-      .select("id, title, category_id, training_date, hours, is_ems_training, ems_core_topic, ems_needs_review, status, created_at")
-      .eq("department_id", currentMember.departmentId)
-      .eq("member_id", currentMember.id)
-      .order("created_at", { ascending: false }),
+    supabase.rpc("get_member_training_outside_submissions", { p_department_id: currentMember.departmentId, p_member_id: currentMember.id }).then((result) => ({
+      data: ((result.data ?? []) as OutsideSubmissionRow[]).filter((row) => row.status === "approved").sort((left, right) => String(right.training_date).localeCompare(String(left.training_date))),
+      error: result.error,
+    })),
+    supabase.rpc("get_member_training_outside_submissions", { p_department_id: currentMember.departmentId, p_member_id: currentMember.id }).then((result) => ({
+      data: ((result.data ?? []) as OutsideSubmissionRow[]).sort((left, right) => String(right.created_at).localeCompare(String(left.created_at))),
+      error: result.error,
+    })),
     supabase
       .from("member_certifications")
       .select("id, certification_id, certificate_number, issued_at, expires_at, supporting_document_id, created_at, updated_at")

@@ -8,6 +8,7 @@ import EmsSupplyFormModal, {
   type EmsSupplyUnitOptionValue,
 } from "@/components/inventory/EmsSupplyFormModal";
 import EmsInventorySwitch from "@/components/inventory/EmsInventorySwitch";
+import QrLabelDialog from "@/components/qr/QrLabelDialog";
 
 type StockStatus = "Out of Stock" | "Critical" | "Low" | "Normal";
 type SupplyFilter = "All" | "Normal" | "Low" | "Critical" | "Out of Stock" | "Inactive";
@@ -412,6 +413,7 @@ export default function EmsSupplyWorkspace({
   const [isActionSaving, setIsActionSaving] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isCheckoutSubmitting, setIsCheckoutSubmitting] = useState(false);
+  const [isQrDialogOpen, setIsQrDialogOpen] = useState(false);
 
   useEffect(() => {
     if (!toastMessage) {
@@ -1307,6 +1309,13 @@ export default function EmsSupplyWorkspace({
                     </button>
                     <button
                       type="button"
+                      onClick={() => setIsQrDialogOpen(true)}
+                      className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+                    >
+                      QR Code
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => openQuantityAction("restock")}
                       className="rounded-lg border border-emerald-500/30 bg-emerald-900/20 px-3 py-2 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-900/30"
                     >
@@ -1417,6 +1426,7 @@ export default function EmsSupplyWorkspace({
         onClose={() => setIsCheckoutOpen(false)}
         onSubmit={submitCheckout}
       />
+      {canManageSupplies && isQrDialogOpen && selectedItem ? <QrLabelDialog title={selectedItem.item_name} subtitle="EMS Supply" value={selectedItem.qr_identifier} onClose={() => setIsQrDialogOpen(false)} /> : null}
     </div>
   );
 }

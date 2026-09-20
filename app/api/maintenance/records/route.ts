@@ -1,5 +1,5 @@
 import { getCurrentMember } from "@/lib/current-member";
-import { hasDepartmentPermission } from "@/lib/member-permissions";
+import { hasAssignedDepartmentPermission, hasDepartmentPermission } from "@/lib/member-permissions";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -51,8 +51,16 @@ export async function POST(request: Request) {
       .eq("active", true)
       .maybeSingle();
     if (!activeMember) return jsonResponse({ ok: false, error: "Unauthorized" }, 401);
-    if (!(await hasDepartmentPermission(supabase, currentMember.departmentId, currentMember.role, "maintenance_management"))) {
-      return jsonResponse({ ok: false, error: "Maintenance management permission is required." }, 403);
+    const [canManageMaintenance, canEnterFieldMaintenance] = await Promise.all([
+      hasDepartmentPermission(supabase, currentMember.departmentId, currentMember.role, "maintenance_management"),
+      hasAssignedDepartmentPermission(supabase, currentMember.departmentId, "maintenance_field_entry"),
+    ]);
+    if (!canManageMaintenance && !canEnterFieldMaintenance) {
+      return jsonResponse({ ok: false, error: "Maintenance field entry permission is required." }, 403);
+    }
+
+    if (canEnterFieldMaintenance && !canManageMaintenance) {
+      payload.completed_by = currentMember.id;
     }
 
     const { data: apparatus } = await supabase
@@ -71,6 +79,16 @@ export async function POST(request: Request) {
         .eq("department_id", currentMember.departmentId)
         .maybeSingle();
       if (!deficiency) return jsonResponse({ ok: false, error: "Deficiency is invalid for this department." }, 400);
+    }
+
+    if (payload.completed_by) {
+      const { data: completedByMember } = await supabase
+        .from("members")
+        .select("id")
+        .eq("id", payload.completed_by)
+        .eq("department_id", currentMember.departmentId)
+        .maybeSingle();
+      if (!completedByMember) return jsonResponse({ ok: false, error: "Completed-by member is invalid for this department." }, 400);
     }
 
     const admin = createSupabaseAdminClient();

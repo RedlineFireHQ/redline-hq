@@ -141,6 +141,29 @@ export default function ApparatusSimpleConfigurationForm({
         ) : null}
       </section>
 
+      <section className="space-y-3 rounded-xl border border-white/10 bg-[#111111] p-4">
+        {renderFieldLabel(
+          "Checklist Requirement",
+          "Choose whether this apparatus follows the department default or uses its own requirement.",
+        )}
+        <select
+          value={value.checklistRequiredOverride === null ? "default" : value.checklistRequiredOverride ? "required" : "not-required"}
+          onChange={(event) =>
+            onChange({
+              ...value,
+              checklistRequiredOverride:
+                event.target.value === "default" ? null : event.target.value === "required",
+            })
+          }
+          disabled={!canEdit}
+          className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-white outline-none transition focus:border-red-500/60 disabled:cursor-not-allowed disabled:opacity-70"
+        >
+          <option value="default">Use Department Default</option>
+          <option value="required">Require Checklist</option>
+          <option value="not-required">Do Not Require Checklist</option>
+        </select>
+      </section>
+
       <section className="space-y-4 rounded-xl border border-white/10 bg-[#111111] p-4">
         {renderFieldLabel(
           "Maintenance",

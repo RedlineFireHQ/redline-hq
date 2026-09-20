@@ -90,6 +90,25 @@ export type ReportSummaryItem = {
 	value: string;
 };
 
+export type ReportMemberBreakdownItem = {
+	memberId: string;
+	memberName: string;
+	totalHours: number;
+	recordCount: number;
+};
+
+export type ReportCategoryBreakdownItem = {
+	categoryId: string | null;
+	categoryName: string;
+	totalHours: number;
+	recordCount: number;
+};
+
+export type ReportBreakdowns = {
+	members?: ReportMemberBreakdownItem[];
+	categories?: ReportCategoryBreakdownItem[];
+};
+
 export type ReportResultPayload = {
 	ok: true;
 	comingSoon: boolean;
@@ -103,6 +122,7 @@ export type ReportResultPayload = {
 	period: ReportPeriod;
 	filtersApplied: AppliedReportFilter[];
 	summary?: ReportSummaryItem[];
+	breakdowns?: ReportBreakdowns;
 	columns: ReportColumn[];
 	rows: ReportRow[];
 	totalRows: number;

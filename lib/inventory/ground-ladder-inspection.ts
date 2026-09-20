@@ -1,3 +1,22 @@
+export type GroundLadderInspectionResult = "ready" | "out-of-service";
+export type GroundLadderInspectionChecklistStatus = "pass" | "fail" | "not_applicable";
+
+export const GROUND_LADDER_INSPECTION_ITEMS: Array<{
+  key: string;
+  label: string;
+  allowNotApplicable?: boolean;
+}> = [
+  { key: "beams-and-rails", label: "Beams & Rails" },
+  { key: "rungs", label: "Rungs" },
+  { key: "pawls-dogs", label: "Pawls / Dogs" },
+  { key: "halyard-pulley", label: "Halyard & Pulley" },
+  { key: "heat-sensors", label: "Heat Sensors" },
+  { key: "butt-spurs-feet", label: "Butt Spurs & Feet" },
+  { key: "guides-stops", label: "Guides & Stops" },
+  { key: "roof-hooks", label: "Roof Hooks / Folding Hooks", allowNotApplicable: true },
+  { key: "cleanliness", label: "Cleanliness" },
+];
+
 export function buildGroundLadderInspectionNotes({
   existingNotes,
   helperSummary,
@@ -10,7 +29,7 @@ export function buildGroundLadderInspectionNotes({
   helperSummary?: string | null;
   checklistSummary?: string | null;
   inspectionNotes?: string | null;
-  result: "ready" | "out-of-service";
+  result: GroundLadderInspectionResult;
   timestamp?: Date;
 }) {
   const summarySections = [existingNotes?.trim(), helperSummary?.trim(), checklistSummary?.trim()].filter(Boolean);

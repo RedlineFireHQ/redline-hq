@@ -1,0 +1,17 @@
+drop policy if exists gas_monitor_calibrations_insert_by_department
+on public.gas_monitor_calibrations;
+
+drop policy if exists gas_monitor_calibrations_update_by_department
+on public.gas_monitor_calibrations;
+
+drop policy if exists gas_monitor_calibration_sessions_insert_by_department
+on public.gas_monitor_calibration_sessions;
+
+drop policy if exists gas_monitor_calibration_sessions_update_by_department
+on public.gas_monitor_calibration_sessions;
+
+drop policy if exists gas_monitor_calibration_session_results_insert_by_department
+on public.gas_monitor_calibration_session_results;
+
+drop policy if exists gas_monitor_calibration_session_results_update_by_department
+on public.gas_monitor_calibration_session_results;

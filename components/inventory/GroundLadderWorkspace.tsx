@@ -15,8 +15,11 @@ import type {
 } from "@/app/inventory/ground-ladders/data";
 import {
 	buildGroundLadderInspectionNotes,
+	GROUND_LADDER_INSPECTION_ITEMS,
 	getGroundLadderInspectionDateFromNotes,
 	parseGroundLadderInspectionHistory,
+	type GroundLadderInspectionChecklistStatus,
+	type GroundLadderInspectionResult,
 } from "@/lib/inventory/ground-ladder-inspection";
 
 const STATION_SUPPLY_OPTION = {
@@ -53,9 +56,6 @@ type GroundLadderServiceTestFormValues = {
 	notes: string;
 };
 
-type GroundLadderInspectionResult = "ready" | "out-of-service";
-type GroundLadderInspectionChecklistStatus = "pass" | "fail" | "not_applicable";
-
 type GroundLadderDeficiencyHistoryRecord = {
 	id: string;
 	ground_ladder_id: string;
@@ -74,18 +74,6 @@ const GROUND_LADDER_PROCEDURE_ITEMS = [
 	"Confirm heat sensor labels and warning plates are present and legible",
 	"Evaluate butt spurs, feet, and contact surfaces for condition",
 	"Verify ladder clean, lubricated, and ready for safe deployment",
-];
-
-const GROUND_LADDER_INSPECTION_ITEMS: Array<{ key: string; label: string; allowNotApplicable?: boolean }> = [
-	{ key: "beams-and-rails", label: "Beams & Rails" },
-	{ key: "rungs", label: "Rungs" },
-	{ key: "pawls-dogs", label: "Pawls / Dogs" },
-	{ key: "halyard-pulley", label: "Halyard & Pulley" },
-	{ key: "heat-sensors", label: "Heat Sensors" },
-	{ key: "butt-spurs-feet", label: "Butt Spurs & Feet" },
-	{ key: "guides-stops", label: "Guides & Stops" },
-	{ key: "roof-hooks", label: "Roof Hooks / Folding Hooks", allowNotApplicable: true },
-	{ key: "cleanliness", label: "Cleanliness" },
 ];
 
 function toTitleCase(value: string) {

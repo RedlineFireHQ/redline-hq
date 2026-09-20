@@ -50,6 +50,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const configurationRecord =
       typeof configuration === "object" && configuration !== null ? (configuration as Record<string, unknown>) : {};
+    const checklistRequiredOverride =
+      configurationRecord.checklistRequiredOverride === true
+        ? true
+        : configurationRecord.checklistRequiredOverride === false
+          ? false
+          : null;
     const checkFrequencyValue = typeof configurationRecord.checkFrequency === "string" ? configurationRecord.checkFrequency.trim() : "";
     const customCheckFrequencyValue = typeof configurationRecord.customCheckFrequency === "string" ? configurationRecord.customCheckFrequency.trim() : "";
     const checkFrequency =
@@ -69,6 +75,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       .from("apparatus")
       .update({
         check_frequency: checkFrequency || null,
+        checklist_required_override: checklistRequiredOverride,
       })
       .eq("id", id)
       .eq("department_id", currentMember.departmentId);

@@ -75,7 +75,10 @@ export default async function ApparatusChecklistPage({
       .eq("member_id", currentMember.id),
   ]);
 
-  const checklistRequired = settingRow?.require_checklist === true;
+  const checklistRequired =
+    typeof apparatus.checklist_required_override === "boolean"
+      ? apparatus.checklist_required_override
+      : settingRow?.require_checklist === true;
 
   const items = ((checklistItemRows ?? []) as ChecklistItemRow[]).map((row) => ({
     id: row.id,

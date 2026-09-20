@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import ArchiveApparatusControls from "@/app/apparatus/[id]/information/ArchiveApparatusControls";
+import ApparatusQrLabelButton from "@/components/apparatus/ApparatusQrLabelButton";
 import QuickFactsCard from "@/components/apparatus/QuickFactsCard";
 import ServiceSpecificationsCard from "@/components/apparatus/ServiceSpecificationsCard";
 import ApparatusSimpleConfigurationCard from "@/components/apparatus/ApparatusSimpleConfigurationCard";
@@ -201,6 +202,8 @@ export default async function ApparatusInformationPage({
       currentCheckFrequency === "Custom" && currentCheckIntervalDays !== null
         ? `Every ${currentCheckIntervalDays} days`
         : "",
+    checklistRequiredOverride:
+      typeof truck.checklist_required_override === "boolean" ? truck.checklist_required_override : null,
     maintenanceRequirements: ((maintenanceRequirementRowsResult.data ?? []) as Array<Record<string, unknown>>).map((row) => {
       const methods = maintenanceByRequirementId.get(typeof row.id === "string" ? row.id : "") ?? [];
       const firstMethod = methods[0] ?? null;
@@ -345,6 +348,7 @@ export default async function ApparatusInformationPage({
                 ) : null}
               </div>
             ) : null}
+            {!isArchived ? <ApparatusQrLabelButton apparatusId={truck.id} apparatusName={truck.name} /> : null}
           </div>
         ) : null}
 

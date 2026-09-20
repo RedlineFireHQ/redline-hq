@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { department } from "@/lib/department";
+import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import {
 	calculateEmsReadiness,
 	type EmsManualAllocation,
@@ -5327,6 +5328,92 @@ async function runTrainingReport(
 		});
 
 	const totalHours = filteredRecords.reduce((total, record) => total + record.hours, 0);
+	const filteredMemberIds = Array.from(new Set(filteredRecords.map((record) => record.memberId).filter(Boolean)));
+	const memberDirectoryById = new Map<string, string>();
+
+	if (filteredMemberIds.length > 0) {
+		const admin = createSupabaseAdminClient();
+		const memberDirectoryQuery = await admin
+			.from("members")
+			.select("id, first_name, last_name")
+			.eq("department_id", context.departmentId)
+			.in("id", filteredMemberIds);
+
+		if (memberDirectoryQuery.error) {
+			return buildError(
+				"QUERY_ERROR",
+				memberDirectoryQuery.error.message || "Unable to resolve Training member names.",
+			);
+		}
+
+		for (const member of (memberDirectoryQuery.data ?? []) as MemberNameRow[]) {
+			const memberName = `${normalizeText(member.first_name)} ${normalizeText(member.last_name)}`.trim();
+			if (memberName) {
+				memberDirectoryById.set(member.id, memberName);
+			}
+		}
+	}
+
+	const memberBreakdownById = new Map<string, {
+		memberId: string;
+		memberName: string;
+		totalHours: number;
+		recordCount: number;
+	}>();
+
+	for (const record of filteredRecords) {
+		const memberName = memberDirectoryById.get(record.memberId);
+		if (!memberName) {
+			return buildError(
+				"QUERY_ERROR",
+				`Unable to resolve Training member ${record.memberId} within the report department.`,
+			);
+		}
+
+		const current = memberBreakdownById.get(record.memberId) ?? {
+			memberId: record.memberId,
+			memberName,
+			totalHours: 0,
+			recordCount: 0,
+		};
+		current.totalHours += record.hours;
+		current.recordCount += 1;
+		memberBreakdownById.set(record.memberId, current);
+	}
+
+	const memberBreakdown = Array.from(memberBreakdownById.values()).sort((left, right) => {
+		if (right.totalHours !== left.totalHours) {
+			return right.totalHours - left.totalHours;
+		}
+		return left.memberName.localeCompare(right.memberName, undefined, { sensitivity: "base" });
+	});
+
+	const categoryBreakdownByKey = new Map<string, {
+		categoryId: string | null;
+		categoryName: string;
+		totalHours: number;
+		recordCount: number;
+	}>();
+
+	for (const record of filteredRecords) {
+		const categoryKey = record.categoryId ?? `name:${record.categoryName}`;
+		const current = categoryBreakdownByKey.get(categoryKey) ?? {
+			categoryId: record.categoryId,
+			categoryName: record.categoryName,
+			totalHours: 0,
+			recordCount: 0,
+		};
+		current.totalHours += record.hours;
+		current.recordCount += 1;
+		categoryBreakdownByKey.set(categoryKey, current);
+	}
+
+	const categoryBreakdown = Array.from(categoryBreakdownByKey.values()).sort((left, right) => {
+		if (right.totalHours !== left.totalHours) {
+			return right.totalHours - left.totalHours;
+		}
+		return left.categoryName.localeCompare(right.categoryName, undefined, { sensitivity: "base" });
+	});
 	const pageSize = request.pageSize === 0 ? Number.MAX_SAFE_INTEGER : Math.max(1, Math.min(Number(request.pageSize) || 50, 200));
 	const page = Math.max(1, Number(request.page) || 1);
 	const offset = (page - 1) * pageSize;
@@ -5375,6 +5462,10 @@ async function runTrainingReport(
 		},
 		filtersApplied: buildAppliedFilters(source, request.filters, request.searchTerm),
 		summary,
+		breakdowns: {
+			members: memberBreakdown,
+			categories: categoryBreakdown,
+		},
 		columns: source.columns,
 		rows: pagedRows,
 		totalRows: filteredRecords.length,
