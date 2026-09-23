@@ -34,12 +34,13 @@ export async function middleware(request: NextRequest) {
 
 	const { pathname } = request.nextUrl;
 	const isLoginRoute = pathname === "/login";
+	const isPrivacyRoute = pathname === "/privacy";
 	const isPublicRootRoute = pathname === "/";
 	const isPublicDemoRequestRoute = pathname === "/api/demo-request";
 	const isChangePasswordRoute = pathname === "/change-password";
 	const mustChangePassword = user?.user_metadata?.must_change_password === true;
 
-	if (!user && !isLoginRoute && !isPublicRootRoute && !isPublicDemoRequestRoute) {
+	if (!user && !isLoginRoute && !isPrivacyRoute && !isPublicRootRoute && !isPublicDemoRequestRoute) {
 		const url = request.nextUrl.clone();
 		url.pathname = "/login";
 		url.search = "";
