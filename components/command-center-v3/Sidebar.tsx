@@ -87,7 +87,7 @@ export default function Sidebar({ translucent = false }: SidebarProps) {
 
   return (
     <aside
-      className={`sticky top-0 flex h-screen w-[270px] flex-shrink-0 flex-col overflow-hidden border-r ${
+      className={`sticky top-0 flex h-screen w-[270px] flex-shrink-0 flex-col border-r ${
         translucent
           ? "border-white/15 bg-[#070708]/58 backdrop-blur-[2px]"
           : "border-white/10 bg-[#090909]"
@@ -96,7 +96,7 @@ export default function Sidebar({ translucent = false }: SidebarProps) {
 
       {/* ================= Logo ================= */}
 
-      <div className="flex flex-shrink-0 flex-col items-center border-b border-white/10 px-5 pt-8 pb-6">
+      <div className="flex flex-col items-center border-b border-white/10 px-5 pt-8 pb-6">
 
         <img
           src="/branding/images/redlinesidebarlogo.png"
@@ -114,7 +114,7 @@ export default function Sidebar({ translucent = false }: SidebarProps) {
 
       {/* ================= Navigation ================= */}
 
-      <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 pr-2 [scrollbar-width:thin] [scrollbar-color:#3f3f46_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-700/70">
+      <nav className="flex-1 px-3 py-4">
 
         <div className="space-y-1">
 
@@ -149,7 +149,7 @@ export default function Sidebar({ translucent = false }: SidebarProps) {
 
       {/* ================= User ================= */}
 
-      <div className="flex-shrink-0 border-t border-white/10 p-4">
+      <div className="border-t border-white/10 p-4">
 
         <button className="flex w-full items-center gap-3 rounded-xl p-3 transition hover:bg-[#171717]">
 

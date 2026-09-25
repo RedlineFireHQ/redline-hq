@@ -68,26 +68,26 @@ export default async function WeatherPanel() {
   ];
 
   return (
-    <section className="relative flex min-h-[155px] flex-col overflow-hidden rounded-[20px] border border-[rgba(255,255,255,0.08)] bg-[#111111] p-3 shadow-lg">
+    <section className="relative flex h-[155px] flex-col rounded-[20px] border border-[rgba(255,255,255,0.08)] bg-[#111111] p-3 shadow-lg">
       {/* Header */}
-      <div className="flex min-w-0 items-center justify-between gap-2">
+      <div className="flex items-center justify-between">
         <Image
           src="/branding/logos/redline-weather-logo.png"
           alt="Redline HQ Weather"
           width={180}
           height={30}
-          className="h-auto max-h-[50px] w-[min(219px,58%)] max-w-[219px] object-contain object-left"
+          className="h-[50px] w-[219px]"
           priority
         />
 
-        <div className="flex min-w-0 items-center justify-end gap-1">
-          <MapPin className="h-3.5 w-3.5 flex-shrink-0 text-[#A1A1AA]" />
-          <p className="truncate text-right text-[11px] font-[500] text-[#A1A1AA]">{weather.locationName}</p>
+        <div className="flex items-center gap-1">
+          <MapPin className="h-3.5 w-3.5 text-[#A1A1AA]" />
+          <p className="text-[11px] font-[500] text-[#A1A1AA]">{weather.locationName}</p>
         </div>
       </div>
 
       {/* Current Conditions */}
-      <div className="mt-2 grid min-h-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-[1.1fr_0.9fr]">
+      <div className="mt-2 grid min-h-0 flex-1 grid-cols-[1.1fr_0.9fr] gap-2">
         <div className="flex min-h-0 flex-col justify-center rounded-[12px] bg-[#0d0d0d] px-2 py-1.5">
           <div className="flex items-center gap-2">
             <div className="relative flex h-[28px] w-[28px] items-center justify-center">
@@ -111,12 +111,12 @@ export default async function WeatherPanel() {
               key={label}
               className="flex items-center justify-between gap-2"
             >
-              <div className="flex min-w-0 items-center gap-2">
-                <Icon className="h-3.5 w-3.5 flex-shrink-0 text-[#A1A1AA]" />
-                <p className="truncate text-[11px] text-[#A1A1AA]">{label}</p>
+              <div className="flex items-center gap-2">
+                <Icon className="h-3.5 w-3.5 text-[#A1A1AA]" />
+                <p className="text-[11px] text-[#A1A1AA]">{label}</p>
               </div>
 
-              <p className="min-w-0 text-right text-[12px] font-[600] text-white">{value}</p>
+              <p className="text-[12px] font-[600] text-white">{value}</p>
             </div>
           ))}
         </div>

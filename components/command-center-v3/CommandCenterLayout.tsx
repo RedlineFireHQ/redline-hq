@@ -9,32 +9,32 @@ import WeatherPanel from "./WeatherPanel";
 export default function CommandCenterLayout() {
   return (
     <div className="flex flex-col gap-4 pb-10">
-      <div className="grid grid-cols-1 auto-rows-auto gap-4 lg:grid-cols-2 2xl:grid-cols-12">
-        <div className="lg:col-span-2 2xl:col-span-7">
+      <div className="grid grid-cols-12 auto-rows-auto gap-4">
+        <div className="col-span-7">
           <ReadinessPanel />
         </div>
 
-        <div className="lg:col-span-1 2xl:col-span-5">
+        <div className="col-span-5">
           <MissionPanel />
         </div>
 
-        <div className="lg:col-span-1 2xl:col-span-4 2xl:-translate-y-[93px]">
+        <div className="col-span-4 -translate-y-[93px]">
           <MyReadinessPanel />
         </div>
 
-        <div className="lg:col-span-1 2xl:col-span-3 2xl:-translate-y-[93px]">
+        <div className="col-span-3 -translate-y-[93px]">
           <TrainingPanel />
         </div>
 
-        <div className="lg:col-span-1 2xl:col-span-5">
+        <div className="col-span-5">
           <AlertsPanel />
         </div>
 
-        <div className="lg:col-span-1 2xl:col-start-5 2xl:col-span-3 2xl:-translate-y-[258px]">
+        <div className="col-start-5 col-span-3 -translate-y-[258px]">
           <WeatherPanel />
         </div>
 
-        <div className="lg:col-span-2 2xl:col-span-12 2xl:-translate-y-[253px]">
+        <div className="col-span-12 -translate-y-[253px]">
           <ApparatusPanel />
         </div>
       </div>
