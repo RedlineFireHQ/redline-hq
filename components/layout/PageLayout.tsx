@@ -33,19 +33,19 @@ export default function PageLayout({
         </>
       ) : null}
 
-      <div className="flex h-screen min-h-0">
+      <div className="flex h-screen">
         <Sidebar translucent={Boolean(environmentBackgroundUrl)} />
 
-        <div className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="relative z-10 flex min-w-0 flex-1 flex-col">
           <Header translucent={Boolean(environmentBackgroundUrl)} />
 
-          <main className={`min-h-0 flex-1 overflow-y-auto ${environmentBackgroundUrl ? "bg-transparent" : "bg-neutral-950"}`}>
+          <main className={`flex-1 overflow-y-auto ${environmentBackgroundUrl ? "bg-transparent" : "bg-neutral-950"}`}>
             <div className="w-full px-4 py-4 lg:px-6 xl:px-8">
               {children}
             </div>
           </main>
 
-          <div className="flex-shrink-0 border-t border-white/10 bg-neutral-950 px-4 lg:px-6 xl:px-8">
+          <div className="border-t border-white/10 bg-neutral-950 px-4 lg:px-6 xl:px-8">
             <Footer />
           </div>
         </div>

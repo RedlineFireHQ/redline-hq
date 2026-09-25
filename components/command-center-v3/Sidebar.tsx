@@ -96,15 +96,15 @@ export default function Sidebar({ translucent = false }: SidebarProps) {
 
       {/* ================= Logo ================= */}
 
-      <div className="flex flex-shrink-0 flex-col items-center border-b border-white/10 px-5 py-[clamp(1rem,3vh,2rem)]">
+      <div className="flex flex-shrink-0 flex-col items-center border-b border-white/10 px-5 pt-8 pb-6">
 
         <img
           src="/branding/images/redlinesidebarlogo.png"
           alt="Redline HQ"
-          className="h-auto w-[clamp(160px,22vh,220px)]"
+          className="h-auto w-[220px]"
         />
 
-        <div className="mt-[clamp(0.5rem,1.8vh,1rem)] text-center">
+        <div className="mt-4 text-center">
           <p className="text-[12px] font-semibold uppercase leading-5 tracking-[0.22em] text-zinc-300">
             {departmentName}
           </p>
@@ -149,7 +149,7 @@ export default function Sidebar({ translucent = false }: SidebarProps) {
 
       {/* ================= User ================= */}
 
-      <div className="flex-shrink-0 border-t border-white/10 p-[clamp(0.5rem,1.6vh,1rem)]">
+      <div className="flex-shrink-0 border-t border-white/10 p-4">
 
         <button className="flex w-full items-center gap-3 rounded-xl p-3 transition hover:bg-[#171717]">
 
