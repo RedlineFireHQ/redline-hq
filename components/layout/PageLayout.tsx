@@ -15,7 +15,7 @@ export default function PageLayout({
   environmentBackgroundPosition = "center center",
 }: PageLayoutProps) {
   return (
-    <div className="relative h-screen overflow-hidden bg-neutral-950 text-white">
+    <div className="relative min-h-screen bg-neutral-950 text-white">
       {environmentBackgroundUrl ? (
         <>
           <div
@@ -33,13 +33,13 @@ export default function PageLayout({
         </>
       ) : null}
 
-      <div className="flex h-screen">
+      <div className="flex min-h-screen">
         <Sidebar translucent={Boolean(environmentBackgroundUrl)} />
 
         <div className="relative z-10 flex min-w-0 flex-1 flex-col">
           <Header translucent={Boolean(environmentBackgroundUrl)} />
 
-          <main className={`flex-1 overflow-y-auto ${environmentBackgroundUrl ? "bg-transparent" : "bg-neutral-950"}`}>
+          <main className={`flex-1 ${environmentBackgroundUrl ? "bg-transparent" : "bg-neutral-950"}`}>
             <div className="w-full px-4 py-4 lg:px-6 xl:px-8">
               {children}
             </div>

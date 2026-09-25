@@ -87,7 +87,7 @@ export default function Sidebar({ translucent = false }: SidebarProps) {
 
   return (
     <aside
-      className={`sticky top-0 flex h-screen w-[270px] flex-shrink-0 flex-col border-r ${
+      className={`flex w-[270px] flex-shrink-0 flex-col border-r ${
         translucent
           ? "border-white/15 bg-[#070708]/58 backdrop-blur-[2px]"
           : "border-white/10 bg-[#090909]"
