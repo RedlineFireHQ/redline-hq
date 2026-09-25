@@ -46,11 +46,11 @@ export default async function TodaysReadinessPanel() {
 
         {/* Header */}
 
-        <p className="text-[14px] font-bold uppercase tracking-[2px] text-[#EF2B2D]">
+        <p className="relative z-10 text-[14px] font-bold uppercase tracking-[2px] text-[#EF2B2D]">
           APPARATUS READINESS
         </p>
 
-        <p className="mt-2 max-w-[55%] text-[15px] leading-5 text-[#B3B3B3]">
+        <p className="relative z-10 mt-2 max-w-[55%] text-[15px] leading-5 text-[#B3B3B3]">
           Current readiness across department apparatus.
         </p>
 
@@ -60,7 +60,7 @@ export default async function TodaysReadinessPanel() {
 
           {/* Score */}
 
-          <div className="flex items-start">
+          <div className="relative z-10 flex items-start">
 
             <span className="text-[58px] font-black leading-none text-white">
               {readinessScore === null ? "--" : readinessScore}
@@ -72,7 +72,7 @@ export default async function TodaysReadinessPanel() {
 
           </div>
 
-          <p className="mt-2 text-[16px] font-bold uppercase tracking-[2px] text-[#EF2B2D]">
+          <p className="relative z-10 mt-2 text-[16px] font-bold uppercase tracking-[2px] text-[#EF2B2D]">
               {outOfServiceCount > 0
                 ? "OUT OF SERVICE RISK"
                   : unavailableCount > 0
@@ -88,7 +88,7 @@ export default async function TodaysReadinessPanel() {
 
           {/* Floating Shield */}
 
-          <div className="pointer-events-none absolute right-[-95px] top-[-170px] h-[485px] w-[485px]">
+          <div className="pointer-events-none absolute right-[-95px] top-[-170px] z-0 h-[388px] w-[388px]">
 
             <Image
               src="/branding/images/todays-readiness-shield.png"
@@ -102,7 +102,7 @@ export default async function TodaysReadinessPanel() {
 
           {/* Biggest Readiness Gain */}
 
-          <div className="mt-7 w-[50%]">
+          <div className="relative z-10 mt-7 w-[50%]">
 
             <p className="text-[10px] font-semibold uppercase tracking-[2px] text-[#EF2B2D]/90">
               TODAY&apos;S BIGGEST READINESS GAIN
