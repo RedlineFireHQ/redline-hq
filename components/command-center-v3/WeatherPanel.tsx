@@ -68,7 +68,7 @@ export default async function WeatherPanel() {
   ];
 
   return (
-    <section className="relative flex h-[155px] flex-col rounded-[20px] border border-[rgba(255,255,255,0.08)] bg-[#111111] p-3 shadow-lg">
+    <section className="relative flex h-[155px] w-[calc(100%+15px)] flex-col rounded-[20px] border border-[rgba(255,255,255,0.08)] bg-[#111111] p-3 shadow-lg">
       {/* Header */}
       <div className="flex items-center justify-between">
         <Image
