@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Bell, ChevronDown } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { supabase } from "@/lib/supabase";
 
@@ -34,12 +34,42 @@ function formatAlertTime(value: string | null) {
   });
 }
 
+const pageTitleRoutes = [
+  { href: "/inventory/ems-supplies", title: "EMS Supplies" },
+  { href: "/mobile", title: "Mobile" },
+  { href: "/my-readiness", title: "My Readiness" },
+  { href: "/apparatus", title: "Apparatus" },
+  { href: "/pre-plans", title: "Pre-Plans" },
+  { href: "/training", title: "Training" },
+  { href: "/personnel", title: "Personnel" },
+  { href: "/operations/deficiencies", title: "Deficiencies" },
+  { href: "/deficiencies", title: "Deficiencies" },
+  { href: "/maintenance", title: "Maintenance" },
+  { href: "/assets", title: "Inventory" },
+  { href: "/inventory", title: "Inventory" },
+  { href: "/reports", title: "Reports" },
+  { href: "/documents", title: "Documents" },
+  { href: "/settings", title: "Settings" },
+  { href: "/calendar", title: "Calendar" },
+  { href: "/department-readiness", title: "Department Readiness" },
+  { href: "/qualification-tracks", title: "Qualification Tracks" },
+] as const;
+
+function getPageTitle(pathname: string) {
+  if (pathname === "/") {
+    return "Command Center";
+  }
+
+  return pageTitleRoutes.find(({ href }) => pathname === href || pathname.startsWith(`${href}/`))?.title ?? "Command Center";
+}
+
 interface HeaderProps {
   translucent?: boolean;
 }
 
 export default function Header({ translucent = false }: HeaderProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, member, signOut, isLoading } = useAuth();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
@@ -221,6 +251,7 @@ export default function Header({ translucent = false }: HeaderProps) {
     hour: "numeric",
     minute: "2-digit",
   });
+  const pageTitle = getPageTitle(pathname);
 
   return (
     <header
@@ -235,7 +266,7 @@ export default function Header({ translucent = false }: HeaderProps) {
             className="text-[48px] font-[700] leading-none tracking-[-0.2px] text-white"
             style={{ fontFamily: '"Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif' }}
           >
-            Command Center
+            {pageTitle}
           </h1>
 
           <div className="mt-[2px] flex items-center gap-2 text-[18px] font-[500] text-[#A1A1AA]">
