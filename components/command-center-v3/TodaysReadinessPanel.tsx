@@ -56,39 +56,55 @@ export default async function TodaysReadinessPanel() {
 
         {/* Main Content */}
 
-        <div className="relative mt-2 flex-1">
+        <div className="relative z-10 mt-2 grid flex-1 grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(180px,0.42fr)] xl:items-center 2xl:block">
 
-          {/* Score */}
+          <div className="min-w-0">
+            {/* Score */}
 
-          <div className="relative z-10 flex items-start">
+            <div className="flex items-start">
 
-            <span className="text-[58px] font-black leading-none text-white">
-              {readinessScore === null ? "--" : readinessScore}
-            </span>
+              <span className="text-[58px] font-black leading-none text-white">
+                {readinessScore === null ? "--" : readinessScore}
+              </span>
 
-            <span className="mt-1 text-[22px] font-bold text-white">
-              %
-            </span>
+              <span className="mt-1 text-[22px] font-bold text-white">
+                %
+              </span>
 
+            </div>
+
+            <p className="mt-2 text-[16px] font-bold uppercase tracking-[2px] text-[#EF2B2D]">
+                {outOfServiceCount > 0
+                  ? "OUT OF SERVICE RISK"
+                    : unavailableCount > 0
+                      ? "READINESS UNAVAILABLE"
+                      : readinessScore === null
+                        ? configurationRequiredCount > 0
+                          ? "CONFIGURATION REQUIRED"
+                          : "NOT SCORED"
+                        : checksDueCount > 0
+                    ? "CHECKS DUE"
+                    : "READY TODAY"}
+            </p>
+
+            {/* Biggest Readiness Gain */}
+
+            <div className="mt-7 max-w-[min(100%,24rem)] 2xl:w-[50%]">
+
+              <p className="text-[10px] font-semibold uppercase tracking-[2px] text-[#EF2B2D]/90">
+                TODAY&apos;S BIGGEST READINESS GAIN
+              </p>
+
+              <h3 className="mt-2 text-[19px] font-bold leading-6 text-white">
+                {largestGapLabel}
+              </h3>
+
+            </div>
           </div>
-
-          <p className="relative z-10 mt-2 text-[16px] font-bold uppercase tracking-[2px] text-[#EF2B2D]">
-              {outOfServiceCount > 0
-                ? "OUT OF SERVICE RISK"
-                  : unavailableCount > 0
-                    ? "READINESS UNAVAILABLE"
-                    : readinessScore === null
-                      ? configurationRequiredCount > 0
-                        ? "CONFIGURATION REQUIRED"
-                        : "NOT SCORED"
-                      : checksDueCount > 0
-                  ? "CHECKS DUE"
-                  : "READY TODAY"}
-          </p>
 
           {/* Floating Shield */}
 
-          <div className="pointer-events-none absolute right-[-78px] top-[-135px] z-0 h-[clamp(260px,34vw,485px)] w-[clamp(260px,34vw,485px)] 2xl:right-[-95px] 2xl:top-[-170px]">
+          <div className="pointer-events-none relative mx-auto h-[clamp(190px,22vw,300px)] w-[clamp(190px,22vw,300px)] opacity-90 2xl:absolute 2xl:right-[-95px] 2xl:top-[-170px] 2xl:h-[485px] 2xl:w-[485px] 2xl:opacity-100">
 
             <Image
               src="/branding/images/todays-readiness-shield.png"
@@ -97,20 +113,6 @@ export default async function TodaysReadinessPanel() {
               priority
               className="object-contain drop-shadow-[0_0_60px_rgba(239,43,45,.45)]"
             />
-
-          </div>
-
-          {/* Biggest Readiness Gain */}
-
-          <div className="relative z-10 mt-7 max-w-[min(100%,24rem)] 2xl:w-[50%]">
-
-            <p className="text-[10px] font-semibold uppercase tracking-[2px] text-[#EF2B2D]/90">
-              TODAY&apos;S BIGGEST READINESS GAIN
-            </p>
-
-            <h3 className="mt-2 text-[19px] font-bold leading-6 text-white">
-              {largestGapLabel}
-            </h3>
 
           </div>
 
