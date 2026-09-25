@@ -88,7 +88,7 @@ export default async function TodaysReadinessPanel() {
 
           {/* Floating Shield */}
 
-          <div className="pointer-events-none absolute right-[-95px] top-[-170px] z-0 h-[388px] w-[388px]">
+          <div className="pointer-events-none absolute right-[-95px] top-[-120px] z-0 h-[388px] w-[388px]">
 
             <Image
               src="/branding/images/todays-readiness-shield.png"
