@@ -27,6 +27,11 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+html:has(.mobile-document-root),
+html:has(.mobile-document-root) body {
+  background: #000000;
+}
+
 .eyebrow {
   color: #ff5956;
   font-size: 0.7rem;

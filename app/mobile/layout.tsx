@@ -6,7 +6,7 @@ export default function MobileLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-[#0b0c0e] text-white [color-scheme:dark]">
+    <div className="mobile-document-root min-h-screen bg-[#000000] text-white [color-scheme:dark]">
       <MobileShell>{children}</MobileShell>
     </div>
   );
