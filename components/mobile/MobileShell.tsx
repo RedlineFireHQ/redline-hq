@@ -90,5 +90,10 @@ function MoreSheet({ onClose }: { onClose: () => void }) {
 }
 
 function MoreLink({ href, label, detail, icon: Icon, onClick }: { href: string; label: string; detail: string; icon: typeof FileText; onClick: () => void }) {
-  return <Link href={href} onClick={onClick} className="flex min-h-16 items-center gap-3 rounded-2xl border border-white/10 bg-[#171717] px-4 py-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl border border-red-400/20 bg-red-500/10 text-red-200"><Icon className="h-5 w-5" /></span><span className="min-w-0 flex-1"><span className="block text-base font-black text-white">{label}</span><span className="block text-xs text-white/45">{detail}</span></span><ChevronRight className="h-4 w-4 text-white/35" /></Link>;
+  const content = <><span className="flex h-10 w-10 items-center justify-center rounded-xl border border-red-400/20 bg-red-500/10 text-red-200"><Icon className="h-5 w-5" /></span><span className="min-w-0 flex-1"><span className="block text-base font-black text-white">{label}</span><span className="block text-xs text-white/45">{detail}</span></span><ChevronRight className="h-4 w-4 text-white/35" /></>;
+  const className = "flex min-h-16 items-center gap-3 rounded-2xl border border-white/10 bg-[#171717] px-4 py-3";
+  if (href === "/mobile/reports") {
+    return <a href={href} className={className}>{content}</a>;
+  }
+  return <Link href={href} onClick={onClick} className={className}>{content}</Link>;
 }
