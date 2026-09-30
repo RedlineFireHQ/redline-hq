@@ -633,7 +633,7 @@ export default async function MobilePage() {
 	return (
 		<main className="min-h-screen overscroll-y-none bg-[#020202] text-white">
 			<div className="relative mx-auto min-h-screen w-full max-w-xl md:max-w-2xl lg:max-w-4xl bg-[#050505]">
-				<div className="pointer-events-none absolute inset-x-0 top-0 z-0 mx-auto h-[280px] w-full max-w-xl md:max-w-2xl lg:max-w-4xl overflow-hidden border-b border-white/10">
+				<div className="pointer-events-none fixed inset-x-0 top-0 z-0 mx-auto h-[280px] w-full max-w-xl md:max-w-2xl lg:max-w-4xl overflow-hidden border-b border-white/10">
 					<Image
 						src="/branding/logos/desktop.png"
 						alt="Firefighter background"
@@ -678,15 +678,16 @@ export default async function MobilePage() {
 					</div>
 				</div>
 
-				<div className="relative z-10 px-4 pb-48">
+				<div className="relative z-10 -mt-6 px-4 pb-48">
 					<section
-						className="relative min-h-[175.2px] overflow-hidden border border-white/16 bg-[linear-gradient(to_bottom,rgba(35,35,35,0.96),rgba(10,10,10,0.99))] p-3 shadow-[0_24px_48px_rgba(0,0,0,0.46),0_3px_12px_rgba(0,0,0,0.26),inset_0_1px_0_rgba(255,255,255,0.08),inset_0_-14px_20px_rgba(0,0,0,0.24)]"
+						className="-mt-[47px] relative h-[175.2px] overflow-hidden border border-white/16 bg-[linear-gradient(to_bottom,rgba(35,35,35,0.96),rgba(10,10,10,0.99))] p-3 shadow-[0_24px_48px_rgba(0,0,0,0.46),0_3px_12px_rgba(0,0,0,0.26),inset_0_1px_0_rgba(255,255,255,0.08),inset_0_-14px_20px_rgba(0,0,0,0.24)]"
+						style={{ clipPath: "polygon(6% 0, 94% 0, 100% 12%, 100% 89%, 95% 100%, 5% 100%, 0 89%, 0 12%)" }}
 					>
 						<div className="pointer-events-none absolute left-[14px] right-[14px] top-[1px] h-px bg-[linear-gradient(to_right,rgba(255,255,255,0),rgba(245,245,245,0.24),rgba(255,255,255,0))]" />
 						<div className="pointer-events-none absolute left-[18px] top-[9px] h-[10px] w-[14px] -skew-x-[18deg] border-l border-t border-white/16" />
 						<div className="pointer-events-none absolute right-[18px] top-[9px] h-[10px] w-[14px] skew-x-[18deg] border-r border-t border-white/14" />
 						<div className="pointer-events-none absolute inset-x-6 top-2 h-7 rounded-full bg-[linear-gradient(to_bottom,rgba(255,255,255,0.18),rgba(255,255,255,0))] blur-[1px]" />
-						<div className="pt-[14px] flex items-center gap-4">
+						<div className="translate-y-[14px] flex items-center gap-4">
 							<div className="relative flex h-[92px] w-[92px] flex-shrink-0 items-center justify-center rounded-full bg-black/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.1),inset_0_-10px_16px_rgba(0,0,0,0.48)]">
 								<span className="pointer-events-none absolute inset-[7px] rounded-full shadow-[0_0_18px_rgba(239,43,45,0.22)]" />
 								<span className="pointer-events-none absolute left-1/2 top-[7px] h-[26px] w-[68px] -translate-x-1/2 rounded-full bg-[linear-gradient(to_bottom,rgba(255,255,255,0.2),rgba(255,255,255,0))] blur-[1px]" />
@@ -807,7 +808,7 @@ export default async function MobilePage() {
 			<style>{`
 				.readiness-flow {
 					background-size: 200% 100%;
-					animation: none;
+					animation: readiness-flow 2.1s linear infinite;
 				}
 
 				@keyframes readiness-flow {
