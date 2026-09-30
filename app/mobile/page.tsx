@@ -186,15 +186,15 @@ const quickActions: CardItem[] = [
 	{ label: "Documents", icon: FileText },
 ];
 
-const buttonInteraction = "transition-all duration-200 active:scale-[0.98]";
+const buttonInteraction = "transition-colors duration-200";
 const actionCardClassName =
-	"group relative flex min-h-[106px] sm:min-h-[114px] w-full flex-col justify-between overflow-hidden border border-white/18 bg-[linear-gradient(to_bottom,rgba(34,34,34,0.94),rgba(9,9,9,0.98))] px-4 sm:px-5 py-4 text-left shadow-[0_12px_20px_rgba(0,0,0,0.32),0_2px_8px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.08),inset_0_-10px_16px_rgba(0,0,0,0.26)] hover:border-red-500/40 hover:bg-[linear-gradient(to_bottom,rgba(42,42,42,0.96),rgba(14,14,14,0.99))]";
+	"group flex min-h-[106px] w-full min-w-0 flex-col justify-between rounded-md border border-white/18 border-l-[3px] border-l-[#ef2b2d] bg-[linear-gradient(to_bottom,rgba(34,34,34,0.94),rgba(9,9,9,0.98))] px-4 py-4 text-left shadow-[0_12px_20px_rgba(0,0,0,0.32),0_2px_8px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.08),inset_0_-10px_16px_rgba(0,0,0,0.26)] hover:border-red-500/40 hover:bg-[linear-gradient(to_bottom,rgba(42,42,42,0.96),rgba(14,14,14,0.99))] sm:min-h-[114px] sm:px-5";
 
 function SectionHeader({ title, meta, className = "" }: { title: string; meta: string; className?: string }) {
 	return (
 		<div className={`mb-4 mt-6 flex items-center justify-between ${className}`}>
 			<div className="flex items-center gap-2">
-				<span className="h-[14px] w-[6px] -skew-x-[20deg] rounded-sm bg-[#ef2b2d]" />
+				<span className="h-[14px] w-[6px] rounded-sm bg-[#ef2b2d]" />
 				<h3 className="text-[14px] font-semibold uppercase tracking-[0.2em] text-white/85">{title}</h3>
 			</div>
 			<span className="inline-flex items-center gap-1 rounded-[10px] px-2 py-1 text-[13px] font-semibold uppercase tracking-[0.08em] text-[#ef2b2d]/80">
@@ -208,14 +208,9 @@ function SectionHeader({ title, meta, className = "" }: { title: string; meta: s
 function ActionCard({ label, Icon, href }: { label: string; Icon: CardItem["icon"]; href?: string }) {
 	const cardContent = (
 		<>
-			<span className="pointer-events-none absolute left-[10px] right-[10px] top-[1px] h-px bg-[linear-gradient(to_right,rgba(255,255,255,0),rgba(245,245,245,0.22),rgba(255,255,255,0))]" />
-			<span className="pointer-events-none absolute left-[17px] top-[8px] h-[10px] w-[14px] -skew-x-[18deg] border-l border-t border-white/16" />
-			<span className="pointer-events-none absolute right-[17px] top-[8px] h-[10px] w-[14px] skew-x-[18deg] border-r border-t border-white/14" />
-			<span className="pointer-events-none absolute inset-x-3 top-0 h-[40%] bg-[linear-gradient(to_bottom,rgba(255,255,255,0.06),rgba(255,255,255,0))]" />
-			<span className="absolute left-0 top-[18px] h-6 w-[3px] bg-[#ef2b2d] opacity-90 shadow-[0_0_7px_rgba(239,43,45,0.24)]" />
-			<ChevronRight className="absolute right-3.5 top-3.5 h-[18px] w-[18px] text-white/45 transition group-hover:text-[#ef2b2d] group-hover:translate-x-0.5" />
-			<div className="flex items-start">
-				<Icon className="h-7 w-7 text-[#ef2b2d]" />
+			<div className="flex items-start justify-between gap-2">
+				<Icon className="h-7 w-7 shrink-0 text-[#ef2b2d]" />
+				<ChevronRight className="h-[18px] w-[18px] shrink-0 text-white/45 transition-colors group-hover:text-[#ef2b2d]" />
 			</div>
 			<div className="mt-2 flex min-h-0 items-end">
 				<span className="text-[15px] sm:text-[16px] font-semibold leading-[1.2] text-white/95">
@@ -230,7 +225,6 @@ function ActionCard({ label, Icon, href }: { label: string; Icon: CardItem["icon
 			<Link
 				href={href}
 				className={`${actionCardClassName} ${buttonInteraction}`}
-				style={{ clipPath: "polygon(6% 0, 94% 0, 100% 10%, 100% 90%, 94% 100%, 6% 100%, 0 90%, 0 10%)" }}
 			>
 				{cardContent}
 			</Link>
@@ -240,7 +234,6 @@ function ActionCard({ label, Icon, href }: { label: string; Icon: CardItem["icon
 	return (
 		<button
 			className={`${actionCardClassName} ${buttonInteraction}`}
-			style={{ clipPath: "polygon(6% 0, 94% 0, 100% 10%, 100% 90%, 94% 100%, 6% 100%, 0 90%, 0 10%)" }}
 		>
 			{cardContent}
 		</button>
@@ -632,8 +625,8 @@ export default async function MobilePage() {
 
 	return (
 		<main className="min-h-screen overscroll-y-none bg-[#020202] text-white">
-			<div className="relative mx-auto min-h-screen w-full max-w-xl md:max-w-2xl lg:max-w-4xl bg-[#050505]">
-				<div className="pointer-events-none fixed inset-x-0 top-0 z-0 mx-auto h-[280px] w-full max-w-xl md:max-w-2xl lg:max-w-4xl overflow-hidden border-b border-white/10">
+			<div className="mx-auto min-h-screen w-full max-w-xl bg-[#050505] md:max-w-2xl lg:max-w-4xl">
+				<header className="relative isolate min-h-[280px] overflow-hidden border-b border-white/10 px-6 pb-8 pt-5">
 					<Image
 						src="/branding/logos/desktop.png"
 						alt="Firefighter background"
@@ -642,12 +635,8 @@ export default async function MobilePage() {
 						className="object-cover brightness-145 contrast-128 saturate-138"
 						style={{ objectPosition: "84% calc(55% + 6px)" }}
 					/>
-					<div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(0,0,0,0.06),rgba(0,0,0,0.18)_48%,rgba(0,0,0,0.46))]" />
-				</div>
-
-				<div className="relative z-10 h-[280px] overflow-hidden border-b border-white/10">
-
-					<div className="absolute inset-x-6 top-5 flex items-center justify-between text-[12px] font-semibold tracking-tight">
+					<div className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,rgba(0,0,0,0.06),rgba(0,0,0,0.18)_48%,rgba(0,0,0,0.46))]" />
+					<div className="relative z-10 flex items-center justify-between text-[12px] font-semibold tracking-tight">
 						<span>9:41</span>
 						<div className="flex items-center gap-2 text-sm text-white/80">
 							<span className="h-2 w-2 rounded-full bg-white" />
@@ -656,9 +645,9 @@ export default async function MobilePage() {
 						</div>
 					</div>
 
-					<div className="absolute left-6 right-6 top-20">
+					<div className="relative z-10 mt-8">
 						<div className="flex items-start justify-between">
-							<button className={`relative mt-2 rounded-full border border-white/25 bg-black/30 p-2 text-white shadow-[0_8px_18px_rgba(0,0,0,0.28)] ${buttonInteraction}`}>
+							<button className={`relative rounded-full border border-white/25 bg-black/30 p-2 text-white shadow-[0_8px_18px_rgba(0,0,0,0.28)] ${buttonInteraction}`}>
 								<Bell className="h-6 w-6" />
 								{notificationCount > 0 && (
 									<span className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full bg-[#ef2b2d] text-xs font-bold text-white">
@@ -668,29 +657,24 @@ export default async function MobilePage() {
 							</button>
 						</div>
 
-						<p className="mt-6 -translate-y-[116px] text-[12px] font-semibold uppercase tracking-[0.22em] text-white/75">
+						<p className="mt-5 text-[12px] font-semibold uppercase tracking-[0.22em] text-white/75">
 							{departmentName}
 						</p>
-						<h1 className="mt-4 -translate-y-[130px] translate-x-[10px] text-[22px] font-semibold leading-none tracking-tight">
+						<h1 className="mt-2 text-[22px] font-semibold leading-none tracking-tight">
 							{memberFirstName}
 						</h1>
 						<div className="mt-4 h-[3px] w-10 bg-[#ef2b2d]" />
 					</div>
-				</div>
+				</header>
 
-				<div className="relative z-10 -mt-6 px-4 pb-48">
+				<div className="px-4 pb-48 pt-4">
 					<section
-						className="-mt-[47px] relative h-[175.2px] overflow-hidden border border-white/16 bg-[linear-gradient(to_bottom,rgba(35,35,35,0.96),rgba(10,10,10,0.99))] p-3 shadow-[0_24px_48px_rgba(0,0,0,0.46),0_3px_12px_rgba(0,0,0,0.26),inset_0_1px_0_rgba(255,255,255,0.08),inset_0_-14px_20px_rgba(0,0,0,0.24)]"
-						style={{ clipPath: "polygon(6% 0, 94% 0, 100% 12%, 100% 89%, 95% 100%, 5% 100%, 0 89%, 0 12%)" }}
+						className="rounded-md border border-white/16 bg-[linear-gradient(to_bottom,rgba(35,35,35,0.96),rgba(10,10,10,0.99))] p-3 shadow-[0_24px_48px_rgba(0,0,0,0.46),0_3px_12px_rgba(0,0,0,0.26),inset_0_1px_0_rgba(255,255,255,0.08),inset_0_-14px_20px_rgba(0,0,0,0.24)]"
 					>
-						<div className="pointer-events-none absolute left-[14px] right-[14px] top-[1px] h-px bg-[linear-gradient(to_right,rgba(255,255,255,0),rgba(245,245,245,0.24),rgba(255,255,255,0))]" />
-						<div className="pointer-events-none absolute left-[18px] top-[9px] h-[10px] w-[14px] -skew-x-[18deg] border-l border-t border-white/16" />
-						<div className="pointer-events-none absolute right-[18px] top-[9px] h-[10px] w-[14px] skew-x-[18deg] border-r border-t border-white/14" />
-						<div className="pointer-events-none absolute inset-x-6 top-2 h-7 rounded-full bg-[linear-gradient(to_bottom,rgba(255,255,255,0.18),rgba(255,255,255,0))] blur-[1px]" />
-						<div className="translate-y-[14px] flex items-center gap-4">
+						<div className="flex items-start gap-3 sm:gap-4">
 							<div className="relative flex h-[92px] w-[92px] flex-shrink-0 items-center justify-center rounded-full bg-black/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.1),inset_0_-10px_16px_rgba(0,0,0,0.48)]">
 								<span className="pointer-events-none absolute inset-[7px] rounded-full shadow-[0_0_18px_rgba(239,43,45,0.22)]" />
-								<span className="pointer-events-none absolute left-1/2 top-[7px] h-[26px] w-[68px] -translate-x-1/2 rounded-full bg-[linear-gradient(to_bottom,rgba(255,255,255,0.2),rgba(255,255,255,0))] blur-[1px]" />
+								<span className="pointer-events-none absolute inset-x-3 top-[7px] h-[26px] rounded-full bg-[linear-gradient(to_bottom,rgba(255,255,255,0.2),rgba(255,255,255,0))] blur-[1px]" />
 								<svg className="absolute inset-0 h-full w-full" viewBox={`0 0 ${gaugeSize} ${gaugeSize}`}>
 									<g style={{ transform: `rotate(${startAngle}deg)`, transformOrigin: `${gaugeSize / 2}px ${gaugeSize / 2}px` }}>
 										{Array.from({ length: innerTickCount }).map((_, index) => {
@@ -767,9 +751,9 @@ export default async function MobilePage() {
 							</div>
 
 							<div className="min-w-0 flex-1">
-								<p className="w-full translate-y-[-11px] whitespace-nowrap text-center text-[12px] font-semibold uppercase tracking-[0.16em] text-white/70">My Readiness</p>
+								<p className="text-center text-[12px] font-semibold uppercase tracking-[0.16em] text-white/70">My Readiness</p>
 								<div
-									className="readiness-flow mx-auto mt-1 h-[2px] w-[230px] -translate-y-[11px] bg-[linear-gradient(to_right,rgba(239,43,45,0),rgba(120,12,12,0.92),rgba(239,43,45,0))]"
+									className="mx-auto mt-1 h-[2px] w-full max-w-[230px] bg-[linear-gradient(to_right,rgba(239,43,45,0),rgba(120,12,12,0.92),rgba(239,43,45,0))]"
 								/>
 								<h2
 									className="mt-1 text-[21px] font-semibold uppercase tracking-[0.03em] text-[#ff3c36]"
@@ -781,17 +765,17 @@ export default async function MobilePage() {
 									<Shield className="h-3.5 w-3.5 flex-shrink-0 text-[#ef2b2d]" />
 									<span>{coachSummary.sentence}</span>
 								</p>
-								<button className={`mt-1 inline-flex h-9 min-w-[190px] -translate-x-[10px] translate-y-[20px] items-center justify-between gap-2 rounded-[12px] border border-[#ef2b2d] bg-[#ef2b2d] px-6 text-[12px] font-semibold text-white/90 shadow-[0_10px_22px_rgba(0,0,0,0.3)] hover:bg-[#ff3c36] ${buttonInteraction}`}>
-									<Link href="/mobile/my-readiness">View My Readiness</Link>
+								<Link href="/mobile/my-readiness" className={`mt-3 inline-flex min-h-9 w-full items-center justify-between gap-2 rounded-md border border-[#ef2b2d] bg-[#ef2b2d] px-3 py-2 text-[12px] font-semibold text-white/90 shadow-[0_10px_22px_rgba(0,0,0,0.3)] hover:bg-[#ff3c36] ${buttonInteraction}`}>
+									<span>View My Readiness</span>
 									<ChevronRight className="h-4 w-4 text-white" />
-								</button>
+								</Link>
 							</div>
 
 						</div>
 					</section>
 
 					<SectionHeader title="FIELD ACTIONS" meta={`${visibleQuickActions.length} Actions`} />
-					<div className="grid grid-cols-2 gap-3.5 sm:gap-4 md:grid-cols-2 lg:grid-cols-2">
+					<div className="grid grid-cols-2 gap-3.5 sm:gap-4">
 						{visibleQuickActions.map((item) => (
 							<ActionCard
 								key={item.label}
@@ -805,21 +789,6 @@ export default async function MobilePage() {
 
 			</div>
 
-			<style>{`
-				.readiness-flow {
-					background-size: 200% 100%;
-					animation: readiness-flow 2.1s linear infinite;
-				}
-
-				@keyframes readiness-flow {
-					0% {
-						background-position: -200% 0;
-					}
-					100% {
-						background-position: 200% 0;
-					}
-				}
-			`}</style>
 		</main>
 	);
 }
