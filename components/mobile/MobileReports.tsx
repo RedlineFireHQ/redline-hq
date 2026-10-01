@@ -415,7 +415,7 @@ export default function MobileReports({ members, trainingCategories, apparatus, 
   }
 
   return (
-    <main className="min-h-screen overflow-x-clip bg-[#080808] px-4 py-5 text-white [color-scheme:dark] sm:px-6">
+    <main className="min-h-screen overflow-x-hidden bg-[#080808] px-4 py-5 text-white [color-scheme:dark] sm:px-6">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 bg-[#080808] pb-10">
         <div className="flex items-center justify-between gap-3">
           {step === "home" ? <Link href="/mobile" className="inline-flex min-h-12 items-center text-sm font-bold text-white/65">Back to Field Actions</Link> : <button type="button" onClick={goBack} className="inline-flex min-h-12 items-center gap-2 text-sm font-bold text-white/65"><ArrowLeft className="h-4 w-4" /> Back</button>}
