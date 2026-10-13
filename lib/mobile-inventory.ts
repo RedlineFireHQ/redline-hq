@@ -51,7 +51,7 @@ export async function loadMobileInventory(supabase: SupabaseClient, departmentId
     supabase.from("ground_ladders").select("id, ladder_number, ladder_type, ladder_length_ft, serial_number, manufacturer, model, status, notes").eq("department_id", departmentId),
     supabase.from("pie_equipment").select("id, equipment_number, serial_number, manufacturer, model, equipment_type, power_source, location, status, notes").eq("department_id", departmentId),
     supabase.from("ppe_items").select("id, item_name, asset_number, assigned_member_id, manufacturer, model, serial_number, size, location, status, notes").eq("department_id", departmentId),
-    supabase.from("pagers").select("id, pager_number, serial_number, manufacturer, model, pager_type, location, status, notes").eq("department_id", departmentId),
+    supabase.from("pagers").select("id, pager_number, serial_number, manufacturer, model, location, status, notes").eq("department_id", departmentId),
   ]);
 
   const results = [deficiencies, fireHose, cylinders, packs, radios, mics, extinguishers, cameras, gasMonitors, ropes, misc, emsEquipment, batteries, ladders, pie, ppe, pagers];

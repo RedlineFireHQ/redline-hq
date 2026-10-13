@@ -11,7 +11,6 @@ type PagerRecord = {
 	serial_number: string | null;
 	manufacturer: string | null;
 	model: string | null;
-	pager_type: string | null;
 	location: string | null;
 	assigned_member_id: string | null;
 	status: "In Service" | "Out of Service" | "Lost" | "Stolen" | "Retired";
@@ -49,7 +48,7 @@ export default async function PagersInventoryPage() {
 		supabase.from("departments").select("name").eq("id", departmentId).maybeSingle(),
 		supabase
 			.from("pagers")
-			.select("id, department_id, pager_number, serial_number, manufacturer, model, pager_type, location, assigned_member_id, status, notes, created_at, updated_at")
+			.select("id, department_id, pager_number, serial_number, manufacturer, model, location, assigned_member_id, status, notes, created_at, updated_at")
 			.eq("department_id", departmentId)
 			.order("pager_number", { ascending: true }),
 	]);

@@ -11,7 +11,6 @@ type PagerRecord = {
 	serial_number: string | null;
 	manufacturer: string | null;
 	model: string | null;
-	pager_type: string | null;
 	location: string | null;
 	assigned_member_id: string | null;
 	status: "In Service" | "Out of Service" | "Lost" | "Stolen" | "Retired";

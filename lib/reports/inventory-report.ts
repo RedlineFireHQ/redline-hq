@@ -878,7 +878,7 @@ export async function runInventoryReport(
 		context.supabase.from("pie_equipment_assignments").select("id, department_id, pie_equipment_id, assignment_type, apparatus_id, station_name, equipment_reference, notes, assigned_at, ended_at, created_at").eq("department_id", context.departmentId).order("assigned_at", { ascending: false }),
 		context.supabase.from("ppe_items").select("id, item_name, assigned_member_id, manufacturer, model, serial_number, asset_number, size, date_manufactured, placed_in_service_date, expiration_date, location, status, notes, photo_path, created_at, updated_at").eq("department_id", context.departmentId),
 		context.supabase.from("ems_supply_items").select("id, item_name, item_category, unit_of_measure, custom_unit_of_measure, quantity_on_hand, reorder_threshold, critical_threshold, target_quantity, location, notes, status, qr_identifier, created_at, updated_at").eq("department_id", context.departmentId),
-		context.supabase.from("pagers").select("id, pager_number, serial_number, manufacturer, model, pager_type, location, assigned_member_id, status, notes, created_at, updated_at").eq("department_id", context.departmentId),
+		context.supabase.from("pagers").select("id, pager_number, serial_number, manufacturer, model, assigned_member_id, status, notes, created_at, updated_at").eq("department_id", context.departmentId),
 	]);
 
 	const queryErrors = [
