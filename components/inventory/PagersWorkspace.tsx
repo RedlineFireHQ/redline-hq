@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 type PagerRecord = {
@@ -30,7 +31,6 @@ type PagerFormValues = {
 	serialNumber: string;
 	manufacturer: string;
 	model: string;
-	location: string;
 	assignedMemberId: string;
 	status: PagerRecord["status"];
 	notes: string;
@@ -59,7 +59,6 @@ const EMPTY_FORM: PagerFormValues = {
 	serialNumber: "",
 	manufacturer: "",
 	model: "",
-	location: "",
 	assignedMemberId: "",
 	status: "In Service",
 	notes: "",
@@ -99,6 +98,7 @@ export default function PagersWorkspace({
 	initialError = null,
 	canManagePagers,
 }: PagersWorkspaceProps) {
+	const router = useRouter();
 	const [rows, setRows] = useState(initialPagers);
 	const [searchTerm, setSearchTerm] = useState("");
 	const [statusFilter, setStatusFilter] = useState("All");
@@ -122,7 +122,7 @@ export default function PagersWorkspace({
 			if (statusFilter !== "All" && row.status !== statusFilter) return false;
 			if (!normalizedSearch) return true;
 			const assignedName = row.assigned_member_id ? memberNameById.get(row.assigned_member_id) ?? "" : "";
-			return [row.pager_number, row.serial_number, row.manufacturer, row.model, row.location, assignedName, row.status, row.notes]
+			return [row.pager_number, row.serial_number, row.manufacturer, row.model, assignedName, row.status, row.notes]
 				.filter(Boolean)
 				.join(" ")
 				.toLowerCase()
@@ -147,12 +147,22 @@ export default function PagersWorkspace({
 			serialNumber: pager.serial_number ?? "",
 			manufacturer: pager.manufacturer ?? "",
 			model: pager.model ?? "",
-			location: pager.location ?? "",
 			assignedMemberId: pager.assigned_member_id ?? "",
 			status: pager.status,
 			notes: pager.notes ?? "",
 		});
 		setIsModalOpen(true);
+	}
+
+	function reportDeficiency(pager?: PagerRecord) {
+		const params = new URLSearchParams();
+		params.set("returnTo", "/inventory/pagers");
+		params.set("inventoryCategory", "pagers");
+		if (pager) {
+			params.set("inventoryItemId", pager.id);
+			params.set("inventoryItemLabel", pager.pager_number);
+		}
+		router.push(`/deficiencies/report?${params.toString()}`);
 	}
 
 	async function refreshRows() {
@@ -189,7 +199,6 @@ export default function PagersWorkspace({
 			serial_number: normalizeOptionalText(formValues.serialNumber),
 			manufacturer: normalizeOptionalText(formValues.manufacturer),
 			model: normalizeOptionalText(formValues.model),
-			location: normalizeOptionalText(formValues.location),
 			assigned_member_id: formValues.assignedMemberId || null,
 			status: formValues.status,
 			notes: normalizeOptionalText(formValues.notes),
@@ -224,13 +233,22 @@ export default function PagersWorkspace({
 						</p>
 					</div>
 					{canManagePagers ? (
-						<button
-							type="button"
-							onClick={openCreateModal}
-							className="rounded-xl bg-red-600 px-4 py-3 text-sm font-black uppercase tracking-wide text-white transition hover:bg-red-700"
-						>
-							Add Pager
-						</button>
+						<div className="flex flex-wrap gap-2">
+							<button
+								type="button"
+								onClick={() => reportDeficiency()}
+								className="rounded-xl border border-amber-500/40 bg-amber-600/20 px-4 py-3 text-sm font-black uppercase tracking-wide text-amber-200 transition hover:bg-amber-600/30"
+							>
+								Report Deficiency
+							</button>
+							<button
+								type="button"
+								onClick={openCreateModal}
+								className="rounded-xl bg-red-600 px-4 py-3 text-sm font-black uppercase tracking-wide text-white transition hover:bg-red-700"
+							>
+								Add Pager
+							</button>
+						</div>
 					) : null}
 				</div>
 				<div className="mt-6 grid gap-3 sm:grid-cols-3">
@@ -245,7 +263,7 @@ export default function PagersWorkspace({
 					<input
 						value={searchTerm}
 						onChange={(event) => setSearchTerm(event.target.value)}
-						placeholder="Search pagers by number, serial, member, manufacturer, model, type, or location..."
+						placeholder="Search pagers by number, serial, member, manufacturer, or model..."
 						className="w-full rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3 text-sm text-white placeholder:text-neutral-500 focus:border-red-500/50 focus:outline-none"
 					/>
 					<select
@@ -269,7 +287,6 @@ export default function PagersWorkspace({
 								<th className="px-4 py-3">Pager</th>
 								<th className="px-4 py-3">Serial</th>
 								<th className="px-4 py-3">Manufacturer / Model</th>
-								<th className="px-4 py-3">Location</th>
 								<th className="px-4 py-3">Assigned To</th>
 								<th className="px-4 py-3">Status</th>
 								<th className="px-4 py-3">Updated</th>
@@ -282,16 +299,20 @@ export default function PagersWorkspace({
 									<td className="px-4 py-3 font-black text-white">{pager.pager_number}</td>
 									<td className="px-4 py-3">{pager.serial_number ?? "-"}</td>
 									<td className="px-4 py-3">{[pager.manufacturer, pager.model].filter(Boolean).join(" ") || "-"}</td>
-									<td className="px-4 py-3">{pager.location ?? "-"}</td>
 									<td className="px-4 py-3">{pager.assigned_member_id ? memberNameById.get(pager.assigned_member_id) ?? "-" : "-"}</td>
 									<td className="px-4 py-3"><span className={`rounded-full border px-2.5 py-1 text-xs font-black ${statusBadgeClasses(pager.status)}`}>{pager.status}</span></td>
 									<td className="px-4 py-3">{formatDateTime(pager.updated_at ?? pager.created_at)}</td>
 									<td className="px-4 py-3 text-right">
-										{canManagePagers ? <button type="button" onClick={() => openEditModal(pager)} className="rounded-lg border border-white/15 px-3 py-2 text-xs font-black uppercase text-white transition hover:bg-white/10">Edit</button> : <span className="text-xs text-neutral-500">Read only</span>}
+										{canManagePagers ? (
+											<div className="flex justify-end gap-2">
+												<button type="button" onClick={() => reportDeficiency(pager)} className="rounded-lg border border-amber-500/30 bg-amber-600/10 px-3 py-2 text-xs font-black uppercase text-amber-200 transition hover:bg-amber-600/20">Report Deficiency</button>
+												<button type="button" onClick={() => openEditModal(pager)} className="rounded-lg border border-white/15 px-3 py-2 text-xs font-black uppercase text-white transition hover:bg-white/10">Edit</button>
+											</div>
+										) : <span className="text-xs text-neutral-500">Read only</span>}
 									</td>
 								</tr>
 							))}
-							{filteredRows.length === 0 ? <tr><td colSpan={8} className="px-4 py-8 text-center text-sm font-semibold text-neutral-500">No pagers found.</td></tr> : null}
+							{filteredRows.length === 0 ? <tr><td colSpan={7} className="px-4 py-8 text-center text-sm font-semibold text-neutral-500">No pagers found.</td></tr> : null}
 						</tbody>
 					</table>
 				</div>
@@ -312,7 +333,6 @@ export default function PagersWorkspace({
 							<label className="text-sm font-semibold text-neutral-300">Serial Number<input value={formValues.serialNumber} onChange={(event) => setFormValues((current) => ({ ...current, serialNumber: event.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3 text-white focus:border-red-500/50 focus:outline-none" /></label>
 							<label className="text-sm font-semibold text-neutral-300">Manufacturer<input value={formValues.manufacturer} onChange={(event) => setFormValues((current) => ({ ...current, manufacturer: event.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3 text-white focus:border-red-500/50 focus:outline-none" /></label>
 							<label className="text-sm font-semibold text-neutral-300">Model<input value={formValues.model} onChange={(event) => setFormValues((current) => ({ ...current, model: event.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3 text-white focus:border-red-500/50 focus:outline-none" /></label>
-							<label className="text-sm font-semibold text-neutral-300">Location<input value={formValues.location} onChange={(event) => setFormValues((current) => ({ ...current, location: event.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3 text-white focus:border-red-500/50 focus:outline-none" /></label>
 							<label className="text-sm font-semibold text-neutral-300">Assigned To
 								<select value={formValues.assignedMemberId} onChange={(event) => setFormValues((current) => ({ ...current, assignedMemberId: event.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3 text-white focus:border-red-500/50 focus:outline-none">
 									<option value="">Unassigned</option>

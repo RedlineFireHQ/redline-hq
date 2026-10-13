@@ -79,6 +79,68 @@ test("pagers workspace renders Assigned To dropdown and omits Pager Type field",
   assert.doesNotMatch(workspace, /formValues\.pagerType/);
 });
 
+test("pagers workspace removes Location field and routes deficiency reporting to pagers", () => {
+  const workspace = readFileSync(
+    join(__dirname, "../../components/inventory/PagersWorkspace.tsx"),
+    "utf8",
+  );
+
+  // Location removed from the form, table, and search payload.
+  assert.doesNotMatch(workspace, />Location</);
+  assert.doesNotMatch(workspace, /formValues\.location/);
+  assert.doesNotMatch(workspace, /location: normalizeOptionalText/);
+  // Deficiency reporting routes into the shared workflow scoped to pagers.
+  assert.match(workspace, /reportDeficiency/);
+  assert.match(workspace, /params\.set\("inventoryCategory", "pagers"\)/);
+  assert.match(workspace, /params\.set\("inventoryItemId", pager\.id\)/);
+  assert.match(workspace, />Report Deficiency</);
+});
+
+test("deficiency report page links pagers through deficiencies.pager_id", () => {
+  const reportPage = readFileSync(
+    join(__dirname, "../../app/deficiencies/report/page.tsx"),
+    "utf8",
+  );
+
+  assert.match(reportPage, /normalizedInventoryCategory === "pagers"/);
+  assert.match(reportPage, /pager_id: isPagerDeficiency && inventoryItemId \? inventoryItemId : null/);
+  assert.match(reportPage, /inventoryTable = "pagers"/);
+});
+
+test("deficiency report page does not force Station Supply onto pager deficiencies", () => {
+  const reportPage = readFileSync(
+    join(__dirname, "../../app/deficiencies/report/page.tsx"),
+    "utf8",
+  );
+
+  // Pagers default to no apparatus (member-assigned), not the Station Supply sentinel.
+  assert.match(reportPage, /normalizedInventoryCategory === "pagers"\s*\?\s*""/);
+  // canSubmit treats a linked pager as satisfying the apparatus requirement.
+  assert.match(reportPage, /Boolean\(effectiveApparatusId \|\| normalizedInventoryCategory === "pagers"\)/);
+});
+
+test("deficiencies page and reports display pager identity", () => {
+  const deficienciesPage = readFileSync(
+    join(__dirname, "../../app/deficiencies/page.tsx"),
+    "utf8",
+  );
+  const serverRunner = readFileSync(
+    join(__dirname, "./server-runner.ts"),
+    "utf8",
+  );
+
+  // Deficiencies list: pager relation selected, labeled, rendered, and searchable.
+  assert.match(deficienciesPage, /pager:pager_id\(pager_number\)/);
+  assert.match(deficienciesPage, /if \(deficiency\.pager_id\) \{\s*return "Pager";/);
+  assert.match(deficienciesPage, /Pager - \{deficiency\.pager\?\.pager_number/);
+  assert.match(deficienciesPage, /deficiency\.pager\?\.pager_number \?\? ""/);
+
+  // Deficiency report: pager resolved as the related item label.
+  assert.match(serverRunner, /pager:pager_id\(pager_number\)/);
+  assert.match(serverRunner, /if \(row\.pager_id\)/);
+  assert.match(serverRunner, /`Pager \$\{pager\}`/);
+});
+
 test("report mode resolves to the expected inventory workflow", () => {
   assert.equal(resolveInventoryReportMode("fire-hose", "fire-hose-testing").categoryKey, "fire-hose");
   assert.equal(resolveInventoryReportMode("gas-monitors", "gas-monitor-calibration").reportTypeKey, "gas-monitor-calibration");

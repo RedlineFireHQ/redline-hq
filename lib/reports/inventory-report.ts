@@ -1243,7 +1243,7 @@ export async function runInventoryReport(
 		if (!id) continue;
 		const assignedMemberId = normalizeText(row.assigned_member_id);
 		const assignedMemberName = assignedMemberId ? memberNameById.get(assignedMemberId) ?? null : null;
-		const locationOrApparatus = assignedMemberName ?? normalizeText(row.location) ?? null;
+		const locationOrApparatus = assignedMemberName ?? null;
 		addRow(inventoryRows, {
 			categoryKey: "pagers",
 			categoryLabel: "Pagers",
@@ -1256,7 +1256,7 @@ export async function runInventoryReport(
 			latestResult: assignedMemberName ? "Assigned" : "-",
 			dueDateRaw: null,
 			openDeficiencies: openCounts.pager_id.get(id) ?? 0,
-			searchParts: ["Pagers", row.pager_number, row.serial_number, row.manufacturer, row.model, assignedMemberName, row.status, row.location],
+			searchParts: ["Pagers", row.pager_number, row.serial_number, row.manufacturer, row.model, assignedMemberName, row.status],
 		});
 	}
 

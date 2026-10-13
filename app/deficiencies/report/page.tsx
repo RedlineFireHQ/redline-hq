@@ -93,6 +93,10 @@ function getInventoryEquipmentTypeLabel(normalizedInventoryCategory: string) {
     return "Portable Radio";
   }
 
+  if (normalizedInventoryCategory === "pagers") {
+    return "Pager";
+  }
+
   if (normalizedInventoryCategory === "ppe") {
     return "Personal Protective Equipment (PPE)";
   }
@@ -233,6 +237,14 @@ function resolveInventoryCategoryOption(
       normalizedOptions.find((entry) => entry.normalizedLabel.includes(MISC_FIRE_EQUIPMENT_CATEGORY_TOKEN))?.option ??
       normalizedOptions.find((entry) => entry.normalizedLabel.includes("misc fire"))?.option ??
       normalizedOptions.find((entry) => entry.normalizedLabel.includes("fire equipment"))?.option ??
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes(INVENTORY_CATEGORY_TOKEN))?.option ??
+      null
+    );
+  }
+
+  if (normalizedInventoryCategory === "pagers") {
+    return (
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes("pager"))?.option ??
       normalizedOptions.find((entry) => entry.normalizedLabel.includes(INVENTORY_CATEGORY_TOKEN))?.option ??
       null
     );
@@ -519,6 +531,7 @@ function ReportDeficiencyPageContent() {
     normalizedInventoryCategory === "ground-ladders" ||
     normalizedInventoryCategory === "ems-equipment" ||
     normalizedInventoryCategory === "portable-radios" ||
+    normalizedInventoryCategory === "pagers" ||
     normalizedInventoryCategory === "ppe" ||
     normalizedInventoryCategory === "rope" ||
     normalizedInventoryCategory === "fire-extinguishers" ||
@@ -569,6 +582,7 @@ function ReportDeficiencyPageContent() {
       normalizedInventoryCategory !== "ground-ladders" &&
       normalizedInventoryCategory !== "ems-equipment" &&
       normalizedInventoryCategory !== "portable-radios" &&
+      normalizedInventoryCategory !== "pagers" &&
       normalizedInventoryCategory !== "ppe" &&
       normalizedInventoryCategory !== "rope" &&
       normalizedInventoryCategory !== "misc-fire-equipment"
@@ -631,6 +645,11 @@ function ReportDeficiencyPageContent() {
         selectColumn = "radio_number";
       }
 
+      if (normalizedInventoryCategory === "pagers") {
+        inventoryTable = "pagers";
+        selectColumn = "pager_number";
+      }
+
       if (normalizedInventoryCategory === "ppe") {
         inventoryTable = "ppe_items";
         selectColumn = "item_name";
@@ -677,6 +696,8 @@ function ReportDeficiencyPageContent() {
         nextLabel = typeof record.equipment_name === "string" ? record.equipment_name : "";
       } else if (normalizedInventoryCategory === "portable-radios") {
         nextLabel = typeof record.radio_number === "string" ? record.radio_number : "";
+      } else if (normalizedInventoryCategory === "pagers") {
+        nextLabel = typeof record.pager_number === "string" ? record.pager_number : "";
       } else if (normalizedInventoryCategory === "ppe") {
         nextLabel = typeof record.item_name === "string" ? record.item_name : "";
       } else if (normalizedInventoryCategory === "rope") {
@@ -759,16 +780,16 @@ function ReportDeficiencyPageContent() {
   const canSubmit = useMemo(() => {
     const effectiveApparatusId = isSessionScopedDeficiency
       ? (apparatusIdParam ?? "")
-      : (formState.apparatusId || (isInventoryDeficiencyLaunch ? STATION_SUPPLY_OPTION.id : ""));
+      : (formState.apparatusId || (isInventoryDeficiencyLaunch && normalizedInventoryCategory !== "pagers" ? STATION_SUPPLY_OPTION.id : ""));
 
     return (
       Boolean(formState.categoryId) &&
       Boolean(formState.priorityId) &&
-      Boolean(effectiveApparatusId) &&
+      Boolean(effectiveApparatusId || normalizedInventoryCategory === "pagers") &&
       Boolean(formState.description.trim()) &&
       Boolean(openStatusId)
     );
-  }, [apparatusIdParam, formState, isInventoryDeficiencyLaunch, isSessionScopedDeficiency, openStatusId]);
+  }, [apparatusIdParam, formState, isInventoryDeficiencyLaunch, isSessionScopedDeficiency, normalizedInventoryCategory, openStatusId]);
 
   useEffect(() => {
     if (!isSessionScopedDeficiency || typeof apparatusIdParam !== "string" || !apparatusIdParam.trim()) {
@@ -866,7 +887,9 @@ function ReportDeficiencyPageContent() {
         );
 
         const defaultApparatusId =
-          normalizedInventoryCategory === "pie" ||
+          normalizedInventoryCategory === "pagers"
+            ? ""
+            : normalizedInventoryCategory === "pie" ||
           normalizedInventoryCategory === "gas-monitors" ||
           normalizedInventoryCategory === "battery" ||
           normalizedInventoryCategory === "thermal-cameras" ||
@@ -932,6 +955,7 @@ function ReportDeficiencyPageContent() {
     const isGroundLadderDeficiency = normalizedInventoryCategory === "ground-ladders";
     const isEmsEquipmentDeficiency = normalizedInventoryCategory === "ems-equipment";
     const isPortableRadioDeficiency = normalizedInventoryCategory === "portable-radios";
+    const isPagerDeficiency = normalizedInventoryCategory === "pagers";
     const isPpeDeficiency = normalizedInventoryCategory === "ppe";
     const isRopeDeficiency = normalizedInventoryCategory === "rope";
     const isMiscFireEquipmentDeficiency = normalizedInventoryCategory === "misc-fire-equipment";
@@ -1058,7 +1082,7 @@ function ReportDeficiencyPageContent() {
 
     const effectiveApparatusId = isSessionScopedDeficiency
       ? apparatusIdParam ?? ""
-      : (formState.apparatusId || (isInventoryDeficiencyLaunch ? STATION_SUPPLY_OPTION.id : ""));
+      : (formState.apparatusId || (isInventoryDeficiencyLaunch && normalizedInventoryCategory !== "pagers" ? STATION_SUPPLY_OPTION.id : ""));
 
     if (isSessionScopedDeficiency && effectiveApparatusId === STATION_SUPPLY_OPTION.id) {
       setErrorMessage("Session-linked deficiencies must be reported against the active apparatus.");
@@ -1108,6 +1132,7 @@ function ReportDeficiencyPageContent() {
       fire_extinguisher_id: normalizedInventoryCategory === "fire-extinguishers" && inventoryItemId ? inventoryItemId : null,
       ems_equipment_id: isEmsEquipmentDeficiency && inventoryItemId ? inventoryItemId : null,
       portable_radio_id: isPortableRadioDeficiency && inventoryItemId ? inventoryItemId : null,
+      pager_id: isPagerDeficiency && inventoryItemId ? inventoryItemId : null,
       ppe_item_id: isPpeDeficiency && inventoryItemId ? inventoryItemId : null,
       rope_item_id: isRopeDeficiency && inventoryItemId ? inventoryItemId : null,
       misc_fire_equipment_id: isMiscFireEquipmentDeficiency && inventoryItemId ? inventoryItemId : null,
@@ -1223,6 +1248,7 @@ function ReportDeficiencyPageContent() {
                 normalizedInventoryCategory === "ground-ladders" ||
                 normalizedInventoryCategory === "ems-equipment" ||
                 normalizedInventoryCategory === "portable-radios" ||
+                normalizedInventoryCategory === "pagers" ||
                 normalizedInventoryCategory === "ppe" ||
                 normalizedInventoryCategory === "rope" ||
                 normalizedInventoryCategory === "misc-fire-equipment") &&
