@@ -7,7 +7,8 @@ create table if not exists public.pagers (
   model text,
   pager_type text,
   location text,
-  status text not null default 'Unassigned' check (status in ('In Service', 'Unassigned', 'Out of Service', 'Lost', 'Stolen', 'Retired')),
+  assigned_member_id uuid references public.members (id) on delete set null,
+  status text not null default 'In Service' check (status in ('In Service', 'Out of Service', 'Lost', 'Stolen', 'Retired')),
   notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -16,6 +17,10 @@ create table if not exists public.pagers (
 
 create index if not exists pagers_department_idx
 on public.pagers (department_id);
+
+create index if not exists pagers_assigned_member_idx
+on public.pagers (assigned_member_id)
+where assigned_member_id is not null;
 
 create index if not exists pagers_pager_number_idx
 on public.pagers (pager_number);
@@ -45,6 +50,35 @@ create trigger trg_pagers_updated_at
 before update on public.pagers
 for each row
 execute function public.set_pagers_updated_at();
+
+-- Enforce that a pager can only be assigned to a member of the same department.
+create or replace function public.validate_pager_assigned_member_department()
+returns trigger
+language plpgsql
+as $$
+begin
+  if new.assigned_member_id is null then
+    return new;
+  end if;
+
+  if not exists (
+    select 1
+    from public.members m
+    where m.id = new.assigned_member_id
+      and m.department_id = new.department_id
+  ) then
+    raise exception 'Assigned member must belong to the same department as the pager.';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_pagers_assigned_member_department on public.pagers;
+create trigger trg_pagers_assigned_member_department
+before insert or update on public.pagers
+for each row
+execute function public.validate_pager_assigned_member_department();
 
 alter table public.pagers enable row level security;
 

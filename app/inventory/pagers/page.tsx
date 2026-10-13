@@ -13,10 +13,17 @@ type PagerRecord = {
 	model: string | null;
 	pager_type: string | null;
 	location: string | null;
-	status: "In Service" | "Unassigned" | "Out of Service" | "Lost" | "Stolen" | "Retired";
+	assigned_member_id: string | null;
+	status: "In Service" | "Out of Service" | "Lost" | "Stolen" | "Retired";
 	notes: string | null;
 	created_at: string | null;
 	updated_at: string | null;
+};
+
+type MemberOption = {
+	id: string;
+	first_name: string | null;
+	last_name: string | null;
 };
 
 export const dynamic = "force-dynamic";
@@ -38,13 +45,19 @@ export default async function PagersInventoryPage() {
 		"pager_management",
 	);
 
-	const [{ data: departmentData }, { data, error }] = await Promise.all([
+	const [{ data: departmentData }, { data, error }, { data: membersData }] = await Promise.all([
 		supabase.from("departments").select("name").eq("id", departmentId).maybeSingle(),
 		supabase
 			.from("pagers")
-			.select("id, department_id, pager_number, serial_number, manufacturer, model, pager_type, location, status, notes, created_at, updated_at")
+			.select("id, department_id, pager_number, serial_number, manufacturer, model, pager_type, location, assigned_member_id, status, notes, created_at, updated_at")
 			.eq("department_id", departmentId)
 			.order("pager_number", { ascending: true }),
+		supabase
+			.from("members")
+			.select("id, first_name, last_name")
+			.eq("department_id", departmentId)
+			.eq("active", true)
+			.order("last_name", { ascending: true }),
 	]);
 
 	return (
@@ -52,6 +65,7 @@ export default async function PagersInventoryPage() {
 			departmentId={departmentId}
 			departmentName={typeof departmentData?.name === "string" ? departmentData.name : null}
 			initialPagers={(data ?? []) as PagerRecord[]}
+			memberOptions={(membersData ?? []) as MemberOption[]}
 			initialError={error?.message ?? null}
 			canManagePagers={canManagePagers}
 		/>

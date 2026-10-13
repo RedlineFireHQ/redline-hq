@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { getReportSourceConfig } from "./registry";
 import {
@@ -48,6 +50,18 @@ test("pagers is a selectable inventory category in the reports registry", () => 
 test("pagers report mode resolves to the expected inventory workflow", () => {
   assert.equal(resolveInventoryReportMode("pagers", "inventory").categoryKey, "pagers");
   assert.equal(resolveInventoryReportMode("pagers", "deficiencies").reportTypeKey, "deficiencies");
+});
+
+test("pagers migration creates member assignment with same-department enforcement", () => {
+  const migration = readFileSync(
+    join(__dirname, "../../supabase/migrations/20260918120000_create_pagers_inventory_category.sql"),
+    "utf8",
+  );
+
+  assert.match(migration, /assigned_member_id uuid references public\.members \(id\)/);
+  assert.match(migration, /validate_pager_assigned_member_department/);
+  assert.match(migration, /m\.department_id = new\.department_id/);
+  assert.match(migration, /create index if not exists pagers_assigned_member_idx/);
 });
 
 test("report mode resolves to the expected inventory workflow", () => {
