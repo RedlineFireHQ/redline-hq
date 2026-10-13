@@ -53,6 +53,12 @@ const INVENTORY_CATEGORY_OPTIONS = [
     description: "Battery assignment and service tracking",
   },
   {
+    key: "pagers",
+    label: "Pagers",
+    href: "/inventory/pagers",
+    description: "Pager accountability and status",
+  },
+  {
     key: "pie",
     label: "PIE Equipment",
     href: "/inventory/pie",

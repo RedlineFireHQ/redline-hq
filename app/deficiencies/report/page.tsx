@@ -17,6 +17,7 @@ type ReportFormState = {
   categoryId: string;
   priorityId: string;
   apparatusId: string;
+  pagerId: string;
   description: string;
   photo: File | null;
 };
@@ -25,6 +26,7 @@ const initialFormState: ReportFormState = {
   categoryId: "",
   priorityId: "",
   apparatusId: "",
+  pagerId: "",
   description: "",
   photo: null,
 };
@@ -91,6 +93,10 @@ function getInventoryEquipmentTypeLabel(normalizedInventoryCategory: string) {
 
   if (normalizedInventoryCategory === "portable-radios") {
     return "Portable Radio";
+  }
+
+  if (normalizedInventoryCategory === "pagers") {
+    return "Pager";
   }
 
   if (normalizedInventoryCategory === "ppe") {
@@ -233,6 +239,14 @@ function resolveInventoryCategoryOption(
       normalizedOptions.find((entry) => entry.normalizedLabel.includes(MISC_FIRE_EQUIPMENT_CATEGORY_TOKEN))?.option ??
       normalizedOptions.find((entry) => entry.normalizedLabel.includes("misc fire"))?.option ??
       normalizedOptions.find((entry) => entry.normalizedLabel.includes("fire equipment"))?.option ??
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes(INVENTORY_CATEGORY_TOKEN))?.option ??
+      null
+    );
+  }
+
+  if (normalizedInventoryCategory === "pagers") {
+    return (
+      normalizedOptions.find((entry) => entry.normalizedLabel.includes("pager"))?.option ??
       normalizedOptions.find((entry) => entry.normalizedLabel.includes(INVENTORY_CATEGORY_TOKEN))?.option ??
       null
     );
@@ -507,6 +521,7 @@ function ReportDeficiencyPageContent() {
   const inventoryItemId = typeof inventoryItemIdParam === "string" ? inventoryItemIdParam : "";
   const inventoryItemLabel = typeof inventoryItemLabelParam === "string" ? inventoryItemLabelParam : "";
   const normalizedInventoryCategory = inventoryCategory.trim().toLowerCase() as string;
+  const isPagerDeficiencyLaunch = normalizedInventoryCategory === "pagers";
   const inventoryEquipmentTypeLabel = getInventoryEquipmentTypeLabel(normalizedInventoryCategory);
   const isInventoryDeficiencyLaunch =
     normalizedInventoryCategory === "fire-hose" ||
@@ -519,6 +534,7 @@ function ReportDeficiencyPageContent() {
     normalizedInventoryCategory === "ground-ladders" ||
     normalizedInventoryCategory === "ems-equipment" ||
     normalizedInventoryCategory === "portable-radios" ||
+    normalizedInventoryCategory === "pagers" ||
     normalizedInventoryCategory === "ppe" ||
     normalizedInventoryCategory === "rope" ||
     normalizedInventoryCategory === "fire-extinguishers" ||
@@ -541,10 +557,12 @@ function ReportDeficiencyPageContent() {
   const [formState, setFormState] = useState<ReportFormState>({
     ...initialFormState,
     apparatusId: apparatusIdParam ?? "",
+    pagerId: isPagerDeficiencyLaunch ? inventoryItemId : "",
   });
   const [categories, setCategories] = useState<SelectOption[]>([]);
   const [priorities, setPriorities] = useState<SelectOption[]>([]);
   const [apparatusOptions, setApparatusOptions] = useState<SelectOption[]>([]);
+  const [pagerOptions, setPagerOptions] = useState<SelectOption[]>([]);
   const [openStatusId, setOpenStatusId] = useState("");
   const [isLoadingOptions, setIsLoadingOptions] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -569,6 +587,7 @@ function ReportDeficiencyPageContent() {
       normalizedInventoryCategory !== "ground-ladders" &&
       normalizedInventoryCategory !== "ems-equipment" &&
       normalizedInventoryCategory !== "portable-radios" &&
+      normalizedInventoryCategory !== "pagers" &&
       normalizedInventoryCategory !== "ppe" &&
       normalizedInventoryCategory !== "rope" &&
       normalizedInventoryCategory !== "misc-fire-equipment"
@@ -631,6 +650,11 @@ function ReportDeficiencyPageContent() {
         selectColumn = "radio_number";
       }
 
+      if (normalizedInventoryCategory === "pagers") {
+        inventoryTable = "pagers";
+        selectColumn = "pager_number";
+      }
+
       if (normalizedInventoryCategory === "ppe") {
         inventoryTable = "ppe_items";
         selectColumn = "item_name";
@@ -677,6 +701,8 @@ function ReportDeficiencyPageContent() {
         nextLabel = typeof record.equipment_name === "string" ? record.equipment_name : "";
       } else if (normalizedInventoryCategory === "portable-radios") {
         nextLabel = typeof record.radio_number === "string" ? record.radio_number : "";
+      } else if (normalizedInventoryCategory === "pagers") {
+        nextLabel = typeof record.pager_number === "string" ? record.pager_number : "";
       } else if (normalizedInventoryCategory === "ppe") {
         nextLabel = typeof record.item_name === "string" ? record.item_name : "";
       } else if (normalizedInventoryCategory === "rope") {
@@ -720,6 +746,25 @@ function ReportDeficiencyPageContent() {
     }));
   }, [isInventoryDeficiencyLaunch, normalizedInventoryCategory, inventoryItemId]);
 
+  const resolvePagerInventoryItemLabel = async (pagerId: string): Promise<string> => {
+    if (!pagerId) {
+      return "";
+    }
+
+    const { data, error } = await supabase
+      .from("pagers")
+      .select("pager_number")
+      .eq("id", pagerId)
+      .maybeSingle();
+
+    if (error || !data || typeof data !== "object") {
+      return "";
+    }
+
+    const record = data as Record<string, unknown>;
+    return typeof record.pager_number === "string" ? record.pager_number : "";
+  };
+
   const resolveInventoryItemLabelForRoute = async (category: string, itemId: string): Promise<string> => {
     if (!itemId) {
       return "";
@@ -759,16 +804,16 @@ function ReportDeficiencyPageContent() {
   const canSubmit = useMemo(() => {
     const effectiveApparatusId = isSessionScopedDeficiency
       ? (apparatusIdParam ?? "")
-      : (formState.apparatusId || (isInventoryDeficiencyLaunch ? STATION_SUPPLY_OPTION.id : ""));
+      : (formState.apparatusId || (isInventoryDeficiencyLaunch && normalizedInventoryCategory !== "pagers" ? STATION_SUPPLY_OPTION.id : ""));
 
     return (
       Boolean(formState.categoryId) &&
       Boolean(formState.priorityId) &&
-      Boolean(effectiveApparatusId) &&
+      Boolean(effectiveApparatusId || (isPagerDeficiencyLaunch && formState.pagerId)) &&
       Boolean(formState.description.trim()) &&
       Boolean(openStatusId)
     );
-  }, [apparatusIdParam, formState, isInventoryDeficiencyLaunch, isSessionScopedDeficiency, openStatusId]);
+  }, [apparatusIdParam, formState, isInventoryDeficiencyLaunch, isPagerDeficiencyLaunch, isSessionScopedDeficiency, normalizedInventoryCategory, openStatusId]);
 
   useEffect(() => {
     if (!isSessionScopedDeficiency || typeof apparatusIdParam !== "string" || !apparatusIdParam.trim()) {
@@ -866,7 +911,9 @@ function ReportDeficiencyPageContent() {
         );
 
         const defaultApparatusId =
-          normalizedInventoryCategory === "pie" ||
+          normalizedInventoryCategory === "pagers"
+            ? ""
+            : normalizedInventoryCategory === "pie" ||
           normalizedInventoryCategory === "gas-monitors" ||
           normalizedInventoryCategory === "battery" ||
           normalizedInventoryCategory === "thermal-cameras" ||
@@ -881,10 +928,23 @@ function ReportDeficiencyPageContent() {
         await ensureBoundApparatusOption(defaultApparatusId || null);
         setApparatusOptions([...normalizedApparatusOptions]);
 
+        if (normalizedInventoryCategory === "pagers") {
+          const { data: pagerRows } = await supabase
+            .from("pagers")
+            .select("id, pager_number")
+            .order("pager_number", { ascending: true });
+          setPagerOptions(
+            (pagerRows ?? []).map((row) => ({
+              id: typeof row.id === "string" ? row.id : String(row.id ?? ""),
+              label: typeof row.pager_number === "string" ? row.pager_number : "Pager",
+            })),
+          );
+        }
+
         setFormState((current) => ({
           ...current,
           categoryId: current.categoryId || resolvedInventoryCategory?.id || "",
-          apparatusId: current.apparatusId || defaultApparatusId,
+          apparatusId: normalizedInventoryCategory === "pagers" ? "" : (current.apparatusId || defaultApparatusId),
         }));
       }
 
@@ -932,6 +992,7 @@ function ReportDeficiencyPageContent() {
     const isGroundLadderDeficiency = normalizedInventoryCategory === "ground-ladders";
     const isEmsEquipmentDeficiency = normalizedInventoryCategory === "ems-equipment";
     const isPortableRadioDeficiency = normalizedInventoryCategory === "portable-radios";
+    const isPagerDeficiency = normalizedInventoryCategory === "pagers";
     const isPpeDeficiency = normalizedInventoryCategory === "ppe";
     const isRopeDeficiency = normalizedInventoryCategory === "rope";
     const isMiscFireEquipmentDeficiency = normalizedInventoryCategory === "misc-fire-equipment";
@@ -1058,12 +1119,25 @@ function ReportDeficiencyPageContent() {
 
     const effectiveApparatusId = isSessionScopedDeficiency
       ? apparatusIdParam ?? ""
-      : (formState.apparatusId || (isInventoryDeficiencyLaunch ? STATION_SUPPLY_OPTION.id : ""));
+      : (formState.apparatusId || (isInventoryDeficiencyLaunch && normalizedInventoryCategory !== "pagers" ? STATION_SUPPLY_OPTION.id : ""));
 
     if (isSessionScopedDeficiency && effectiveApparatusId === STATION_SUPPLY_OPTION.id) {
       setErrorMessage("Session-linked deficiencies must be reported against the active apparatus.");
       setIsSubmitting(false);
       return;
+    }
+
+    if (isPagerDeficiencyLaunch && !formState.pagerId) {
+      setErrorMessage("Select the affected pager before submitting.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (isPagerDeficiencyLaunch && !resolvedInventoryItemLabel) {
+      const resolvedPagerLabel = await resolvePagerInventoryItemLabel(formState.pagerId);
+      if (resolvedPagerLabel) {
+        setResolvedInventoryItemLabel(resolvedPagerLabel);
+      }
     }
 
     if (formState.photo) {
@@ -1088,7 +1162,7 @@ function ReportDeficiencyPageContent() {
       id: deficiencyId,
       category_id: formState.categoryId,
       priority: formState.priorityId,
-      apparatus_id: effectiveApparatusId === STATION_SUPPLY_OPTION.id ? null : effectiveApparatusId,
+      apparatus_id: isPagerDeficiencyLaunch || effectiveApparatusId === STATION_SUPPLY_OPTION.id ? null : effectiveApparatusId,
       description: formState.description.trim(),
       location: null,
       reported_at: now,
@@ -1108,6 +1182,7 @@ function ReportDeficiencyPageContent() {
       fire_extinguisher_id: normalizedInventoryCategory === "fire-extinguishers" && inventoryItemId ? inventoryItemId : null,
       ems_equipment_id: isEmsEquipmentDeficiency && inventoryItemId ? inventoryItemId : null,
       portable_radio_id: isPortableRadioDeficiency && inventoryItemId ? inventoryItemId : null,
+      pager_id: isPagerDeficiency && formState.pagerId ? formState.pagerId : null,
       ppe_item_id: isPpeDeficiency && inventoryItemId ? inventoryItemId : null,
       rope_item_id: isRopeDeficiency && inventoryItemId ? inventoryItemId : null,
       misc_fire_equipment_id: isMiscFireEquipmentDeficiency && inventoryItemId ? inventoryItemId : null,
@@ -1223,6 +1298,7 @@ function ReportDeficiencyPageContent() {
                 normalizedInventoryCategory === "ground-ladders" ||
                 normalizedInventoryCategory === "ems-equipment" ||
                 normalizedInventoryCategory === "portable-radios" ||
+                normalizedInventoryCategory === "pagers" ||
                 normalizedInventoryCategory === "ppe" ||
                 normalizedInventoryCategory === "rope" ||
                 normalizedInventoryCategory === "misc-fire-equipment") &&
@@ -1244,20 +1320,36 @@ function ReportDeficiencyPageContent() {
                 </label>
               ) : null}
 
-              <label className="block md:col-span-2">
-                <span className="mb-2 block text-sm font-semibold text-zinc-200">Apparatus</span>
-                <select
-                  value={formState.apparatusId}
-                  onChange={(event) => setFormState((current) => ({ ...current, apparatusId: event.target.value }))}
-                  disabled={isSessionScopedDeficiency}
-                  className="w-full rounded-xl border border-white/10 bg-[#151515] px-4 py-3 text-sm text-white"
-                >
-                  <option value="">Select apparatus</option>
-                  {[STATION_SUPPLY_OPTION, ...apparatusOptions].map((option) => (
-                    <option key={option.id} value={option.id}>{option.label}</option>
-                  ))}
-                </select>
-              </label>
+              {isPagerDeficiencyLaunch ? (
+                <label className="block md:col-span-2">
+                  <span className="mb-2 block text-sm font-semibold text-zinc-200">Pager</span>
+                  <select
+                    value={formState.pagerId}
+                    onChange={(event) => setFormState((current) => ({ ...current, pagerId: event.target.value }))}
+                    className="w-full rounded-xl border border-white/10 bg-[#151515] px-4 py-3 text-sm text-white"
+                  >
+                    <option value="">Select pager</option>
+                    {pagerOptions.map((option) => (
+                      <option key={option.id} value={option.id}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <label className="block md:col-span-2">
+                  <span className="mb-2 block text-sm font-semibold text-zinc-200">Apparatus</span>
+                  <select
+                    value={formState.apparatusId}
+                    onChange={(event) => setFormState((current) => ({ ...current, apparatusId: event.target.value }))}
+                    disabled={isSessionScopedDeficiency}
+                    className="w-full rounded-xl border border-white/10 bg-[#151515] px-4 py-3 text-sm text-white"
+                  >
+                    <option value="">Select apparatus</option>
+                    {[STATION_SUPPLY_OPTION, ...apparatusOptions].map((option) => (
+                      <option key={option.id} value={option.id}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
 
               <label className="block">
                 <span className="mb-2 block text-sm font-semibold text-zinc-200">Category</span>

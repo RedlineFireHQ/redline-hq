@@ -21,6 +21,7 @@ type Deficiency = {
 	fire_hose_id: string | null;
 	scba_cylinder_id: string | null;
 	scba_pack_id: string | null;
+	pager_id: string | null;
 	pie_equipment: {
 		equipment_number: string | null;
 	} | null;
@@ -50,6 +51,9 @@ type Deficiency = {
 	} | null;
 	scba_pack: {
 		pack_number: string | null;
+	} | null;
+	pager: {
+		pager_number: string | null;
 	} | null;
 	apparatus: {
 		name: string | null;
@@ -219,6 +223,35 @@ function normalizeFireExtinguisherRelation(value: unknown): { extinguisher_numbe
 		return {
 			extinguisher_number: typeof relation.extinguisher_number === "string" ? relation.extinguisher_number : null,
 			extinguisher_type: typeof relation.extinguisher_type === "string" ? relation.extinguisher_type : null,
+		};
+	}
+
+	return null;
+}
+
+function normalizePagerRelation(
+	value: unknown,
+): { pager_number: string | null } | null {
+	if (Array.isArray(value)) {
+		const first = value[0] as Record<string, unknown> | undefined;
+		if (!first) {
+			return null;
+		}
+
+		const pagerNumber = first.pager_number;
+		return {
+			pager_number:
+				typeof pagerNumber === "string" ? pagerNumber : null,
+		};
+	}
+
+	if (value && typeof value === "object") {
+		const relation = value as Record<string, unknown>;
+		const pagerNumber = relation.pager_number;
+
+		return {
+			pager_number:
+				typeof pagerNumber === "string" ? pagerNumber : null,
 		};
 	}
 
@@ -462,6 +495,7 @@ function normalizeDeficienciesData(data: unknown[] | null): Deficiency[] {
 		const fireHoseIdValue = row.fire_hose_id;
 		const scbaCylinderIdValue = row.scba_cylinder_id;
 		const scbaPackIdValue = row.scba_pack_id;
+		const pagerIdValue = row.pager_id;
 
 		return {
 			id: typeof idValue === "string" ? idValue : String(idValue ?? ""),
@@ -482,6 +516,7 @@ function normalizeDeficienciesData(data: unknown[] | null): Deficiency[] {
 				typeof scbaCylinderIdValue === "string" ? scbaCylinderIdValue : null,
 			scba_pack_id:
 				typeof scbaPackIdValue === "string" ? scbaPackIdValue : null,
+			pager_id: typeof pagerIdValue === "string" ? pagerIdValue : null,
 			pie_equipment: normalizePieEquipmentRelation(row.pie_equipment),
 			ems_equipment: normalizeEmsEquipmentRelation(row.ems_equipment),
 			ppe_item: normalizePpeItemRelation(row.ppe_item),
@@ -491,6 +526,7 @@ function normalizeDeficienciesData(data: unknown[] | null): Deficiency[] {
 			fire_hose: normalizeFireHoseRelation(row.fire_hose),
 			scba_cylinder: normalizeScbaCylinderRelation(row.scba_cylinder),
 			scba_pack: normalizeScbaPackRelation(row.scba_pack),
+			pager: normalizePagerRelation(row.pager),
 			apparatus: normalizeDeficiencyRelation(row.apparatus),
 			category: normalizeDeficiencyRelation(row.category),
 			priority: normalizeDeficiencyRelation(row.priority),
@@ -511,6 +547,10 @@ function getDeficiencyEquipmentCategoryLabel(deficiency: Deficiency) {
 
 	if (deficiency.scba_pack_id) {
 		return "SCBA Pack";
+	}
+
+	if (deficiency.pager_id) {
+		return "Pager";
 	}
 
 	if (deficiency.pie_equipment_id) {
@@ -546,7 +586,7 @@ async function fetchDeficiencies() {
 	const result = await supabase
 		.from("deficiencies")
 		.select(
-			"id, deficiency_number, description, reported_at, fire_hose_id, scba_cylinder_id, scba_pack_id, pie_equipment_id, ems_equipment_id, ppe_item_id, rope_item_id, fire_extinguisher_id, misc_fire_equipment_id, fire_hose:fire_hose_id(inventory_number), scba_cylinder:scba_cylinder_id(cylinder_number), scba_pack:scba_pack_id(pack_number), pie_equipment:pie_equipment_id(equipment_number), ems_equipment:ems_equipment_id(equipment_name), ppe_item:ppe_item_id(item_name), rope_item:rope_item_id(rope_name, rope_identifier), fire_extinguisher:fire_extinguisher_id(extinguisher_number, extinguisher_type), misc_fire_equipment:misc_fire_equipment_id(equipment_name, asset_number), category:deficiency_categories!fk_deficiencies_category(name), priority:deficiency_priorities!fk_deficiencies_priority(name), status:deficiency_statuses!fk_deficiencies_status(name), apparatus:apparatus!fk_deficiencies_apparatus(name)"
+			"id, deficiency_number, description, reported_at, fire_hose_id, scba_cylinder_id, scba_pack_id, pager_id, pie_equipment_id, ems_equipment_id, ppe_item_id, rope_item_id, fire_extinguisher_id, misc_fire_equipment_id, fire_hose:fire_hose_id(inventory_number), scba_cylinder:scba_cylinder_id(cylinder_number), scba_pack:scba_pack_id(pack_number), pager:pager_id(pager_number), pie_equipment:pie_equipment_id(equipment_number), ems_equipment:ems_equipment_id(equipment_name), ppe_item:ppe_item_id(item_name), rope_item:rope_item_id(rope_name, rope_identifier), fire_extinguisher:fire_extinguisher_id(extinguisher_number, extinguisher_type), misc_fire_equipment:misc_fire_equipment_id(equipment_name, asset_number), category:deficiency_categories!fk_deficiencies_category(name), priority:deficiency_priorities!fk_deficiencies_priority(name), status:deficiency_statuses!fk_deficiencies_status(name), apparatus:apparatus!fk_deficiencies_apparatus(name)"
 		)
 		.order("reported_at", { ascending: false });
 
@@ -711,6 +751,7 @@ function DeficienciesPageContent() {
 				deficiency.fire_hose?.inventory_number ?? "",
 				deficiency.scba_cylinder?.cylinder_number ?? "",
 				deficiency.scba_pack?.pack_number ?? "",
+				deficiency.pager?.pager_number ?? "",
 				deficiency.description ?? "",
 				deficiency.location ?? "",
 			];
@@ -1199,6 +1240,12 @@ function DeficienciesPageContent() {
 																<p>Station Supply</p>
 																<p>
 																	SCBA Pack - {deficiency.scba_pack?.pack_number ?? "Unknown"}
+																</p>
+															</div>
+														) : deficiency.pager_id ? (
+															<div>
+																<p>
+																	Pager - {deficiency.pager?.pager_number ?? "Unknown"}
 																</p>
 															</div>
 																		) : deficiency.ems_equipment_id ? (

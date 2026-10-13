@@ -98,6 +98,10 @@ export const APP_PERMISSION_KEYS = [
   "misc_fire_equipment_inspection_testing",
   "misc_fire_equipment_assignment",
   "misc_fire_equipment_retire_delete",
+  "pager_management",
+  "pager_inspection_testing",
+  "pager_assignment",
+  "pager_retire_delete",
   "inventory_management",
 ] as const;
 
@@ -131,6 +135,7 @@ export function getAppPermissionCategory(permissionKey: string): string {
   if (permissionKey.startsWith("battery_")) return "Batteries";
   if (permissionKey.startsWith("pie_equipment")) return "PIE Equipment";
   if (permissionKey.startsWith("misc_fire_equipment")) return "Miscellaneous Fire Equipment";
+  if (permissionKey.startsWith("pager_")) return "Pagers";
   if (permissionKey === "inventory_management") return "Legacy Permissions";
   return "Core";
 }
