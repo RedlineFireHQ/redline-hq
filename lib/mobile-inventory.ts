@@ -34,8 +34,8 @@ function item(params: Partial<MobileInventoryItem> & Pick<MobileInventoryItem, "
 }
 
 export async function loadMobileInventory(supabase: SupabaseClient, departmentId: string): Promise<MobileInventoryItem[]> {
-  const [deficiencies, fireHose, cylinders, packs, radios, mics, extinguishers, cameras, gasMonitors, ropes, misc, emsEquipment, batteries, ladders, pie, ppe] = await Promise.all([
-    supabase.from("deficiencies").select("fire_hose_id, scba_cylinder_id, scba_pack_id, portable_radio_id, portable_radio_mic_id, thermal_imaging_camera_id, gas_monitor_id, battery_id, ground_ladder_id, pie_equipment_id, ems_equipment_id, ppe_item_id, rope_item_id, fire_extinguisher_id, misc_fire_equipment_id, status_info:deficiency_statuses!fk_deficiencies_status(active)").eq("department_id", departmentId),
+  const [deficiencies, fireHose, cylinders, packs, radios, mics, extinguishers, cameras, gasMonitors, ropes, misc, emsEquipment, batteries, ladders, pie, ppe, pagers] = await Promise.all([
+    supabase.from("deficiencies").select("fire_hose_id, scba_cylinder_id, scba_pack_id, portable_radio_id, portable_radio_mic_id, thermal_imaging_camera_id, gas_monitor_id, battery_id, ground_ladder_id, pie_equipment_id, ems_equipment_id, ppe_item_id, rope_item_id, fire_extinguisher_id, misc_fire_equipment_id, pager_id, status_info:deficiency_statuses!fk_deficiencies_status(active)").eq("department_id", departmentId),
     supabase.from("fire_hose").select("id, inventory_number, hose_size, hose_length, apparatus, status, next_test_date, notes").eq("department_id", departmentId),
     supabase.from("scba_cylinders").select("id, cylinder_number, cylinder_type, serial_number, manufacturer, model, status, notes, next_hydrostatic_test_due_date").eq("department_id", departmentId),
     supabase.from("scba_packs").select("id, pack_number, serial_number, manufacturer, model, status, notes, next_flow_test_due_date").eq("department_id", departmentId),
@@ -51,9 +51,10 @@ export async function loadMobileInventory(supabase: SupabaseClient, departmentId
     supabase.from("ground_ladders").select("id, ladder_number, ladder_type, ladder_length_ft, serial_number, manufacturer, model, status, notes").eq("department_id", departmentId),
     supabase.from("pie_equipment").select("id, equipment_number, serial_number, manufacturer, model, equipment_type, power_source, location, status, notes").eq("department_id", departmentId),
     supabase.from("ppe_items").select("id, item_name, asset_number, assigned_member_id, manufacturer, model, serial_number, size, location, status, notes").eq("department_id", departmentId),
+    supabase.from("pagers").select("id, pager_number, serial_number, manufacturer, model, pager_type, location, status, notes").eq("department_id", departmentId),
   ]);
 
-  const results = [deficiencies, fireHose, cylinders, packs, radios, mics, extinguishers, cameras, gasMonitors, ropes, misc, emsEquipment, batteries, ladders, pie, ppe];
+  const results = [deficiencies, fireHose, cylinders, packs, radios, mics, extinguishers, cameras, gasMonitors, ropes, misc, emsEquipment, batteries, ladders, pie, ppe, pagers];
   const error = results.find((result) => result.error)?.error;
   if (error) throw new Error(error.message || "Unable to load inventory.");
 
@@ -61,7 +62,7 @@ export async function loadMobileInventory(supabase: SupabaseClient, departmentId
   for (const row of deficiencies.data ?? []) {
     const relation = Array.isArray(row.status_info) ? row.status_info[0] : row.status_info;
     if (relation?.active !== true) continue;
-    for (const key of ["fire_hose_id", "scba_cylinder_id", "scba_pack_id", "portable_radio_id", "portable_radio_mic_id", "thermal_imaging_camera_id", "gas_monitor_id", "battery_id", "ground_ladder_id", "pie_equipment_id", "ems_equipment_id", "ppe_item_id", "rope_item_id", "fire_extinguisher_id", "misc_fire_equipment_id"]) {
+    for (const key of ["fire_hose_id", "scba_cylinder_id", "scba_pack_id", "portable_radio_id", "portable_radio_mic_id", "thermal_imaging_camera_id", "gas_monitor_id", "battery_id", "ground_ladder_id", "pie_equipment_id", "ems_equipment_id", "ppe_item_id", "rope_item_id", "fire_extinguisher_id", "misc_fire_equipment_id", "pager_id"]) {
       const value = row[key as keyof typeof row];
       if (typeof value === "string") deficiencyCounts.set(value, (deficiencyCounts.get(value) ?? 0) + 1);
     }
@@ -88,6 +89,7 @@ export async function loadMobileInventory(supabase: SupabaseClient, departmentId
   add(misc.data, "misc-fire-equipment", "Misc Fire Equipment", (row) => item({ id: text(row.id), category: "Misc Fire Equipment", categoryKey: "misc-fire-equipment", name: text(row.equipment_name), identifier: text(row.asset_number), manufacturer: text(row.manufacturer), model: text(row.model), location: text(row.other_location ?? row.location_type), status: text(row.status), notes: text(row.notes), detailHref: `/mobile/inventory/misc-fire-equipment/${row.id}` }));
   add(emsEquipment.data, "ems-equipment", "EMS Equipment", (row) => item({ id: text(row.id), category: "EMS Equipment", categoryKey: "ems-equipment", name: text(row.equipment_name), identifier: text(row.equipment_number), serialNumber: text(row.serial_number), manufacturer: text(row.manufacturer), model: text(row.model), location: text(row.location), status: text(row.status), notes: text(row.notes), detailHref: `/mobile/inventory/ems-equipment/${row.id}` }));
   add(batteries.data, "batteries", "Batteries", (row) => item({ id: text(row.id), category: "Batteries", categoryKey: "batteries", name: text(row.battery_number), identifier: text(row.battery_number), serialNumber: text(row.serial_number), manufacturer: text(row.manufacturer), model: text(row.model), location: text(row.location), status: text(row.status), notes: text(row.notes), detailHref: `/mobile/inventory/batteries/${row.id}` }));
+  add(pagers.data, "pagers", "Pagers", (row) => item({ id: text(row.id), category: "Pagers", categoryKey: "pagers", name: text(row.pager_number), identifier: text(row.pager_number), serialNumber: text(row.serial_number), manufacturer: text(row.manufacturer), model: text(row.model), location: text(row.location), status: text(row.status), notes: text(row.notes), detailHref: `/mobile/inventory/pagers/${row.id}` }));
   add(ladders.data, "ground-ladders", "Ground Ladders", (row) => item({ id: text(row.id), category: "Ground Ladders", categoryKey: "ground-ladders", name: text(row.ladder_number), identifier: text(row.ladder_number), serialNumber: text(row.serial_number), manufacturer: text(row.manufacturer), model: text(row.model), quantity: `${number(row.ladder_length_ft)} ft`, status: text(row.status), notes: text(row.notes), relatedHref: "/mobile/ladder-inspections", detailHref: `/mobile/inventory/ground-ladders/${row.id}` }));
   add(pie.data, "pie", "PIE Equipment", (row) => item({ id: text(row.id), category: "PIE Equipment", categoryKey: "pie", name: text(row.equipment_number), identifier: text(row.equipment_number), serialNumber: text(row.serial_number), manufacturer: text(row.manufacturer), model: text(row.model), location: text(row.location), status: text(row.status), notes: text(row.notes), detailHref: `/mobile/inventory/pie/${row.id}` }));
   add(ppe.data, "ppe", "PPE", (row) => item({ id: text(row.id), category: "PPE", categoryKey: "ppe", name: text(row.item_name), identifier: text(row.asset_number), serialNumber: text(row.serial_number), manufacturer: text(row.manufacturer), model: text(row.model), location: text(row.location), status: text(row.status), notes: text(row.notes), detailHref: `/mobile/inventory/ppe/${row.id}` }));

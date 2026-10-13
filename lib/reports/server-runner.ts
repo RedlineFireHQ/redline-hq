@@ -60,6 +60,7 @@ type DeficiencyRow = {
 	gas_monitor_id: string | null;
 	battery_id: string | null;
 	ground_ladder_id: string | null;
+	pager_id: string | null;
 	status_info: { name: string | null } | Array<{ name: string | null }> | null;
 	priority_info: { name: string | null } | Array<{ name: string | null }> | null;
 	category_info: { name: string | null } | Array<{ name: string | null }> | null;
@@ -403,6 +404,7 @@ const OWNERSHIP_LINKS: OwnershipLookupConfig[] = [
 	{ field: "rope_item_id", table: "rope_items", labelPrefix: "Rope" },
 	{ field: "fire_extinguisher_id", table: "fire_extinguishers", labelPrefix: "Fire Extinguisher" },
 	{ field: "misc_fire_equipment_id", table: "misc_fire_equipment", labelPrefix: "Misc Fire Equipment" },
+	{ field: "pager_id", table: "pagers", labelPrefix: "Pager" },
 ];
 
 function isTimestampWithinRange(
@@ -756,7 +758,7 @@ async function runDeficiencyReport(
 	const queryResult = await context.supabase
 		.from("deficiencies")
 		.select(
-			"id, department_id, deficiency_number, description, reported_at, resolved_at, reported_by, assigned_to, resolved_by, apparatus_id, fire_hose_id, scba_cylinder_id, scba_pack_id, portable_radio_id, portable_radio_mic_id, thermal_imaging_camera_id, gas_monitor_id, battery_id, pie_equipment_id, ground_ladder_id, ems_equipment_id, ppe_item_id, rope_item_id, fire_extinguisher_id, misc_fire_equipment_id, status_info:deficiency_statuses!fk_deficiencies_status(name), priority_info:deficiency_priorities!fk_deficiencies_priority(name), category_info:deficiency_categories!fk_deficiencies_category(name), apparatus_info:apparatus!fk_deficiencies_apparatus(name), fire_hose:fire_hose_id(inventory_number), scba_cylinder:scba_cylinder_id(cylinder_number), scba_pack:scba_pack_id(pack_number), pie_equipment:pie_equipment_id(equipment_number), ems_equipment:ems_equipment_id(equipment_name), ppe_item:ppe_item_id(item_name), rope_item:rope_item_id(rope_name, rope_identifier), fire_extinguisher:fire_extinguisher_id(extinguisher_number, extinguisher_type), misc_fire_equipment:misc_fire_equipment_id(equipment_name, asset_number)",
+			"id, department_id, deficiency_number, description, reported_at, resolved_at, reported_by, assigned_to, resolved_by, apparatus_id, fire_hose_id, scba_cylinder_id, scba_pack_id, portable_radio_id, portable_radio_mic_id, thermal_imaging_camera_id, gas_monitor_id, battery_id, pie_equipment_id, ground_ladder_id, ems_equipment_id, ppe_item_id, rope_item_id, fire_extinguisher_id, misc_fire_equipment_id, pager_id, status_info:deficiency_statuses!fk_deficiencies_status(name), priority_info:deficiency_priorities!fk_deficiencies_priority(name), category_info:deficiency_categories!fk_deficiencies_category(name), apparatus_info:apparatus!fk_deficiencies_apparatus(name), fire_hose:fire_hose_id(inventory_number), scba_cylinder:scba_cylinder_id(cylinder_number), scba_pack:scba_pack_id(pack_number), pie_equipment:pie_equipment_id(equipment_number), ems_equipment:ems_equipment_id(equipment_name), ppe_item:ppe_item_id(item_name), rope_item:rope_item_id(rope_name, rope_identifier), fire_extinguisher:fire_extinguisher_id(extinguisher_number, extinguisher_type), misc_fire_equipment:misc_fire_equipment_id(equipment_name, asset_number)",
 		)
 		.order("reported_at", { ascending: false });
 

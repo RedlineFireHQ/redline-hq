@@ -319,6 +319,7 @@ export const REPORT_SOURCES: ReportSourceConfig[] = [
 					{ value: "misc-fire-equipment", label: "Misc Fire Equipment" },
 					{ value: "ems-equipment", label: "EMS Equipment" },
 					{ value: "batteries", label: "Batteries" },
+					{ value: "pagers", label: "Pagers" },
 					{ value: "ground-ladders", label: "Ground Ladders" },
 					{ value: "pie", label: "PIE Equipment" },
 					{ value: "ppe", label: "PPE" },

@@ -29,6 +29,27 @@ test("all inventory keeps a simple inventory-only drill-down", () => {
   ]);
 });
 
+test("pagers exposes inventory and deficiencies report types", () => {
+  assert.deepEqual(getInventoryReportTypeOptions("pagers"), [
+    { value: "inventory", label: "Inventory" },
+    { value: "deficiencies", label: "Deficiencies" },
+  ]);
+});
+
+test("pagers is a selectable inventory category in the reports registry", () => {
+  const source = getReportSourceConfig("inventory");
+
+  assert.ok(source);
+  const categoryFilter = source.filters.find((filter) => filter.key === "inventory_category");
+  assert.ok(categoryFilter);
+  assert.ok(categoryFilter.options?.some((option) => option.value === "pagers" && option.label === "Pagers"));
+});
+
+test("pagers report mode resolves to the expected inventory workflow", () => {
+  assert.equal(resolveInventoryReportMode("pagers", "inventory").categoryKey, "pagers");
+  assert.equal(resolveInventoryReportMode("pagers", "deficiencies").reportTypeKey, "deficiencies");
+});
+
 test("report mode resolves to the expected inventory workflow", () => {
   assert.equal(resolveInventoryReportMode("fire-hose", "fire-hose-testing").categoryKey, "fire-hose");
   assert.equal(resolveInventoryReportMode("gas-monitors", "gas-monitor-calibration").reportTypeKey, "gas-monitor-calibration");

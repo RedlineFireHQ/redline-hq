@@ -53,6 +53,7 @@ const INVENTORY_GROUPS: Array<{ name: string; keys: string[] }> = [
   { name: "Batteries", keys: ["battery_management", "battery_testing", "battery_assignment", "battery_retire_delete"] },
   { name: "PIE", keys: ["pie_equipment_management", "pie_equipment_inspection_testing", "pie_equipment_assignment", "pie_equipment_retire_delete"] },
   { name: "Misc Fire Equipment", keys: ["misc_fire_equipment_management", "misc_fire_equipment_inspection_testing", "misc_fire_equipment_assignment", "misc_fire_equipment_retire_delete"] },
+  { name: "Pagers", keys: ["pager_management", "pager_inspection_testing", "pager_assignment", "pager_retire_delete"] },
 ];
 
 const INVENTORY_MANAGEMENT_KEYS = INVENTORY_GROUPS.flatMap((group) =>

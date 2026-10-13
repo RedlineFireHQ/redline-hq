@@ -17,6 +17,7 @@ const inventoryCategories: InventoryCategory[] = [
 	{ name: "SCBA Packs", detail: "24 tracked units", href: "/inventory/scba-packs", countLabel: "tracked units", countTables: ["scba_packs"] },
 	{ name: "SCBA Cylinders", detail: "62 tracked cylinders", href: "/inventory/scba-cylinders", countLabel: "tracked cylinders", countTables: ["scba_cylinders"] },
 	{ name: "Portable Radios", detail: "39 assigned radios", href: "/inventory/portable-radios", countLabel: "assigned radios", countTables: ["portable_radios"] },
+	{ name: "Pagers", detail: "0 on hand", href: "/inventory/pagers", countLabel: "on hand", countTables: ["pagers"] },
 	{ name: "Fire Extinguishers", detail: "Tracked extinguisher inventory", href: "/inventory/fire-extinguishers" },
 	{
 		name: "Thermal Imaging Cameras",

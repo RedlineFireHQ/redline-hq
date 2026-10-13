@@ -313,6 +313,13 @@ export function getInventoryReportTypeOptions(categoryKey: string): InventoryRep
 		];
 	}
 
+	if (normalized === "pagers") {
+		return [
+			{ value: "inventory", label: "Inventory" },
+			{ value: "deficiencies", label: "Deficiencies" },
+		];
+	}
+
 	if (normalized === "all") {
 		return [{ value: "inventory", label: "Inventory" }];
 	}
@@ -348,6 +355,7 @@ function getInventoryCategoryLabel(categoryKey: string) {
 		"misc-fire-equipment": "Misc Fire Equipment",
 		"ems-equipment": "EMS Equipment",
 		"batteries": "Batteries",
+		"pagers": "Pagers",
 		"ground-ladders": "Ground Ladders",
 		"pie": "PIE Equipment",
 		"ppe": "PPE",
@@ -419,7 +427,7 @@ export async function runInventoryReport(
 	if (mode.reportTypeKey === "deficiencies") {
 		const { data, error } = await context.supabase
 			.from("deficiencies")
-			.select("id, department_id, deficiency_number, description, reported_at, resolved_at, status_info:deficiency_statuses!fk_deficiencies_status(name), priority_info:deficiency_priorities!fk_deficiencies_priority(name), category_info:deficiency_categories!fk_deficiencies_category(name), fire_hose_id, scba_cylinder_id, scba_pack_id, portable_radio_id, portable_radio_mic_id, thermal_imaging_camera_id, gas_monitor_id, battery_id, ground_ladder_id, pie_equipment_id, ems_equipment_id, ppe_item_id, rope_item_id, fire_extinguisher_id, misc_fire_equipment_id, fire_hose:fire_hose_id(inventory_number), scba_cylinder:scba_cylinder_id(cylinder_number), scba_pack:scba_pack_id(pack_number), rope_item:rope_item_id(rope_name, rope_identifier), gas_monitor:gas_monitor_id(monitor_number), ground_ladder:ground_ladder_id(ladder_number), fire_extinguisher:fire_extinguisher_id(extinguisher_number, extinguisher_type)")
+			.select("id, department_id, deficiency_number, description, reported_at, resolved_at, status_info:deficiency_statuses!fk_deficiencies_status(name), priority_info:deficiency_priorities!fk_deficiencies_priority(name), category_info:deficiency_categories!fk_deficiencies_category(name), fire_hose_id, scba_cylinder_id, scba_pack_id, portable_radio_id, portable_radio_mic_id, thermal_imaging_camera_id, gas_monitor_id, battery_id, ground_ladder_id, pie_equipment_id, ems_equipment_id, ppe_item_id, rope_item_id, fire_extinguisher_id, misc_fire_equipment_id, pager_id, fire_hose:fire_hose_id(inventory_number), scba_cylinder:scba_cylinder_id(cylinder_number), scba_pack:scba_pack_id(pack_number), rope_item:rope_item_id(rope_name, rope_identifier), gas_monitor:gas_monitor_id(monitor_number), ground_ladder:ground_ladder_id(ladder_number), fire_extinguisher:fire_extinguisher_id(extinguisher_number, extinguisher_type), pager:pager_id(pager_number)")
 			.eq("department_id", context.departmentId)
 			.order("reported_at", { ascending: false });
 
@@ -439,6 +447,7 @@ export async function runInventoryReport(
 					"misc-fire-equipment": "misc_fire_equipment_id",
 					"ppe": "ppe_item_id",
 					"ems-equipment": "ems_equipment_id",
+					"pagers": "pager_id",
 				};
 				return Boolean(row[fieldMap[categoryKey] ?? ""]);
 			})
@@ -460,6 +469,7 @@ export async function runInventoryReport(
 					row.gas_monitor,
 					row.rope_item,
 					row.fire_extinguisher,
+					row.pager,
 				].join(" ");
 				return searchable.toLowerCase().includes(searchTerm);
 			});
@@ -478,6 +488,7 @@ export async function runInventoryReport(
 				((Array.isArray(row.gas_monitor) ? row.gas_monitor[0] : row.gas_monitor) as { monitor_number?: unknown } | null | undefined)?.monitor_number ??
 				((Array.isArray(row.ground_ladder) ? row.ground_ladder[0] : row.ground_ladder) as { ladder_number?: unknown } | null | undefined)?.ladder_number ??
 				((Array.isArray(row.fire_extinguisher) ? row.fire_extinguisher[0] : row.fire_extinguisher) as { extinguisher_number?: unknown } | null | undefined)?.extinguisher_number ??
+				((Array.isArray(row.pager) ? row.pager[0] : row.pager) as { pager_number?: unknown } | null | undefined)?.pager_number ??
 				"-"
 			),
 			description: displayText(row.description),
@@ -829,6 +840,7 @@ export async function runInventoryReport(
 		pieEquipmentAssignmentsQuery,
 		ppeItemsQuery,
 		emsSupplyItemsQuery,
+		pagersQuery,
 	] = await Promise.all([
 		context.supabase.from("members").select("id, first_name, last_name").eq("department_id", context.departmentId),
 		context.supabase.from("apparatus").select("id, name").eq("department_id", context.departmentId),
@@ -866,6 +878,7 @@ export async function runInventoryReport(
 		context.supabase.from("pie_equipment_assignments").select("id, department_id, pie_equipment_id, assignment_type, apparatus_id, station_name, equipment_reference, notes, assigned_at, ended_at, created_at").eq("department_id", context.departmentId).order("assigned_at", { ascending: false }),
 		context.supabase.from("ppe_items").select("id, item_name, assigned_member_id, manufacturer, model, serial_number, asset_number, size, date_manufactured, placed_in_service_date, expiration_date, location, status, notes, photo_path, created_at, updated_at").eq("department_id", context.departmentId),
 		context.supabase.from("ems_supply_items").select("id, item_name, item_category, unit_of_measure, custom_unit_of_measure, quantity_on_hand, reorder_threshold, critical_threshold, target_quantity, location, notes, status, qr_identifier, created_at, updated_at").eq("department_id", context.departmentId),
+		context.supabase.from("pagers").select("id, pager_number, serial_number, manufacturer, model, pager_type, location, status, notes, created_at, updated_at").eq("department_id", context.departmentId),
 	]);
 
 	const queryErrors = [
@@ -902,6 +915,7 @@ export async function runInventoryReport(
 		pieEquipmentAssignmentsQuery.error,
 		ppeItemsQuery.error,
 		emsSupplyItemsQuery.error,
+		pagersQuery.error,
 	].filter(Boolean) as Array<{ message?: string | null }>;
 
 	if (queryErrors.length > 0) {
@@ -938,6 +952,7 @@ export async function runInventoryReport(
 		rope_item_id: buildOpenDeficiencyCountMap(deficiencyRows, "rope_item_id"),
 		fire_extinguisher_id: buildOpenDeficiencyCountMap(deficiencyRows, "fire_extinguisher_id"),
 		misc_fire_equipment_id: buildOpenDeficiencyCountMap(deficiencyRows, "misc_fire_equipment_id"),
+		pager_id: buildOpenDeficiencyCountMap(deficiencyRows, "pager_id"),
 	};
 
 	const fireHoseLatestById = buildLatestRecordMap((fireHoseTestsQuery.data ?? []) as Array<Record<string, unknown>>, "hose_id");
@@ -1223,6 +1238,25 @@ export async function runInventoryReport(
 		});
 	}
 
+	for (const row of (pagersQuery.data ?? []) as Array<Record<string, unknown>>) {
+		const id = normalizeText(row.id);
+		if (!id) continue;
+		addRow(inventoryRows, {
+			categoryKey: "pagers",
+			categoryLabel: "Pagers",
+			itemName: row.pager_number,
+			identifier: row.pager_number,
+			serialNumber: row.serial_number,
+			status: row.status,
+			locationOrApparatus: row.location,
+			latestActivityRaw: normalizeText(row.updated_at) || normalizeText(row.created_at) || null,
+			latestResult: "-",
+			dueDateRaw: null,
+			openDeficiencies: openCounts.pager_id.get(id) ?? 0,
+			searchParts: ["Pagers", row.pager_number, row.serial_number, row.manufacturer, row.model, row.pager_type, row.status, row.location],
+		});
+	}
+
 	for (const row of (groundLaddersQuery.data ?? []) as Array<Record<string, unknown>>) {
 		const id = normalizeText(row.id);
 		if (!id) continue;
@@ -1367,6 +1401,7 @@ export async function runInventoryReport(
 			"misc-fire-equipment",
 			"ems-equipment",
 			"batteries",
+			"pagers",
 			"ground-ladders",
 			"pie",
 			"ppe",
