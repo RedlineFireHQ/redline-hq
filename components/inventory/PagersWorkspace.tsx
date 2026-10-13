@@ -30,7 +30,6 @@ type PagerFormValues = {
 	serialNumber: string;
 	manufacturer: string;
 	model: string;
-	pagerType: string;
 	location: string;
 	assignedMemberId: string;
 	status: PagerRecord["status"];
@@ -42,6 +41,7 @@ interface PagersWorkspaceProps {
 	departmentName: string | null;
 	initialPagers: PagerRecord[];
 	memberOptions: MemberOption[];
+	membersError?: string | null;
 	initialError?: string | null;
 	canManagePagers: boolean;
 }
@@ -59,7 +59,6 @@ const EMPTY_FORM: PagerFormValues = {
 	serialNumber: "",
 	manufacturer: "",
 	model: "",
-	pagerType: "",
 	location: "",
 	assignedMemberId: "",
 	status: "In Service",
@@ -96,6 +95,7 @@ export default function PagersWorkspace({
 	departmentName,
 	initialPagers,
 	memberOptions,
+	membersError = null,
 	initialError = null,
 	canManagePagers,
 }: PagersWorkspaceProps) {
@@ -122,7 +122,7 @@ export default function PagersWorkspace({
 			if (statusFilter !== "All" && row.status !== statusFilter) return false;
 			if (!normalizedSearch) return true;
 			const assignedName = row.assigned_member_id ? memberNameById.get(row.assigned_member_id) ?? "" : "";
-			return [row.pager_number, row.serial_number, row.manufacturer, row.model, row.pager_type, row.location, assignedName, row.status, row.notes]
+			return [row.pager_number, row.serial_number, row.manufacturer, row.model, row.location, assignedName, row.status, row.notes]
 				.filter(Boolean)
 				.join(" ")
 				.toLowerCase()
@@ -147,7 +147,6 @@ export default function PagersWorkspace({
 			serialNumber: pager.serial_number ?? "",
 			manufacturer: pager.manufacturer ?? "",
 			model: pager.model ?? "",
-			pagerType: pager.pager_type ?? "",
 			location: pager.location ?? "",
 			assignedMemberId: pager.assigned_member_id ?? "",
 			status: pager.status,
@@ -190,7 +189,6 @@ export default function PagersWorkspace({
 			serial_number: normalizeOptionalText(formValues.serialNumber),
 			manufacturer: normalizeOptionalText(formValues.manufacturer),
 			model: normalizeOptionalText(formValues.model),
-			pager_type: normalizeOptionalText(formValues.pagerType),
 			location: normalizeOptionalText(formValues.location),
 			assigned_member_id: formValues.assignedMemberId || null,
 			status: formValues.status,
@@ -271,7 +269,6 @@ export default function PagersWorkspace({
 								<th className="px-4 py-3">Pager</th>
 								<th className="px-4 py-3">Serial</th>
 								<th className="px-4 py-3">Manufacturer / Model</th>
-								<th className="px-4 py-3">Type</th>
 								<th className="px-4 py-3">Location</th>
 								<th className="px-4 py-3">Assigned To</th>
 								<th className="px-4 py-3">Status</th>
@@ -285,7 +282,6 @@ export default function PagersWorkspace({
 									<td className="px-4 py-3 font-black text-white">{pager.pager_number}</td>
 									<td className="px-4 py-3">{pager.serial_number ?? "-"}</td>
 									<td className="px-4 py-3">{[pager.manufacturer, pager.model].filter(Boolean).join(" ") || "-"}</td>
-									<td className="px-4 py-3">{pager.pager_type ?? "-"}</td>
 									<td className="px-4 py-3">{pager.location ?? "-"}</td>
 									<td className="px-4 py-3">{pager.assigned_member_id ? memberNameById.get(pager.assigned_member_id) ?? "-" : "-"}</td>
 									<td className="px-4 py-3"><span className={`rounded-full border px-2.5 py-1 text-xs font-black ${statusBadgeClasses(pager.status)}`}>{pager.status}</span></td>
@@ -295,7 +291,7 @@ export default function PagersWorkspace({
 									</td>
 								</tr>
 							))}
-							{filteredRows.length === 0 ? <tr><td colSpan={9} className="px-4 py-8 text-center text-sm font-semibold text-neutral-500">No pagers found.</td></tr> : null}
+							{filteredRows.length === 0 ? <tr><td colSpan={8} className="px-4 py-8 text-center text-sm font-semibold text-neutral-500">No pagers found.</td></tr> : null}
 						</tbody>
 					</table>
 				</div>
@@ -316,13 +312,13 @@ export default function PagersWorkspace({
 							<label className="text-sm font-semibold text-neutral-300">Serial Number<input value={formValues.serialNumber} onChange={(event) => setFormValues((current) => ({ ...current, serialNumber: event.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3 text-white focus:border-red-500/50 focus:outline-none" /></label>
 							<label className="text-sm font-semibold text-neutral-300">Manufacturer<input value={formValues.manufacturer} onChange={(event) => setFormValues((current) => ({ ...current, manufacturer: event.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3 text-white focus:border-red-500/50 focus:outline-none" /></label>
 							<label className="text-sm font-semibold text-neutral-300">Model<input value={formValues.model} onChange={(event) => setFormValues((current) => ({ ...current, model: event.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3 text-white focus:border-red-500/50 focus:outline-none" /></label>
-							<label className="text-sm font-semibold text-neutral-300">Pager Type<input value={formValues.pagerType} onChange={(event) => setFormValues((current) => ({ ...current, pagerType: event.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3 text-white focus:border-red-500/50 focus:outline-none" /></label>
 							<label className="text-sm font-semibold text-neutral-300">Location<input value={formValues.location} onChange={(event) => setFormValues((current) => ({ ...current, location: event.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3 text-white focus:border-red-500/50 focus:outline-none" /></label>
 							<label className="text-sm font-semibold text-neutral-300">Assigned To
 								<select value={formValues.assignedMemberId} onChange={(event) => setFormValues((current) => ({ ...current, assignedMemberId: event.target.value }))} className="mt-2 w-full rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3 text-white focus:border-red-500/50 focus:outline-none">
 									<option value="">Unassigned</option>
 									{memberOptions.map((member) => <option key={member.id} value={member.id}>{getMemberName(member)}</option>)}
 								</select>
+								{memberOptions.length === 0 ? <p className="mt-2 text-xs font-semibold text-amber-300">{membersError ? `Could not load members: ${membersError}` : "No active department members found."}</p> : null}
 							</label>
 							<label className="text-sm font-semibold text-neutral-300">Status<select value={formValues.status} onChange={(event) => setFormValues((current) => ({ ...current, status: event.target.value as PagerRecord["status"] }))} className="mt-2 w-full rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3 text-white focus:border-red-500/50 focus:outline-none">{STATUS_OPTIONS.map((status) => <option key={status} value={status}>{status}</option>)}</select></label>
 							<label className="text-sm font-semibold text-neutral-300 sm:col-span-2">Notes<textarea value={formValues.notes} onChange={(event) => setFormValues((current) => ({ ...current, notes: event.target.value }))} rows={3} className="mt-2 w-full rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3 text-white focus:border-red-500/50 focus:outline-none" /></label>

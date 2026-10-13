@@ -1256,7 +1256,7 @@ export async function runInventoryReport(
 			latestResult: assignedMemberName ? "Assigned" : "-",
 			dueDateRaw: null,
 			openDeficiencies: openCounts.pager_id.get(id) ?? 0,
-			searchParts: ["Pagers", row.pager_number, row.serial_number, row.manufacturer, row.model, row.pager_type, assignedMemberName, row.status, row.location],
+			searchParts: ["Pagers", row.pager_number, row.serial_number, row.manufacturer, row.model, assignedMemberName, row.status, row.location],
 		});
 	}
 

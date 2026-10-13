@@ -45,27 +45,46 @@ export default async function PagersInventoryPage() {
 		"pager_management",
 	);
 
-	const [{ data: departmentData }, { data, error }, { data: membersData }] = await Promise.all([
+	const [{ data: departmentData }, { data, error }] = await Promise.all([
 		supabase.from("departments").select("name").eq("id", departmentId).maybeSingle(),
 		supabase
 			.from("pagers")
 			.select("id, department_id, pager_number, serial_number, manufacturer, model, pager_type, location, assigned_member_id, status, notes, created_at, updated_at")
 			.eq("department_id", departmentId)
 			.order("pager_number", { ascending: true }),
-		supabase
+	]);
+
+	let memberOptions: MemberOption[] = [];
+	let membersError: string | null = null;
+	const membersResult = await supabase
+		.from("members")
+		.select("id, first_name, last_name")
+		.eq("department_id", departmentId)
+		.eq("active", true)
+		.order("last_name", { ascending: true });
+
+	if (membersResult.error) {
+		const fallback = await supabase
 			.from("members")
 			.select("id, first_name, last_name")
 			.eq("department_id", departmentId)
-			.eq("active", true)
-			.order("last_name", { ascending: true }),
-	]);
+			.order("last_name", { ascending: true });
+		if (fallback.error) {
+			membersError = fallback.error.message || "Unable to load department members.";
+		} else {
+			memberOptions = (fallback.data ?? []) as MemberOption[];
+		}
+	} else {
+		memberOptions = (membersResult.data ?? []) as MemberOption[];
+	}
 
 	return (
 		<PagersWorkspace
 			departmentId={departmentId}
 			departmentName={typeof departmentData?.name === "string" ? departmentData.name : null}
 			initialPagers={(data ?? []) as PagerRecord[]}
-			memberOptions={(membersData ?? []) as MemberOption[]}
+			memberOptions={memberOptions}
+			membersError={membersError}
 			initialError={error?.message ?? null}
 			canManagePagers={canManagePagers}
 		/>

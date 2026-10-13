@@ -64,6 +64,21 @@ test("pagers migration creates member assignment with same-department enforcemen
   assert.match(migration, /create index if not exists pagers_assigned_member_idx/);
 });
 
+test("pagers workspace renders Assigned To dropdown and omits Pager Type field", () => {
+  const workspace = readFileSync(
+    join(__dirname, "../../components/inventory/PagersWorkspace.tsx"),
+    "utf8",
+  );
+
+  // Assigned To dropdown present with an Unassigned option and member options.
+  assert.match(workspace, />Assigned To/);
+  assert.match(workspace, /<option value="">Unassigned<\/option>/);
+  assert.match(workspace, /memberOptions\.map/);
+  // Pager Type input removed from the form.
+  assert.doesNotMatch(workspace, />Pager Type</);
+  assert.doesNotMatch(workspace, /formValues\.pagerType/);
+});
+
 test("report mode resolves to the expected inventory workflow", () => {
   assert.equal(resolveInventoryReportMode("fire-hose", "fire-hose-testing").categoryKey, "fire-hose");
   assert.equal(resolveInventoryReportMode("gas-monitors", "gas-monitor-calibration").reportTypeKey, "gas-monitor-calibration");
