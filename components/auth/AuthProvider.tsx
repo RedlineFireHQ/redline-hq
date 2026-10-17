@@ -65,86 +65,46 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
 	const [isLoading, setIsLoading] = useState(true);
 
 	async function loadMemberProfileByIdentity(userCandidate: User | null | undefined) {
-		const authUserId = typeof userCandidate?.id === "string" ? userCandidate.id : "";
-		const normalizedEmail = userCandidate?.email?.trim();
-
-		if (!authUserId && !normalizedEmail) {
+		if (!userCandidate) {
 			setMember(null);
 			setDepartment(null);
 			setPermissions({ personnel_management: false, reports_management: false });
 			return;
 		}
 
-		let data: MemberProfile | null = null;
-		let error: unknown = null;
+		// Resolve the current member server-side. The active department lives in an
+		// httpOnly cookie that client JavaScript cannot read, and a user can belong to
+		// multiple departments — so an ambiguous client-side maybeSingle() on
+		// auth_user_id can pick the wrong member row (wrong role/nav). The server route
+		// resolves the member for the active department authoritatively.
+		try {
+			const response = await fetch("/api/auth/current-member", { cache: "no-store" });
+			const result = (await response.json().catch(() => null)) as {
+				ok?: boolean;
+				member?: MemberProfile | null;
+				department?: DepartmentProfile | null;
+				permissions?: MemberPermissions;
+			} | null;
 
-		if (authUserId) {
-			const authUserLookup = await supabase
-				.from("members")
-				.select("*")
-				.eq("auth_user_id", authUserId)
-				.maybeSingle();
+			if (!response.ok || !result?.ok) {
+				setMember(null);
+				setDepartment(null);
+				setPermissions({ personnel_management: false, reports_management: false });
+				return;
+			}
 
-			data = (authUserLookup.data as MemberProfile | null) ?? null;
-			error = authUserLookup.error;
-		}
-
-		if (!data && normalizedEmail) {
-			const emailFallbackLookup = await supabase
-				.from("members")
-				.select("*")
-				.eq("email", normalizedEmail)
-				.maybeSingle();
-
-			data = (emailFallbackLookup.data as MemberProfile | null) ?? null;
-			error = emailFallbackLookup.error;
-		}
-
-		if (error) {
-			console.error("[auth] loadMemberProfileByIdentity error", {
-				authUserId,
-				email: normalizedEmail,
-				error,
+			setMember(result.member ?? null);
+			setDepartment(result.department ?? null);
+			setPermissions({
+				personnel_management: Boolean(result.permissions?.personnel_management),
+				reports_management: Boolean(result.permissions?.reports_management),
 			});
+		} catch (error) {
+			console.error("[auth] loadMemberProfileByIdentity error", error);
 			setMember(null);
 			setDepartment(null);
 			setPermissions({ personnel_management: false, reports_management: false });
-			return;
 		}
-
-		setMember(data ?? null);
-
-		const departmentId = typeof data?.department_id === "string" ? data.department_id : "";
-		if (!departmentId) {
-			setDepartment(null);
-			setPermissions({ personnel_management: false, reports_management: false });
-			return;
-		}
-
-		const [personnelResult, reportsResult, departmentResult] = await Promise.all([
-			supabase.rpc("member_has_app_permission", {
-				p_department_id: departmentId,
-				p_permission_key: "personnel_management",
-			}),
-			supabase.rpc("member_has_app_permission", {
-				p_department_id: departmentId,
-				p_permission_key: "reports_management",
-			}),
-			supabase.from("departments").select("id, name").eq("id", departmentId).maybeSingle(),
-		]);
-
-		setPermissions({
-			personnel_management:
-				!personnelResult.error && Boolean(personnelResult.data),
-			reports_management:
-				!reportsResult.error && Boolean(reportsResult.data),
-		});
-
-		const departmentName =
-			typeof departmentResult.data?.name === "string" ? departmentResult.data.name : "";
-		setDepartment(
-			!departmentResult.error && departmentName ? { id: departmentId, name: departmentName } : null,
-		);
 	}
 
 	useEffect(() => {
