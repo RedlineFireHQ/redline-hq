@@ -6,6 +6,12 @@ import { hasDepartmentPermission } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import PublicHomepage from "@/components/public/PublicHomepage";
 
+// The command center renders per-department data driven by the active-department
+// cookie. Force dynamic, non-cached rendering so switching departments can never
+// serve a stale payload built for a previously selected department.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type TrainingCategoryRow = {
   id: string;
   name: string;

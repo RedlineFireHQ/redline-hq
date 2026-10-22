@@ -1233,7 +1233,7 @@ export async function getDepartmentReadinessData(
         )
       : null;
 
-  const readinessRows = await getApparatusReadinessList();
+  const readinessRows = await getApparatusReadinessList(departmentId);
   const includedApparatusRows = readinessRows.filter(
     (row) =>
       row.apparatus.lifecycle_status !== "archived" &&

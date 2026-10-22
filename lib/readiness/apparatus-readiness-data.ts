@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   type ApparatusMaintenanceRequirementEvaluation,
   type ApparatusReadinessResult,
@@ -688,11 +689,18 @@ export function ensureApparatusReadinessRowContract(
   };
 }
 
-export async function getApparatusReadinessList() {
-  const supabase = await createSupabaseServerClient();
+export async function getApparatusReadinessList(departmentId?: string | null, client?: SupabaseClient) {
+  // Never return another department's apparatus. Without a valid active
+  // department, return an empty list rather than all departments' fleets.
+  if (!departmentId) {
+    return [];
+  }
+
+  const supabase = client ?? (await createSupabaseServerClient());
   const { data } = await supabase
     .from("apparatus")
     .select("id, department_id, name, type, include_in_department_readiness, lifecycle_status, status, last_inspection_at, mileage, engine_hours")
+    .eq("department_id", departmentId)
     .eq("lifecycle_status", "active")
     .order("name");
 

@@ -74,7 +74,7 @@ export default async function ApparatusPage() {
   const apparatusData = await getApparatus(supabase);
   const apparatusIds = apparatusData.map((unit) => String(unit.id));
   const openDeficiencyCountByApparatusId = await getOpenDeficiencyCountsByApparatusIds(apparatusIds);
-  const readinessRows = await getApparatusReadinessList();
+  const readinessRows = await getApparatusReadinessList(currentMember?.departmentId ?? null, supabase);
   const readinessByApparatusId = readinessRows.reduce<Record<string, (typeof readinessRows)[number]["readiness"]>>(
     (accumulator, row) => {
       accumulator[row.apparatus.id] = row.readiness;

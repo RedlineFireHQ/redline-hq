@@ -2,9 +2,13 @@ import Image from "next/image";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { getApparatusReadinessList, getStatusLabelForReadinessRow } from "@/lib/readiness/apparatus-readiness-data";
+import { getCurrentMember } from "@/lib/current-member";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 export default async function TodaysReadinessPanel() {
-  const readinessRows = await getApparatusReadinessList();
+  const supabase = await createSupabaseServerClient();
+  const currentMember = await getCurrentMember(supabase);
+  const readinessRows = await getApparatusReadinessList(currentMember?.departmentId ?? null, supabase);
   const scoreRows = readinessRows
     .filter((row) => row.readinessState === "evaluated")
     .map((row) => row.readiness.scorePercent)

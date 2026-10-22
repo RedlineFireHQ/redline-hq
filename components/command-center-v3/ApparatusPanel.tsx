@@ -3,6 +3,8 @@ import { ChevronRight, CheckCircle2, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { getApparatusReadinessList, getStatusLabelForReadinessRow } from "@/lib/readiness/apparatus-readiness-data";
 import { getApparatusImagePath } from "@/lib/apparatus-images";
+import { getCurrentMember } from "@/lib/current-member";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 function statusChipClasses(
   statusLabel: "Ready" | "Checks Due" | "Out of Service" | "Configuration Required" | "Readiness Unavailable"
@@ -27,7 +29,9 @@ function statusChipClasses(
 }
 
 export default async function ApparatusPanel() {
-  const readinessRows = await getApparatusReadinessList();
+  const supabase = await createSupabaseServerClient();
+  const currentMember = await getCurrentMember(supabase);
+  const readinessRows = await getApparatusReadinessList(currentMember?.departmentId ?? null, supabase);
 
   return (
     <section className="relative overflow-hidden rounded-[22px] border border-white/10 bg-[#101010] shadow-[0_20px_60px_rgba(0,0,0,.45)]">
