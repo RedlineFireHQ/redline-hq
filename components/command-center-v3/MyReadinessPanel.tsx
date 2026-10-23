@@ -304,12 +304,13 @@ export default function MyReadinessPanel() {
           .eq("department_id", departmentId)
           .eq("member_id", memberId)
           .eq("attendance_status", "attending"),
+        // Participant-aware: credit the submitter and every selected participant.
         supabase
-          .from("training_outside_submissions")
-          .select("id, category_id, hours")
-          .eq("department_id", departmentId)
-          .eq("member_id", memberId)
-          .eq("status", "approved"),
+          .rpc("get_member_training_outside_submissions", { p_department_id: departmentId, p_member_id: memberId })
+          .then((result) => ({
+            data: ((result.data ?? []) as Array<Record<string, unknown>>).filter((row) => row.status === "approved"),
+            error: result.error,
+          })),
         supabase
           .from("training_assignment_members")
           .select("id, training_assignment_id, completion_status, due_at, completed_at, hours_earned")
