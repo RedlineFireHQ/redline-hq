@@ -158,12 +158,13 @@ export default function TrainingPanel() {
           .from("training_events")
           .select("id, starts_at, category_id, hours_credit, is_ems_training, ems_core_topic, ems_needs_review")
           .eq("department_id", departmentId),
+        // Participant-aware: credit the submitter and every selected participant.
         supabase
-          .from("training_outside_submissions")
-          .select("id, training_date, category_id, hours, is_ems_training, ems_core_topic, ems_needs_review")
-          .eq("department_id", departmentId)
-          .eq("member_id", memberId)
-          .eq("status", "approved"),
+          .rpc("get_member_training_outside_submissions", { p_department_id: departmentId, p_member_id: memberId })
+          .then((result) => ({
+            data: ((result.data ?? []) as Array<Record<string, unknown>>).filter((row) => row.status === "approved"),
+            error: result.error,
+          })),
         supabase
           .from("training_assignment_members")
           .select("training_assignment_id, completion_status, hours_earned, completed_at")

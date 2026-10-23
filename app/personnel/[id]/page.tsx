@@ -364,6 +364,7 @@ export default async function PersonnelProfilePage({
     { data: departmentDocumentsData, error: departmentDocumentsError },
     { data: memberTrainingAttendanceData, error: memberTrainingAttendanceError },
     { data: approvedOutsideTrainingData, error: approvedOutsideTrainingError },
+    { data: participantOutsideTrainingData, error: participantOutsideTrainingError },
     { data: readinessRequirementsData, error: readinessRequirementsError },
     { data: approvedAssignmentMembersData, error: approvedAssignmentMembersError },
     { data: trainingAssignmentsData, error: trainingAssignmentsError },
@@ -428,6 +429,19 @@ export default async function PersonnelProfilePage({
       .eq("department_id", currentMember.departmentId)
       .eq("member_id", id)
       .eq("attendance_status", "attending"),
+    // Participant-aware: credit the submitter and every selected participant.
+    // The RPC get_member_training_outside_submissions is self-only (requester must equal
+    // p_member_id), so it cannot be used when an authorized manager views another member.
+    // This page already gates other-member views behind personnel_management/self, and the
+    // table's select policy permits department reviewers/managers to read these rows, so a
+    // direct participant-aware query is correct here. Dedup by submission id below.
+    supabase
+      .from("training_outside_submissions")
+      .select("id, title, category_id, training_date, hours, description, notes, member_id, training_outside_submission_members!inner(member_id)")
+      .eq("department_id", currentMember.departmentId)
+      .eq("status", "approved")
+      .eq("training_outside_submission_members.member_id", id)
+      .order("training_date", { ascending: false }),
     supabase
       .from("training_outside_submissions")
       .select("id, title, category_id, training_date, hours, description, notes")
@@ -516,6 +530,10 @@ export default async function PersonnelProfilePage({
 
   if (approvedOutsideTrainingError) {
     throw new Error(approvedOutsideTrainingError.message || "Unable to load approved self-reported training.");
+  }
+
+  if (participantOutsideTrainingError) {
+    throw new Error(participantOutsideTrainingError.message || "Unable to load approved self-reported training.");
   }
 
   if (readinessRequirementsError) {
@@ -672,18 +690,30 @@ export default async function PersonnelProfilePage({
     training_event_id: typeof row.training_event_id === "string" ? row.training_event_id : "",
   }));
 
-  const approvedOutsideTraining: MemberApprovedOutsideTrainingRow[] = (approvedOutsideTrainingData ?? []).map((row) => ({
-    id: String(row.id),
-    title: typeof row.title === "string" ? row.title : "Self-Reported Training",
-    category_id: typeof row.category_id === "string" ? row.category_id : null,
-    training_date: typeof row.training_date === "string" ? row.training_date : "",
-    hours:
-      typeof row.hours === "number" || typeof row.hours === "string"
-        ? row.hours
-        : null,
-    description: typeof row.description === "string" ? row.description : null,
-    notes: typeof row.notes === "string" ? row.notes : null,
-  }));
+  // Combine submissions the member submitted with those they were a selected participant on,
+  // deduplicated by submission id so the submitter is never counted twice.
+  const approvedOutsideById = new Map<string, Record<string, unknown>>();
+  for (const row of (approvedOutsideTrainingData ?? []) as Array<Record<string, unknown>>) {
+    approvedOutsideById.set(String(row.id), row);
+  }
+  for (const row of (participantOutsideTrainingData ?? []) as Array<Record<string, unknown>>) {
+    approvedOutsideById.set(String(row.id), row);
+  }
+
+  const approvedOutsideTraining: MemberApprovedOutsideTrainingRow[] = Array.from(approvedOutsideById.values())
+    .sort((left, right) => String(right.training_date).localeCompare(String(left.training_date)))
+    .map((row) => ({
+      id: String(row.id),
+      title: typeof row.title === "string" ? row.title : "Self-Reported Training",
+      category_id: typeof row.category_id === "string" ? row.category_id : null,
+      training_date: typeof row.training_date === "string" ? row.training_date : "",
+      hours:
+        typeof row.hours === "number" || typeof row.hours === "string"
+          ? row.hours
+          : null,
+      description: typeof row.description === "string" ? row.description : null,
+      notes: typeof row.notes === "string" ? row.notes : null,
+    }));
 
   const readinessRequirements: ReadinessRequirementRow[] = (readinessRequirementsData ?? []) as ReadinessRequirementRow[];
   const approvedAssignmentMembers: TrainingAssignmentMemberRow[] = (approvedAssignmentMembersData ?? []).map((row) => ({
