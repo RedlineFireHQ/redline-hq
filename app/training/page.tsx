@@ -227,6 +227,7 @@ export default async function TrainingPage() {
       { data: departmentOutsideData, error: departmentOutsideError },
       { data: departmentAssignmentsData, error: departmentAssignmentsError },
       { data: departmentAssignmentMembersData, error: departmentAssignmentMembersError },
+      { data: departmentMembersData, error: departmentMembersError },
     ] = await Promise.all([
       supabase
         .from("training_categories")
@@ -274,9 +275,10 @@ export default async function TrainingPage() {
         .from("training_event_attendance")
         .select("training_event_id, member_id, attendance_status, completion_status")
         .eq("department_id", currentMember.departmentId),
-      departmentDataClient.from("training_outside_submissions").select("training_date, hours, status").eq("department_id", currentMember.departmentId),
+      departmentDataClient.from("training_outside_submissions").select("id, member_id, title, category_id, training_date, hours, status").eq("department_id", currentMember.departmentId),
       departmentDataClient.from("training_assignments").select("id, hours_credit").eq("department_id", currentMember.departmentId),
       departmentDataClient.from("training_assignment_members").select("training_assignment_id, completion_status, completed_at, updated_at, created_at, hours_earned").eq("department_id", currentMember.departmentId),
+      departmentDataClient.from("members").select("id, first_name, last_name").eq("department_id", currentMember.departmentId).eq("active", true),
     ]);
 
     if (categoriesError) {
@@ -421,6 +423,32 @@ export default async function TrainingPage() {
         (row) => row.training_event_id === event.id && row.attendance_status === "attending",
       ).length,
     }));
+
+    // Approved self-reported training for the unified department history (Stage A).
+    const departmentMemberNameById = new Map(
+      ((departmentMembersData ?? []) as Array<{ id: string; first_name: string | null; last_name: string | null }>).map((member) => [
+        member.id,
+        `${member.first_name ?? ""} ${member.last_name ?? ""}`.trim() || "Unknown Member",
+      ]),
+    );
+    const departmentSelfReported = ((departmentOutsideData ?? []) as Array<{
+      id: string;
+      member_id: string;
+      title: string | null;
+      category_id: string | null;
+      training_date: string;
+      hours: number | string | null;
+      status: string;
+    }>)
+      .filter((row) => row.status === "approved")
+      .map((row) => ({
+        id: row.id,
+        title: row.title ?? "Self-Reported Training",
+        categoryName: categories.find((category) => category.id === row.category_id)?.name ?? "Uncategorized",
+        trainingDate: row.training_date,
+        hours: typeof row.hours === "string" ? Number.parseFloat(row.hours) : row.hours,
+        submitterName: departmentMemberNameById.get(row.member_id) ?? "Unknown Member",
+      }));
     const pendingReviews =
       (departmentOutsideData ?? []).filter((row) => row.status === "pending_review").length +
       (departmentAssignmentMembersData ?? []).filter(
@@ -533,6 +561,7 @@ export default async function TrainingPage() {
           pendingReviews={pendingReviews}
           events={departmentOverviewEvents}
           membersTrainedCount={membersTrainedCount}
+          selfReported={departmentSelfReported}
         />
         <TrainingWorkspace
         departmentId={currentMember.departmentId}
@@ -574,6 +603,7 @@ export default async function TrainingPage() {
     { data: assignmentMemberData, error: assignmentMemberError },
     { data: assignmentEvidenceData, error: assignmentEvidenceError },
     { data: emsCourseDefinitionsData, error: emsCourseDefinitionsError },
+    { data: approvedOutsideDisplayData, error: approvedOutsideDisplayError },
   ] = await Promise.all([
     supabase
       .from("training_categories")
@@ -654,6 +684,12 @@ export default async function TrainingPage() {
       .eq("department_id", currentMember.departmentId)
       .eq("active", true)
       .order("course_name", { ascending: true }),
+    supabase
+      .from("training_outside_submissions")
+      .select("id, member_id, title, category_id, training_date, hours, status")
+      .eq("department_id", currentMember.departmentId)
+      .eq("status", "approved")
+      .order("training_date", { ascending: false }),
   ]);
 
   if (categoriesError) {
@@ -702,6 +738,10 @@ export default async function TrainingPage() {
 
   if (emsCourseDefinitionsError) {
     throw new Error(emsCourseDefinitionsError.message || "Unable to load EMS course definitions.");
+  }
+
+  if (approvedOutsideDisplayError) {
+    throw new Error(approvedOutsideDisplayError.message || "Unable to load approved self-reported training.");
   }
 
   const categories: TrainingCategoryRow[] = (categoriesData ?? []).map((row) => ({
@@ -865,6 +905,26 @@ export default async function TrainingPage() {
     assignmentMembers,
   });
 
+  // Approved self-reported training for the unified department history (Stage A),
+  // shown in the manager view's Training Events section. Display-layer merge only.
+  const managerMemberNameById = new Map(members.map((member) => [member.id, `${member.first_name ?? ""} ${member.last_name ?? ""}`.trim() || "Unknown Member"]));
+  const approvedSelfReported = ((approvedOutsideDisplayData ?? []) as Array<{
+    id: string;
+    member_id: string;
+    title: string | null;
+    category_id: string | null;
+    training_date: string;
+    hours: number | string | null;
+    status: string;
+  }>).map((row) => ({
+    id: row.id,
+    title: row.title ?? "Self-Reported Training",
+    categoryName: categories.find((category) => category.id === row.category_id)?.name ?? "Uncategorized",
+    trainingDate: row.training_date,
+    hours: typeof row.hours === "string" ? Number.parseFloat(row.hours) : row.hours,
+    submitterName: managerMemberNameById.get(row.member_id) ?? "Unknown Member",
+  }));
+
   return (
     <TrainingWorkspace
       departmentId={currentMember.departmentId}
@@ -886,6 +946,7 @@ export default async function TrainingPage() {
       assignmentEvidenceRows={assignmentEvidenceRows}
       emsCourseDefinitions={emsCourseDefinitions}
       departmentTrainingHoursThisYear={departmentTrainingHoursThisYear}
+      approvedSelfReported={approvedSelfReported}
     />
   );
 }
