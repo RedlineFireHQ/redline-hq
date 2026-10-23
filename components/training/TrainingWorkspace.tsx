@@ -9,6 +9,7 @@ import { EMS_CORE_TOPICS, type EmsCoreTopicCode } from "@/lib/ems/requirements";
 import { triggerEmsAllocationRecalculation, triggerEmsAllocationRecalculationForMembers } from "@/lib/ems/recalculate-client";
 import { supabase } from "@/lib/supabase";
 import SubmitTrainingModal from "@/components/training/SubmitTrainingModal";
+import type { SelfReportedTraining } from "@/components/training/TrainingDepartmentOverview";
 
 type CurrentMemberRole = "firefighter" | "officer" | "administrator";
 
@@ -175,6 +176,7 @@ interface TrainingWorkspaceProps {
   emsCourseDefinitions: EmsCourseDefinitionRow[];
   departmentTrainingHoursThisYear: number;
   initialAddTrainingEventOpen?: boolean;
+  approvedSelfReported?: SelfReportedTraining[];
 }
 
 type TrainingEventFormState = {
@@ -486,6 +488,7 @@ export default function TrainingWorkspace({
   assignmentEvidenceRows,
   emsCourseDefinitions,
   departmentTrainingHoursThisYear,
+  approvedSelfReported = [],
 }: TrainingWorkspaceProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -605,6 +608,26 @@ export default function TrainingWorkspace({
   const sortedEvents = useMemo(() => {
     return [...eventRows].sort((left, right) => new Date(right.starts_at).getTime() - new Date(left.starts_at).getTime());
   }, [eventRows]);
+
+  // Unified department training history (Stage A): department-created events plus
+  // approved self-reported training, merged for display only. Self-reported rows are
+  // labeled and not linked (no event detail page exists for them). No records are
+  // duplicated; this is a render-time merge of two existing data sources.
+  type UnifiedHistoryRow =
+    | { kind: "event"; event: TrainingEventRow }
+    | { kind: "self"; submission: SelfReportedTraining };
+
+  const unifiedHistory = useMemo<UnifiedHistoryRow[]>(() => {
+    const rows: UnifiedHistoryRow[] = [
+      ...sortedEvents.map((event) => ({ kind: "event" as const, event })),
+      ...approvedSelfReported.map((submission) => ({ kind: "self" as const, submission })),
+    ];
+    return rows.sort((left, right) => {
+      const leftDate = left.kind === "event" ? left.event.starts_at : left.submission.trainingDate;
+      const rightDate = right.kind === "event" ? right.event.starts_at : right.submission.trainingDate;
+      return new Date(rightDate).getTime() - new Date(leftDate).getTime();
+    });
+  }, [sortedEvents, approvedSelfReported]);
 
   const departmentMembers = useMemo(
     () => members.map((member) => ({ ...member, full_name: memberDisplayName(member) })),
@@ -3030,7 +3053,7 @@ export default function TrainingWorkspace({
         </section>
       ) : null}
 
-      {sortedEvents.length === 0 ? (
+      {unifiedHistory.length === 0 ? (
         <section className="rounded-2xl border border-dashed border-neutral-700 bg-neutral-900 px-6 py-10 text-center">
           <p className="text-lg font-semibold text-white">No training events yet.</p>
           <p className="mt-2 text-sm text-neutral-400">
@@ -3050,7 +3073,7 @@ export default function TrainingWorkspace({
         <section className="overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900">
           <div className="border-b border-neutral-800 px-5 py-4">
             <h2 className="text-xl font-semibold text-white">Training Events</h2>
-            <p className="mt-1 text-sm text-neutral-400">Department training history.</p>
+            <p className="mt-1 text-sm text-neutral-400">Department training history, including approved self-reported training.</p>
           </div>
 
           <div className="max-h-[28rem] overflow-y-auto">
@@ -3059,6 +3082,7 @@ export default function TrainingWorkspace({
               <thead className="border-b border-neutral-800 bg-[#111111]">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-[0.16em] text-neutral-500">Training</th>
+                  <th className="px-4 py-3 text-left text-xs uppercase tracking-[0.16em] text-neutral-500">Source</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-[0.16em] text-neutral-500">Category</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-[0.16em] text-neutral-500">Date/Time</th>
                   <th className="px-4 py-3 text-left text-xs uppercase tracking-[0.16em] text-neutral-500">Hours</th>
@@ -3069,15 +3093,49 @@ export default function TrainingWorkspace({
                 </tr>
               </thead>
               <tbody>
-                {sortedEvents.map((trainingEvent) => {
+                {unifiedHistory.map((row) => {
+                  if (row.kind === "self") {
+                    const submission = row.submission;
+                    return (
+                      <tr key={`self-${submission.id}`} className="border-b border-neutral-800 transition hover:bg-neutral-800/40">
+                        <td className="px-4 py-3">
+                          <span className="font-semibold text-white">{submission.title}</span>
+                          <p className="mt-1 text-xs text-neutral-400">by {submission.submitterName}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="rounded-full border border-amber-500/35 bg-amber-500/15 px-2.5 py-1 text-xs uppercase tracking-[0.14em] text-amber-200">
+                            Self-Reported
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-neutral-200">{submission.categoryName}</td>
+                        <td className="px-4 py-3 text-sm text-neutral-200">{formatDateOnly(submission.trainingDate)}</td>
+                        <td className="px-4 py-3 text-sm text-neutral-200">{formatHours(submission.hours)}</td>
+                        <td className="px-4 py-3 text-sm text-neutral-200">-</td>
+                        <td className="px-4 py-3 text-sm text-neutral-200">-</td>
+                        <td className="px-4 py-3 text-sm text-neutral-200">-</td>
+                        <td className="px-4 py-3">
+                          <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs uppercase tracking-[0.14em] text-neutral-200">
+                            approved
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  const trainingEvent = row.event;
                   const attendance = attendanceByEventId.get(trainingEvent.id) ?? { attended: 0, completed: 0 };
                   return (
-                    <tr key={trainingEvent.id} className="border-b border-neutral-800 transition hover:bg-neutral-800/40">
+                    <tr key={`event-${trainingEvent.id}`} className="border-b border-neutral-800 transition hover:bg-neutral-800/40">
                       <td className="px-4 py-3">
                         <Link href={`/training/${trainingEvent.id}`} className="font-semibold text-white hover:text-red-300">
                           {trainingEvent.title}
                         </Link>
                         <p className="mt-1 text-xs text-neutral-400">{trainingEvent.topic || trainingEvent.training_type?.replaceAll(" | ", " • ") || "-"}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="rounded-full border border-sky-500/35 bg-sky-500/15 px-2.5 py-1 text-xs uppercase tracking-[0.14em] text-sky-200">
+                          Department Event
+                        </span>
                       </td>
                       <td className="px-4 py-3 text-sm text-neutral-200">
                         {getCategoryNameById(categories, trainingEvent.category_id)}
@@ -3102,18 +3160,49 @@ export default function TrainingWorkspace({
             </div>
 
             <div className="space-y-3 p-4 md:hidden">
-            {sortedEvents.map((trainingEvent) => {
+            {unifiedHistory.map((row) => {
+              if (row.kind === "self") {
+                const submission = row.submission;
+                return (
+                  <div
+                    key={`self-${submission.id}`}
+                    className="block rounded-xl border border-white/10 bg-[#151515] p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <h3 className="text-base font-semibold text-white">{submission.title}</h3>
+                      <span className="rounded-full border border-amber-500/35 bg-amber-500/15 px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-amber-200">
+                        Self-Reported
+                      </span>
+                    </div>
+
+                    <p className="mt-1 text-xs text-neutral-400">{submission.categoryName} · by {submission.submitterName}</p>
+
+                    <div className="mt-3 space-y-1 text-sm text-neutral-300">
+                      <div className="inline-flex items-center gap-2">
+                        <CalendarDays className="h-4 w-4 text-neutral-500" />
+                        {formatDateOnly(submission.trainingDate)}
+                      </div>
+                      <div className="inline-flex items-center gap-2">
+                        <Clock3 className="h-4 w-4 text-neutral-500" />
+                        {formatHours(submission.hours)} hrs
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              const trainingEvent = row.event;
               const attendance = attendanceByEventId.get(trainingEvent.id) ?? { attended: 0, completed: 0 };
               return (
                 <Link
-                  key={trainingEvent.id}
+                  key={`event-${trainingEvent.id}`}
                   href={`/training/${trainingEvent.id}`}
                   className="block rounded-xl border border-white/10 bg-[#151515] p-4 transition hover:border-white/20"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <h3 className="text-base font-semibold text-white">{trainingEvent.title}</h3>
-                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-neutral-200">
-                      {trainingEvent.status.replaceAll("_", " ")}
+                    <span className="rounded-full border border-sky-500/35 bg-sky-500/15 px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-sky-200">
+                      Department Event
                     </span>
                   </div>
 
@@ -3139,7 +3228,7 @@ export default function TrainingWorkspace({
                   </div>
 
                   <p className="mt-3 text-xs text-neutral-400">
-                    {attendance.attended} attended / {attendance.completed} completed
+                    {attendance.attended} attended / {attendance.completed} completed · {trainingEvent.status.replaceAll("_", " ")}
                   </p>
                 </Link>
               );
