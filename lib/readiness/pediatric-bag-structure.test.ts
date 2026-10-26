@@ -190,7 +190,7 @@ test("STRUCT9. each updated_at-bearing table has a matching trigger function and
 
 test("STRUCT10. idempotent seed protections are present for both bags and template", () => {
   assert.match(SQL, /on conflict \(department_id, bag_label\) do nothing;/);
-  assert.match(SQL, /where not exists \([\s\S]*?from public\.pediatric_bag_checklist_items existing[\s\S]*?\);/);
+  assert.match(SQL, /(where|and) not exists \([\s\S]*?from public\.pediatric_bag_checklist_items existing[\s\S]*?\);/);
   // Seeding is scoped to exactly one department id (Red Oak).
   const deptIds = new Set(Array.from(SQL.matchAll(/'([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})'::uuid/g)).map((m) => m[1]));
   assert.deepEqual([...deptIds], ["82f50d14-216a-4dd1-80f4-58459dc97b97"]);
