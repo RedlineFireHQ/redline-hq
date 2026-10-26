@@ -136,7 +136,7 @@ test("PEDI11. bag seeding is idempotent and scoped to Red Oak only", () => {
 });
 
 test("PEDI12. template seeding uses a NOT EXISTS guard so re-running never duplicates", () => {
-  assert.match(MIGRATION, /where not exists \(\s*select 1\s+from public\.pediatric_bag_checklist_items existing\s+where existing\.department_id = seed\.department_id/);
+  assert.match(MIGRATION, /(where|and) not exists \(\s*select 1\s+from public\.pediatric_bag_checklist_items existing\s+where existing\.department_id = seed\.department_id/);
 });
 
 test("PEDI13. sessions enforce one active check per member per bag", () => {
