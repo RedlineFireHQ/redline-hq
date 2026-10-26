@@ -1207,7 +1207,10 @@ from (
     ('82f50d14-216a-4dd1-80f4-58459dc97b97'::uuid, '24–30 kg Kit', '10mL Syringe', 1, '1', 86),
     ('82f50d14-216a-4dd1-80f4-58459dc97b97'::uuid, '24–30 kg Kit', '#3 Miller, #2-3 Mac', 1, '1ea', 87)
 ) as seed(department_id, section_name, item_label, required_quantity, source_quantity_text, display_order)
-where not exists (
+where exists (
+  select 1 from public.departments d where d.id = seed.department_id
+)
+and not exists (
   select 1
   from public.pediatric_bag_checklist_items existing
   where existing.department_id = seed.department_id
