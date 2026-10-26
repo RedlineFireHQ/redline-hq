@@ -3,7 +3,7 @@
 import Link from "next/link";
 
 type EmsInventorySwitchProps = {
-  activeView: "supplies" | "equipment";
+  activeView: "supplies" | "equipment" | "pediatric-bags" | "drug-box";
   outOfServiceCount?: number;
 };
 
@@ -29,6 +29,12 @@ export default function EmsInventorySwitch({ activeView, outOfServiceCount }: Em
             </Link>
             <Link href="/inventory/ems-equipment" className={tabClasses(activeView === "equipment")}>
               Equipment
+            </Link>
+            <Link href="/inventory/ems-pediatric-bags" className={tabClasses(activeView === "pediatric-bags")}>
+              Pediatric Bags
+            </Link>
+            <Link href="/inventory/ems-drug-box" className={tabClasses(activeView === "drug-box")}>
+              Drug Boxes
             </Link>
           </div>
         </div>
