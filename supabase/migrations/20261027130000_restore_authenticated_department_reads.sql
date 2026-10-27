@@ -6,6 +6,27 @@ alter table public.members enable row level security;
 alter table public.apparatus_inspections enable row level security;
 alter table public.deficiency_statuses enable row level security;
 alter table public.deficiency_priorities enable row level security;
+alter table public.apparatus_check_sessions enable row level security;
+
+drop policy if exists apparatus_check_sessions_select_self
+  on public.apparatus_check_sessions;
+create policy apparatus_check_sessions_select_self
+on public.apparatus_check_sessions
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.members m
+    where m.id = apparatus_check_sessions.member_id
+      and m.department_id = apparatus_check_sessions.department_id
+      and coalesce(m.active, false) = true
+      and (
+        (auth.uid() is not null and m.auth_user_id = auth.uid())
+        or lower(coalesce(m.email, '')) = lower(coalesce(auth.email(), ''))
+      )
+  )
+);
 
 drop policy if exists deficiency_statuses_select_for_member_department
   on public.deficiency_statuses;
@@ -47,6 +68,7 @@ grant select on table
   public.apparatus,
   public.auth_user_department_memberships,
   public.apparatus_inspections,
+  public.apparatus_check_sessions,
   public.apparatus_check_requirements,
   public.apparatus_check_department_defaults,
   public.apparatus_inspection_checklist_items,
