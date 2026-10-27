@@ -57,6 +57,7 @@ grant select on table
   public.apparatus_equipment_requirements,
   public.department_bay_schedules,
   public.deficiencies,
+  public.deficiency_history,
   public.deficiency_statuses,
   public.deficiency_priorities,
   public.maintenance_records,
