@@ -23,6 +23,7 @@ grant select on table
   public.deficiencies,
   public.maintenance_records,
   public.training_categories,
+  public.training_requirements,
   public.training_events,
   public.training_event_attendance,
   public.training_outside_submissions,
