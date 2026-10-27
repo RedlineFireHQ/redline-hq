@@ -827,7 +827,7 @@ export async function getDepartmentReadinessData(
         supabase
           .from("deficiencies")
           .select(
-            "id, deficiency_number, description, assigned_to, created_at, reported_at, status_info:deficiency_statuses!fk_deficiencies_status(name, active), priority_info:deficiency_priorities!fk_deficiencies_priority(name)",
+            "id, deficiency_number, description, assigned_to, created_at, reported_at, status_info:deficiency_statuses!deficiencies_status_fkey(name, active), priority_info:deficiency_priorities!deficiencies_priority_fkey(name)",
           )
           .in("assigned_to", memberIds),
       ])

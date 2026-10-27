@@ -284,6 +284,15 @@ test("DR14. Migration sets include_in_department_readiness default true", () => 
   assert.match(migrationSql, /not\s+null/i);
 });
 
+test("DR14A. Deficiency embeds use the deployed foreign-key constraint names", () => {
+  const sourcePath = resolve(process.cwd(), "lib/readiness/department-readiness.ts");
+  const source = readFileSync(sourcePath, "utf8");
+
+  assert.match(source, /deficiency_statuses!deficiencies_status_fkey/);
+  assert.match(source, /deficiency_priorities!deficiencies_priority_fkey/);
+  assert.doesNotMatch(source, /!fk_deficiencies_(?:status|priority)/);
+});
+
 test("DR15. Coach actions are ranked by highest impact first", () => {
   const actions: DepartmentReadinessCoachAction[] = [
     {
