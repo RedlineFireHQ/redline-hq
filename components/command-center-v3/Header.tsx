@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Bell, ChevronDown } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
+import DepartmentSwitcher from "@/components/command-center-v3/DepartmentSwitcher";
 import { supabase } from "@/lib/supabase";
 
 type NotificationRow = {
@@ -278,6 +279,8 @@ export default function Header({ translucent = false }: HeaderProps) {
 
         {/* RIGHT SIDE */}
         <div className="flex items-center gap-4">
+          <DepartmentSwitcher />
+
           {/* Notification Button */}
           <div className="relative" ref={alertsRef}>
             <button
