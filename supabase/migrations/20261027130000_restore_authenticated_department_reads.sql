@@ -4,6 +4,42 @@
 alter table public.departments enable row level security;
 alter table public.members enable row level security;
 alter table public.apparatus_inspections enable row level security;
+alter table public.deficiency_statuses enable row level security;
+alter table public.deficiency_priorities enable row level security;
+
+drop policy if exists deficiency_statuses_select_for_member_department
+  on public.deficiency_statuses;
+create policy deficiency_statuses_select_for_member_department
+on public.deficiency_statuses
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.deficiencies d
+    join public.auth_user_department_memberships audm
+      on audm.department_id = d.department_id
+     and audm.auth_user_id = auth.uid()
+    where d.status = deficiency_statuses.id
+  )
+);
+
+drop policy if exists deficiency_priorities_select_for_member_department
+  on public.deficiency_priorities;
+create policy deficiency_priorities_select_for_member_department
+on public.deficiency_priorities
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.deficiencies d
+    join public.auth_user_department_memberships audm
+      on audm.department_id = d.department_id
+     and audm.auth_user_id = auth.uid()
+    where d.priority = deficiency_priorities.id
+  )
+);
 
 grant select on table
   public.departments,
@@ -21,6 +57,8 @@ grant select on table
   public.apparatus_equipment_requirements,
   public.department_bay_schedules,
   public.deficiencies,
+  public.deficiency_statuses,
+  public.deficiency_priorities,
   public.maintenance_records,
   public.training_categories,
   public.training_requirements,
