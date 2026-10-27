@@ -8,11 +8,18 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { supabase } from "@/lib/supabase";
+import { shouldUseMobileInterface } from "@/lib/mobile-device";
 
 type AuthView = "sign_in" | "recovery";
 
 function getPostLoginDestination() {
-	return Capacitor.isNativePlatform() || window.matchMedia("(max-width: 767px)").matches ? "/mobile" : "/";
+	const useMobileInterface = shouldUseMobileInterface({
+		isNative: Capacitor.isNativePlatform(),
+		userAgent: window.navigator.userAgent,
+		platform: window.navigator.platform,
+		maxTouchPoints: window.navigator.maxTouchPoints,
+	});
+	return useMobileInterface ? "/mobile" : "/";
 }
 
 export default function LoginPage() {
