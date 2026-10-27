@@ -1,38 +1,33 @@
 import { getCurrentMember } from "@/lib/current-member";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { resolveInventoryOverviewCategories } from "@/lib/inventory-overview";
 import PageLayout from "@/components/layout/PageLayout";
 import Link from "next/link";
 
-type InventoryCategory = {
-	name: string;
-	detail: string;
-	href: string;
-	countLabel?: string;
-	countTables?: string[];
-};
+type InventoryCategory = Parameters<typeof resolveInventoryOverviewCategories>[0][number] & { href: string };
 
 const inventoryCategories: InventoryCategory[] = [
-	{ name: "EMS Inventory", detail: "Supplies and equipment", href: "/inventory/ems-supplies" },
-	{ name: "Fire Hose", detail: "148 sections", href: "/inventory/fire-hose", countLabel: "sections", countTables: ["fire_hose"] },
-	{ name: "SCBA Packs", detail: "24 tracked units", href: "/inventory/scba-packs", countLabel: "tracked units", countTables: ["scba_packs"] },
-	{ name: "SCBA Cylinders", detail: "62 tracked cylinders", href: "/inventory/scba-cylinders", countLabel: "tracked cylinders", countTables: ["scba_cylinders"] },
-	{ name: "Portable Radios", detail: "39 assigned radios", href: "/inventory/portable-radios", countLabel: "assigned radios", countTables: ["portable_radios"] },
-	{ name: "Pagers", detail: "0 on hand", href: "/inventory/pagers", countLabel: "on hand", countTables: ["pagers"] },
-	{ name: "Fire Extinguishers", detail: "Tracked extinguisher inventory", href: "/inventory/fire-extinguishers" },
+	{ name: "EMS Inventory", detail: "Supplies and equipment", href: "/inventory/ems-supplies", countLabel: "tracked items", countTables: ["ems_supply_items", "ems_equipment"] },
+	{ name: "Fire Hose", detail: "Department-scoped inventory", href: "/inventory/fire-hose", countLabel: "sections", countTables: ["fire_hose"] },
+	{ name: "SCBA Packs", detail: "Department-scoped inventory", href: "/inventory/scba-packs", countLabel: "tracked units", countTables: ["scba_packs"] },
+	{ name: "SCBA Cylinders", detail: "Department-scoped inventory", href: "/inventory/scba-cylinders", countLabel: "tracked cylinders", countTables: ["scba_cylinders"] },
+	{ name: "Portable Radios", detail: "Department-scoped inventory", href: "/inventory/portable-radios", countLabel: "tracked radios", countTables: ["portable_radios"] },
+	{ name: "Pagers", detail: "Department-scoped inventory", href: "/inventory/pagers", countLabel: "tracked pagers", countTables: ["pagers"] },
+	{ name: "Fire Extinguishers", detail: "Department-scoped inventory", href: "/inventory/fire-extinguishers", countLabel: "tracked extinguishers", countTables: ["fire_extinguishers"] },
 	{
 		name: "Thermal Imaging Cameras",
-		detail: "7 assigned cameras",
+		detail: "Department-scoped inventory",
 		href: "/inventory/thermal-cameras",
-		countLabel: "assigned cameras",
+		countLabel: "tracked cameras",
 		countTables: ["thermal_imaging_cameras"],
 	},
-	{ name: "Gas Monitors", detail: "12 calibrated monitors", href: "/inventory/gas-monitors", countLabel: "calibrated monitors", countTables: ["gas_monitors"] },
-	{ name: "PPE", detail: "92 stocked items", href: "/inventory/ppe", countLabel: "stocked items", countTables: ["ppe_items"] },
-	{ name: "Rope", detail: "Inspection-ready rope inventory", href: "/inventory/rope" },
-	{ name: "Miscellaneous Fire Equipment", detail: "General fire equipment and tools", href: "/inventory/misc-fire-equipment" },
-	{ name: "Batteries", detail: "61 on hand", href: "/inventory/batteries", countLabel: "on hand", countTables: ["batteries"] },
-	{ name: "Power & Industrial Equipment", detail: "14 tracked units", href: "/inventory/pie", countLabel: "tracked units", countTables: ["pie_equipment"] },
-	{ name: "Ground Ladders", detail: "18 inspection records", href: "/inventory/ground-ladders", countLabel: "inspection records", countTables: ["ground_ladders"] },
+	{ name: "Gas Monitors", detail: "Department-scoped inventory", href: "/inventory/gas-monitors", countLabel: "tracked monitors", countTables: ["gas_monitors"] },
+	{ name: "PPE", detail: "Department-scoped inventory", href: "/inventory/ppe", countLabel: "tracked items", countTables: ["ppe_items"] },
+	{ name: "Rope", detail: "Department-scoped inventory", href: "/inventory/rope", countLabel: "tracked ropes", countTables: ["rope_items"] },
+	{ name: "Miscellaneous Fire Equipment", detail: "Department-scoped inventory", href: "/inventory/misc-fire-equipment", countLabel: "tracked items", countTables: ["misc_fire_equipment"] },
+	{ name: "Batteries", detail: "Department-scoped inventory", href: "/inventory/batteries", countLabel: "tracked batteries", countTables: ["batteries"] },
+	{ name: "Power & Industrial Equipment", detail: "Department-scoped inventory", href: "/inventory/pie", countLabel: "tracked units", countTables: ["pie_equipment"] },
+	{ name: "Ground Ladders", detail: "Department-scoped inventory", href: "/inventory/ground-ladders", countLabel: "tracked ladders", countTables: ["ground_ladders"] },
 ];
 
 async function loadDepartmentCounts(departmentId: string) {
@@ -62,25 +57,7 @@ export default async function AssetsPage() {
 		? await loadDepartmentCounts(currentMember.departmentId)
 		: null;
 
-	const categories = inventoryCategories.map((category) => {
-		if (!countByTable || !category.countLabel || !category.countTables?.length) {
-			return category;
-		}
-
-		let total = 0;
-		for (const table of category.countTables) {
-			const count = countByTable.get(table);
-			if (typeof count !== "number") {
-				return category;
-			}
-			total += count;
-		}
-
-		return {
-			...category,
-			detail: `${total} ${category.countLabel}`,
-		};
-	});
+	const categories = resolveInventoryOverviewCategories(inventoryCategories, countByTable);
 
 	return (
 		<PageLayout
