@@ -1,5 +1,5 @@
 import { getCurrentMember } from "@/lib/current-member";
-import { hasAssignedDepartmentPermission, hasDepartmentPermission } from "@/lib/member-permissions";
+import { hasDepartmentPermission } from "@/lib/member-permissions";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -51,15 +51,9 @@ export async function POST(request: Request) {
       .eq("active", true)
       .maybeSingle();
     if (!activeMember) return jsonResponse({ ok: false, error: "Unauthorized" }, 401);
-    const [canManageMaintenance, canEnterFieldMaintenance] = await Promise.all([
-      hasDepartmentPermission(supabase, currentMember.departmentId, currentMember.role, "maintenance_management"),
-      hasAssignedDepartmentPermission(supabase, currentMember.departmentId, "maintenance_field_entry"),
-    ]);
-    if (!canManageMaintenance && !canEnterFieldMaintenance) {
-      return jsonResponse({ ok: false, error: "Maintenance field entry permission is required." }, 403);
-    }
+    const canManageMaintenance = await hasDepartmentPermission(supabase, currentMember.departmentId, currentMember.role, "maintenance_management");
 
-    if (canEnterFieldMaintenance && !canManageMaintenance) {
+    if (!canManageMaintenance) {
       payload.completed_by = currentMember.id;
     }
 
@@ -109,7 +103,18 @@ export async function POST(request: Request) {
     const { error: insertError } = await admin.from("maintenance_records").insert({
       id: recordId,
       department_id: currentMember.departmentId,
-      ...payload,
+      apparatus_id: payload.apparatus_id,
+      deficiency_id: payload.deficiency_id ?? null,
+      maintenance_type: payload.maintenance_type,
+      completed_by: payload.completed_by ?? null,
+      service_date: payload.service_date,
+      description: payload.description,
+      parts_used: payload.parts_used ?? null,
+      labor_hours: payload.labor_hours ?? null,
+      mileage: payload.mileage ?? null,
+      engine_hours: payload.engine_hours ?? null,
+      cost: payload.cost ?? null,
+      notes: payload.notes ?? null,
       photos: [],
       attachments: [],
     });
@@ -125,6 +130,16 @@ export async function POST(request: Request) {
       .select("id, maintenance_number, deficiency_id")
       .single();
     if (updateError || !record) throw new Error(updateError?.message || "Unable to attach maintenance files.");
+
+    if (record.deficiency_id && record.maintenance_number) {
+      const { error: historyError } = await admin.from("deficiency_history").insert({
+        deficiency_id: record.deficiency_id,
+        event_type: "Maintenance",
+        event_description: `Linked Maintenance Record created (${record.maintenance_number}).`,
+        member_id: payload.completed_by,
+      });
+      if (historyError) console.error("maintenance history link insert failed", historyError);
+    }
 
     return jsonResponse({ ok: true, record });
   } catch (error) {

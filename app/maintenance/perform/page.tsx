@@ -19,7 +19,7 @@ function PerformMaintenancePageContent() {
       ? returnToParam
       : null;
   const lockApparatus = Boolean(apparatusId);
-  const { canManageMaintenance, isCheckingMaintenancePermission } = useMaintenancePermission();
+  const { canPerformMaintenance, isCheckingMaintenancePermission } = useMaintenancePermission();
 
   return (
     <PageLayout>
@@ -43,7 +43,7 @@ function PerformMaintenancePageContent() {
           </p>
         </div>
 
-        {isCheckingMaintenancePermission ? <p className="text-sm text-zinc-400">Checking Maintenance access...</p> : canManageMaintenance ? <MaintenanceFormModal
+        {isCheckingMaintenancePermission ? <p className="text-sm text-zinc-400">Checking Maintenance access...</p> : canPerformMaintenance ? <MaintenanceFormModal
           isOpen
           mode="create"
           title="Perform Maintenance"
@@ -64,7 +64,7 @@ function PerformMaintenancePageContent() {
             router.push(`/maintenance/${recordId}`);
             router.refresh();
           }}
-        /> : <p className="text-sm text-amber-300">Maintenance management permission is required.</p>}
+        /> : <p className="text-sm text-amber-300">You must be an active member of a department to perform maintenance.</p>}
       </div>
     </PageLayout>
   );

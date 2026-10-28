@@ -67,12 +67,15 @@ export default async function MobileMaintenancePage() {
   if (!currentMember?.departmentId) redirect("/login");
 
   const departmentId = currentMember.departmentId;
-  const { data: hasPermission } = await supabase.rpc("member_has_app_permission", {
-    p_department_id: departmentId,
-    p_permission_key: "maintenance_field_entry",
-  });
+  const { data: activeMember } = await supabase
+    .from("members")
+    .select("id")
+    .eq("id", currentMember.id)
+    .eq("department_id", departmentId)
+    .eq("active", true)
+    .maybeSingle();
 
-  if (!hasPermission) redirect("/mobile");
+  if (!activeMember) redirect("/mobile");
 
   const [recordsResult, apparatusResult] = await Promise.all([
     supabase

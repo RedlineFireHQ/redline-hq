@@ -107,7 +107,7 @@ function MaintenancePageContent() {
   const [serviceDateFrom, setServiceDateFrom] = useState("");
   const [serviceDateTo, setServiceDateTo] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const { canManageMaintenance } = useMaintenancePermission();
+  const { canPerformMaintenance } = useMaintenancePermission();
 
   const linkedDeficiencyId = searchParams.get("deficiencyId");
   const shouldAutoOpenCreate = searchParams.get("create") === "1";
@@ -305,7 +305,7 @@ function MaintenancePageContent() {
             </p>
           </div>
 
-          {canManageMaintenance ? (
+          {canPerformMaintenance ? (
             <button
               type="button"
               onClick={() => router.push(buildPerformMaintenanceHref())}

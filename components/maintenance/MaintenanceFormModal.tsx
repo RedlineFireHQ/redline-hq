@@ -240,28 +240,20 @@ export default function MaintenanceFormModal({
         return;
       }
 
-      // Roster email can differ from the auth login email, so resolve by
-      // auth_user_id first (matches useMaintenancePermission()) before falling back.
-      let memberQuery = await supabase
-        .from("members")
-        .select("department_id")
-        .eq("auth_user_id", user.id)
-        .maybeSingle();
+      // Resolve the active department server-side; a client-side members lookup by
+      // auth_user_id/email is ambiguous across multiple departments.
+      const response = await fetch("/api/auth/current-member", { cache: "no-store" });
+      const result = (await response.json().catch(() => null)) as {
+        ok?: boolean;
+        member?: { department_id?: string | null } | null;
+      } | null;
 
-      if (!memberQuery.data && user.email) {
-        memberQuery = await supabase
-          .from("members")
-          .select("department_id")
-          .eq("email", user.email.trim())
-          .maybeSingle();
-      }
-
-      if (memberQuery.error || !isMounted) {
+      if (!isMounted || !result?.ok) {
         return;
       }
 
       const nextDepartmentId =
-        typeof memberQuery.data?.department_id === "string" ? memberQuery.data.department_id : null;
+        typeof result.member?.department_id === "string" ? result.member.department_id : null;
 
       if (nextDepartmentId) {
         setDepartmentId(nextDepartmentId);
@@ -583,16 +575,6 @@ export default function MaintenanceFormModal({
 
         if (!response.ok || !result?.ok || !result.record?.id) {
           throw new Error(result?.error || "Unable to create maintenance record.");
-        }
-
-        if (result.record.deficiency_id && result.record.maintenance_number) {
-          const { error: historyError } = await supabase.from("deficiency_history").insert({
-            deficiency_id: result.record.deficiency_id,
-            event_type: "Maintenance",
-            event_description: `Linked Maintenance Record created (${result.record.maintenance_number}).`,
-            member_id: basePayload.completed_by,
-          });
-          if (historyError) console.error("maintenance history link insert failed", historyError);
         }
 
         setIsSubmitting(false);

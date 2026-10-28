@@ -255,10 +255,6 @@ export default async function MobilePage() {
 		redirect("/login");
 	}
 
-	const { data: hasMobileMaintenanceFieldEntry } = await supabase.rpc("member_has_app_permission", {
-		p_department_id: currentMember.departmentId,
-		p_permission_key: "maintenance_field_entry",
-	});
 	const hasMobileReportsAccess = await hasDepartmentPermission(
 		supabase,
 		currentMember.departmentId,
@@ -622,7 +618,6 @@ export default async function MobilePage() {
 	const innerTickCount = 36;
 	const notificationCount = assignedDeficiencies.length;
 	const visibleQuickActions = quickActions.filter((item) => {
-		if (item.label === "Maintenance") return Boolean(hasMobileMaintenanceFieldEntry);
 		if (item.label === "Reports") return hasMobileReportsAccess;
 		return true;
 	});
