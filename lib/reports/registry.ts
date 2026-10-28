@@ -293,6 +293,7 @@ export const REPORT_SOURCES: ReportSourceConfig[] = [
 			{ key: "pump_tested_by", label: "Pump Tested By" },
 			{ key: "pump_test_result", label: "Pump Result" },
 			{ key: "pump_test_notes", label: "Pump Notes" },
+			{ key: "pump_test_attachments", label: "Attachments" },
 		],
 	},
 	{

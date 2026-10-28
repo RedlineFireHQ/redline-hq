@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 type PumpTestHistoryRow = {
@@ -9,6 +10,7 @@ type PumpTestHistoryRow = {
   testedBy: string;
   result: string | null;
   notes: string | null;
+  attachmentCount: number;
 };
 
 interface PumpTestHistoryTableProps {
@@ -77,12 +79,13 @@ export default function PumpTestHistoryTable({ rows }: PumpTestHistoryTableProps
               <th className="px-4 py-3 font-semibold">Tested By</th>
               <th className="px-4 py-3 font-semibold">Result</th>
               <th className="px-4 py-3 font-semibold">Notes</th>
+              <th className="px-4 py-3 font-semibold">Attachments</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
             {filteredRows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-neutral-400">
+                <td colSpan={6} className="px-4 py-8 text-center text-neutral-400">
                   No pump-test history found.
                 </td>
               </tr>
@@ -106,6 +109,14 @@ export default function PumpTestHistoryTable({ rows }: PumpTestHistoryTableProps
                     </span>
                   </td>
                   <td className="px-4 py-3 text-neutral-200">{row.notes?.trim() || "-"}</td>
+                  <td className="px-4 py-3">
+                    <Link
+                      href={`/apparatus/pump-test-history/${row.id}`}
+                      className="inline-flex rounded-lg border border-white/15 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800"
+                    >
+                      {row.attachmentCount > 0 ? `View (${row.attachmentCount})` : "Open"}
+                    </Link>
+                  </td>
                 </tr>
               ))
             )}

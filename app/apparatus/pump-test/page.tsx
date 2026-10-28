@@ -2,13 +2,13 @@ import Link from "next/link";
 import PageLayout from "@/components/layout/PageLayout";
 import PumpTestForm from "@/components/apparatus/PumpTestForm";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { getCurrentMember } from "@/lib/current-member";
+import { getActiveDepartmentMember } from "@/lib/pump-tests/access";
 
 export default async function PumpTestPage() {
   const supabase = await createSupabaseServerClient();
-  const currentMember = await getCurrentMember(supabase);
+  const currentMember = await getActiveDepartmentMember(supabase);
 
-  if (!currentMember?.departmentId) {
+  if (!currentMember) {
     return (
       <PageLayout environmentBackgroundUrl="/branding/images/apparatuspageimage.png" environmentBackgroundPosition="left center">
         <div className="mx-auto max-w-3xl rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-8 text-center">

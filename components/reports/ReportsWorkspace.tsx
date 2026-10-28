@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { buildDateRangeFromPreset, REPORT_DATE_PRESETS } from "@/lib/reports/date-range";
 import { REPORT_SOURCES } from "@/lib/reports/registry";
@@ -432,7 +433,13 @@ function ReportResultsTable({
 												: "",
 										].join(" ")}
 									>
-										{asText(row[column.key])}
+										{column.key === "pump_test_attachments" && typeof row.pump_test_detail_href === "string" && /^\d+ files?$/.test(asText(row[column.key])) ? (
+										  <Link href={asText(row.pump_test_detail_href)} className="font-semibold text-red-300 underline hover:text-red-200">
+										    {asText(row[column.key])}
+										  </Link>
+										) : (
+										  asText(row[column.key])
+										)}
 									</td>
 								);
 							})}

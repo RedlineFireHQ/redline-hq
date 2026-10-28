@@ -3323,6 +3323,7 @@ async function runApparatusReport(
 		"pump_tested_by",
 		"pump_test_result",
 		"pump_test_notes",
+		"pump_test_attachments",
 	]);
 	const columnsForMode = reportType === "mileage-hours"
 		? source.columns.filter((column) => mileageHoursColumnKeys.has(column.key))
@@ -3491,6 +3492,24 @@ async function runApparatusReport(
 				return rightTime - leftTime;
 			});
 
+		// Attachment counts are best-effort: if the attachments table is unavailable the report still runs.
+		const attachmentCountByTestId = new Map<string, number>();
+		let attachmentsAvailable = false;
+		if (filteredTests.length > 0) {
+			const attachmentsQuery = await context.supabase
+				.from("apparatus_pump_test_attachments")
+				.select("pump_test_id")
+				.eq("department_id", context.departmentId)
+				.in("pump_test_id", filteredTests.map((row) => row.id));
+
+			if (!attachmentsQuery.error) {
+				attachmentsAvailable = true;
+				for (const attachment of (attachmentsQuery.data ?? []) as Array<{ pump_test_id: string }>) {
+					attachmentCountByTestId.set(attachment.pump_test_id, (attachmentCountByTestId.get(attachment.pump_test_id) ?? 0) + 1);
+				}
+			}
+		}
+
 		const summary = [
 			{ label: "Pump Tests", value: String(filteredTests.length) },
 			{ label: "Pass", value: String(filteredTests.filter((row) => normalizeText(row.result).toLowerCase() === "pass").length) },
@@ -3513,6 +3532,13 @@ async function runApparatusReport(
 				pump_tested_by: testerName,
 				pump_test_result: normalizeText(row.result) || "-",
 				pump_test_notes: normalizeText(row.notes) || "-",
+				pump_test_attachments: !attachmentsAvailable
+					? "-"
+					: (attachmentCountByTestId.get(row.id) ?? 0) > 0
+						? `${attachmentCountByTestId.get(row.id)} ${attachmentCountByTestId.get(row.id) === 1 ? "file" : "files"}`
+						: "None",
+				// Not a column: lets the on-screen report link to the detail page.
+				pump_test_detail_href: `/apparatus/pump-test-history/${row.id}`,
 			};
 		});
 

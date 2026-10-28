@@ -2,13 +2,13 @@ import Link from "next/link";
 import PageLayout from "@/components/layout/PageLayout";
 import PumpTestHistoryTable from "@/components/apparatus/PumpTestHistoryTable";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { getCurrentMember } from "@/lib/current-member";
+import { getActiveDepartmentMember } from "@/lib/pump-tests/access";
 
 export default async function PumpTestHistoryPage() {
   const supabase = await createSupabaseServerClient();
-  const currentMember = await getCurrentMember(supabase);
+  const currentMember = await getActiveDepartmentMember(supabase);
 
-  if (!currentMember?.departmentId) {
+  if (!currentMember) {
     return (
       <PageLayout environmentBackgroundUrl="/branding/images/apparatuspageimage.png" environmentBackgroundPosition="left center">
         <div className="mx-auto max-w-3xl rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-8 text-center">
@@ -50,6 +50,15 @@ export default async function PumpTestHistoryPage() {
     }, {});
   }
 
+  const { data: attachmentRows } = await supabase
+    .from("apparatus_pump_test_attachments")
+    .select("pump_test_id")
+    .eq("department_id", currentMember.departmentId);
+  const attachmentCountByTestId = ((attachmentRows ?? []) as Array<{ pump_test_id: string }>).reduce<Record<string, number>>((counts, row) => {
+    counts[row.pump_test_id] = (counts[row.pump_test_id] ?? 0) + 1;
+    return counts;
+  }, {});
+
   const rows = ((rowsData ?? []) as Array<{
     id: string;
     test_date: string | null;
@@ -75,6 +84,7 @@ export default async function PumpTestHistoryPage() {
       testedBy: testerName,
       result: row.result,
       notes: row.notes,
+      attachmentCount: attachmentCountByTestId[row.id] ?? 0,
     };
   });
 
