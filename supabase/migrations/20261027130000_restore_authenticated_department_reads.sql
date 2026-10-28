@@ -62,6 +62,69 @@ using (
   )
 );
 
+drop policy if exists ems_requirement_components_select_by_department
+  on public.ems_requirement_components;
+create policy ems_requirement_components_select_by_department
+on public.ems_requirement_components
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.members m
+    where m.department_id = ems_requirement_components.department_id
+      and coalesce(m.active, false) = true
+      and (
+        (auth.uid() is not null and m.auth_user_id = auth.uid())
+        or lower(coalesce(m.email, '')) = lower(coalesce(auth.email(), ''))
+      )
+  )
+);
+
+drop policy if exists ems_requirement_topics_select_by_department
+  on public.ems_requirement_topics;
+create policy ems_requirement_topics_select_by_department
+on public.ems_requirement_topics
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.members m
+    where m.department_id = ems_requirement_topics.department_id
+      and coalesce(m.active, false) = true
+      and (
+        (auth.uid() is not null and m.auth_user_id = auth.uid())
+        or lower(coalesce(m.email, '')) = lower(coalesce(auth.email(), ''))
+      )
+  )
+);
+
+drop policy if exists ems_member_ce_cycles_select_self_or_role
+  on public.ems_member_ce_cycles;
+create policy ems_member_ce_cycles_select_self_or_role
+on public.ems_member_ce_cycles
+for select
+to authenticated
+using (
+  exists (
+    select 1
+    from public.ems_member_track_profiles p
+    join public.members m on m.department_id = p.department_id
+    where p.id = ems_member_ce_cycles.member_track_profile_id
+      and p.department_id = ems_member_ce_cycles.department_id
+      and coalesce(m.active, false) = true
+      and (
+        (auth.uid() is not null and m.auth_user_id = auth.uid())
+        or lower(coalesce(m.email, '')) = lower(coalesce(auth.email(), ''))
+      )
+      and (
+        m.id = p.member_id
+        or lower(coalesce(m.role, '')) in ('administrator', 'officer')
+      )
+  )
+);
+
 grant select on table
   public.departments,
   public.members,
@@ -82,6 +145,12 @@ grant select on table
   public.deficiency_history,
   public.deficiency_statuses,
   public.deficiency_priorities,
+  public.documents,
+  public.ems_course_definitions,
+  public.ems_member_ce_cycles,
+  public.ems_requirement_sets,
+  public.ems_requirement_components,
+  public.ems_requirement_topics,
   public.maintenance_records,
   public.training_categories,
   public.training_requirements,

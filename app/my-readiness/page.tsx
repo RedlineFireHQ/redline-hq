@@ -550,8 +550,9 @@ export default async function MyReadinessPage() {
     supabase
       .from("deficiencies")
       .select(
-        "id, deficiency_number, description, assigned_to, created_at, reported_at, status_info:deficiency_statuses!fk_deficiencies_status(name, active), priority_info:deficiency_priorities!fk_deficiencies_priority(name)",
+        "id, deficiency_number, description, assigned_to, created_at, reported_at, status_info:deficiency_statuses!deficiencies_status_fkey(name, active), priority_info:deficiency_priorities!deficiencies_priority_fkey(name)",
       )
+      .eq("department_id", currentMember.departmentId)
       .eq("assigned_to", currentMember.id),
     supabase
       .from("deficiency_history")
@@ -570,18 +571,21 @@ export default async function MyReadinessPage() {
     supabase
       .from("maintenance_records")
       .select("id, maintenance_number, maintenance_type, service_date, description")
+      .eq("department_id", currentMember.departmentId)
       .eq("completed_by", currentMember.id)
       .order("service_date", { ascending: false })
       .limit(20),
     supabase
       .from("apparatus_inspections")
       .select("id, created_at, status")
+      .eq("department_id", currentMember.departmentId)
       .eq("member_id", currentMember.id)
       .order("created_at", { ascending: false })
       .limit(20),
     supabase
       .from("apparatus_check_session_members")
       .select("session_id")
+      .eq("department_id", currentMember.departmentId)
       .eq("member_id", currentMember.id)
       .order("created_at", { ascending: false })
       .limit(50),
@@ -719,6 +723,7 @@ export default async function MyReadinessPage() {
     const { data: participationSessionRowsRaw, error: participationSessionRowsError } = await supabase
       .from("apparatus_check_sessions")
       .select("id, completed_inspection_id")
+      .eq("department_id", currentMember.departmentId)
       .in("id", participationSessionIds)
       .not("completed_inspection_id", "is", null);
 
@@ -742,6 +747,7 @@ export default async function MyReadinessPage() {
       const { data: helperInspectionRowsRaw, error: helperInspectionRowsError } = await supabase
         .from("apparatus_inspections")
         .select("id, created_at, status")
+        .eq("department_id", currentMember.departmentId)
         .in("id", participationInspectionIds)
         .order("created_at", { ascending: false });
 

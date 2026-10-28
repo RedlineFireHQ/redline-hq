@@ -466,12 +466,14 @@ async function loadRequirementSetForTrack(
 
 async function loadTrackRequirementRefs(
   supabase: SupabaseClient,
+  departmentId: string,
   requirementSet: RequirementSetRef,
   cycleId: string | null,
 ): Promise<TrackRequirementRefs> {
   const { data: componentsData, error: componentsError } = await supabase
     .from("ems_requirement_components")
     .select("id, requirement_set_id, component_code")
+    .eq("department_id", departmentId)
     .eq("requirement_set_id", requirementSet.id);
 
   if (componentsError) {
@@ -491,6 +493,7 @@ async function loadTrackRequirementRefs(
     const { data: topicsData, error: topicsError } = await supabase
       .from("ems_requirement_topics")
       .select("id, requirement_component_id, topic_code")
+      .eq("department_id", departmentId)
       .in("requirement_component_id", componentIds);
 
     if (topicsError) {
@@ -816,10 +819,10 @@ export async function recalculateMemberEmsCreditAccounting(input: {
     : null;
 
   const iowaRefs = iowaRequirementSet
-    ? await loadTrackRequirementRefs(input.supabase, iowaRequirementSet, iowaCycleId)
+    ? await loadTrackRequirementRefs(input.supabase, input.departmentId, iowaRequirementSet, iowaCycleId)
     : null;
   const nremtRefs = nremtRequirementSet
-    ? await loadTrackRequirementRefs(input.supabase, nremtRequirementSet, nremtCycleId)
+    ? await loadTrackRequirementRefs(input.supabase, input.departmentId, nremtRequirementSet, nremtCycleId)
     : null;
 
   const sources = await loadMemberEmsSources(input.supabase, input.departmentId, input.memberId);
