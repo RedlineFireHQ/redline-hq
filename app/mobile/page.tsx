@@ -647,15 +647,6 @@ export default async function MobilePage() {
 
 				<div className="relative z-10 h-[280px] overflow-hidden border-b border-white/10">
 
-					<div className="absolute inset-x-6 top-5 flex items-center justify-between text-[12px] font-semibold tracking-tight">
-						<span>9:41</span>
-						<div className="flex items-center gap-2 text-sm text-white/80">
-							<span className="h-2 w-2 rounded-full bg-white" />
-							<span className="h-2 w-2 rounded-full bg-white/70" />
-							<span className="h-2 w-2 rounded-full bg-white/40" />
-						</div>
-					</div>
-
 					<div className="absolute left-6 right-6 top-20">
 						<div className="flex items-start justify-between">
 							<button className={`relative mt-2 rounded-full border border-white/25 bg-black/30 p-2 text-white shadow-[0_8px_18px_rgba(0,0,0,0.28)] ${buttonInteraction}`}>
