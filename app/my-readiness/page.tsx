@@ -12,9 +12,9 @@ import {
   resolveCertificationStatusFromTrack,
 } from "@/lib/ems/authoritative-certifications";
 import { getCurrentMember } from "@/lib/current-member";
-import { calculateEmsReadiness, type EmsTrackProfileInput, type EmsTrainingRecord } from "@/lib/ems/calculation";
+import EmsContinuingEducationSection from "@/components/ems/EmsContinuingEducationSection";
+import { buildMemberEmsProgress } from "@/lib/ems/member-ems-progress";
 import { recalculateMemberEmsCreditAccounting } from "@/lib/ems/persistent-allocation";
-import { type EmsCertificationLevel, type EmsCoreTopicCode } from "@/lib/ems/requirements";
 import {
   buildMemberReadinessScore,
   getCertificationStatus,
@@ -270,97 +270,6 @@ function sourceLabel(source: HistoryItem["source"]) {
   }
 
   return "Apparatus";
-}
-
-function normalizeEmsTopic(value: string | null): EmsCoreTopicCode | null {
-  if (
-    value === "airway_respirations_ventilations" ||
-    value === "cardiology" ||
-    value === "trauma" ||
-    value === "medical" ||
-    value === "operations" ||
-    value === "other"
-  ) {
-    return value;
-  }
-
-  return null;
-}
-
-function normalizeEmsLevel(value: string): EmsCertificationLevel {
-  if (value === "emr" || value === "emt" || value === "aemt" || value === "paramedic") {
-    return value;
-  }
-
-  return "emt";
-}
-
-function normalizeEmsStatus(value: string): "active" | "inactive" | "expired" | "not_maintained" | "needs_review" {
-  if (value === "active" || value === "inactive" || value === "expired" || value === "not_maintained" || value === "needs_review") {
-    return value;
-  }
-
-  return "needs_review";
-}
-
-function formatEmsTopicLabel(topic: string) {
-  if (topic === "airway_respirations_ventilations") {
-    return "Airway, Respirations, Ventilations";
-  }
-
-  if (topic === "cardiology") {
-    return "Cardiology";
-  }
-
-  if (topic === "trauma") {
-    return "Trauma";
-  }
-
-  if (topic === "medical") {
-    return "Medical";
-  }
-
-  if (topic === "operations") {
-    return "Operations";
-  }
-
-  return "Other";
-}
-
-function formatEmsProgressStatus(status: string) {
-  if (status === "complete") {
-    return "Complete";
-  }
-
-  if (status === "on_track") {
-    return "On Track";
-  }
-
-  if (status === "needs_attention") {
-    return "Needs Attention";
-  }
-
-  if (status === "not_maintained") {
-    return "Not Maintained";
-  }
-
-  return "Not Configured";
-}
-
-function emsProgressStatusClasses(status: string) {
-  if (status === "complete") {
-    return "border-emerald-500/30 bg-emerald-500/10 text-emerald-200";
-  }
-
-  if (status === "on_track") {
-    return "border-blue-500/30 bg-blue-500/10 text-blue-200";
-  }
-
-  if (status === "needs_attention") {
-    return "border-amber-500/30 bg-amber-500/10 text-amber-200";
-  }
-
-  return "border-neutral-600/40 bg-neutral-700/20 text-neutral-300";
 }
 
 function isEmsLikeCertificationName(value: string) {
@@ -1188,61 +1097,17 @@ export default async function MyReadinessPage() {
   const expiringSoonEmsCertifications = emsCertificationCards.filter((row) => row.status === "expiring_soon").length;
   const expiredEmsCertifications = emsCertificationCards.filter((row) => row.status === "expired").length;
 
-  const iowaProfileInput: EmsTrackProfileInput | null = activeIowaProfile
-    ? {
-        level: normalizeEmsLevel(activeIowaProfile.certification_level),
-        status: normalizeEmsStatus(activeIowaProfile.track_status),
-        expirationDate: activeIowaProfile.expiration_date,
-        maintainTrack: true,
-      }
-    : null;
-
-  const nremtProfileInput: EmsTrackProfileInput | null = activeNremtProfile
-    ? {
-        level: normalizeEmsLevel(activeNremtProfile.certification_level),
-        status: normalizeEmsStatus(activeNremtProfile.track_status),
-        expirationDate: activeNremtProfile.expiration_date,
-        maintainTrack: activeNremtProfile.maintain_track === true,
-      }
-    : null;
-
-  const emsTrainingRecords: EmsTrainingRecord[] = [
-    ...attendedEvents.map((event) => ({
-      id: `event-${event.id}`,
-      occurredAt: event.starts_at,
-      hours: parseHours(event.hours_credit),
-      coreTopic: normalizeEmsTopic(event.ems_core_topic),
-      needsReview: event.ems_needs_review === true,
-      eligibleForIowa: event.is_ems_training === true,
-      eligibleForNremt: event.is_ems_training === true,
-      pediatricTagged: false,
-    })),
-    ...approvedOutside.map((submission) => ({
-      id: `outside-${submission.id}`,
-      occurredAt: submission.training_date,
-      hours: parseHours(submission.hours),
-      coreTopic: normalizeEmsTopic(submission.ems_core_topic),
-      needsReview: submission.ems_needs_review === true,
-      eligibleForIowa: submission.is_ems_training === true,
-      eligibleForNremt: submission.is_ems_training === true,
-      pediatricTagged: false,
-    })),
-  ].filter((record) => record.eligibleForIowa || record.eligibleForNremt);
-
-  const emsReadiness = calculateEmsReadiness({
-    iowaProfile: iowaProfileInput,
-    nremtProfile: nremtProfileInput,
-    trainingRecords: emsTrainingRecords,
+  const {
+    emsReadiness,
+    emsTrainingRecords,
+    visibleWarnings: firefighterVisibleEmsWarnings,
+    unclassifiedRecordIds: displayUnclassifiedRecordIds,
+  } = buildMemberEmsProgress({
+    iowaProfile: activeIowaProfile,
+    nremtProfile: activeNremtProfile,
+    events: attendedEvents,
+    outsideSubmissions: approvedOutside,
   });
-
-  const firefighterVisibleEmsWarnings = emsReadiness.warnings.filter(
-    (warning) => !warning.includes("NEEDS AUTHORITATIVE VERIFICATION"),
-  );
-
-  // My Readiness warning should reflect truly unclassified topic data, not stale review flags.
-  const displayUnclassifiedRecordIds = emsTrainingRecords
-    .filter((record) => record.coreTopic === null || record.coreTopic === "other")
-    .map((record) => record.id);
 
   // Keep dynamic readiness as the source for display while persisting deterministic accounting records.
   try {
@@ -1441,93 +1306,15 @@ export default async function MyReadinessPage() {
           </div>
         </section>
 
-         <section className="rounded-2xl border border-white/10 bg-neutral-900/70 p-6">
-           <div className="flex flex-col gap-3 border-b border-neutral-800 pb-4 md:flex-row md:items-end md:justify-between">
-             <div>
-               <h2 className="text-2xl font-semibold text-white">EMS Continuing Education</h2>
-               <p className="mt-1 text-sm text-neutral-400">Certification-cycle CE tracking for Iowa and National Registry is separate from calendar-year training totals.</p>
-             </div>
-             <div className="rounded-lg border border-white/10 bg-neutral-950 px-4 py-3 text-xs uppercase tracking-[0.14em] text-neutral-300">
-               EMS records counted: {emsTrainingRecords.length}
-             </div>
-           </div>
-
-           {activeIowaProfile === null && activeNremtProfile === null ? (
-             <div className="mt-4 rounded-xl border border-dashed border-neutral-700 bg-neutral-950 p-6 text-sm text-neutral-400">
-               No EMS track profile configured for this member yet. Set Iowa/NREMT status on the Personnel profile.
-             </div>
-           ) : (
-             <>
-               <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                 <div className="rounded-xl border border-white/10 bg-[#141414] p-4">
-                   <div className="flex items-center justify-between gap-2">
-                     <p className="text-base font-semibold text-white">Iowa EMS</p>
-                     <span className={`rounded-full border px-2.5 py-1 text-xs uppercase tracking-[0.12em] ${emsProgressStatusClasses(emsReadiness.iowa.status)}`}>
-                       {formatEmsProgressStatus(emsReadiness.iowa.status)}
-                     </span>
-                   </div>
-                   <p className="mt-2 text-sm text-neutral-300">
-                     {emsReadiness.iowa.totalCompleted.toFixed(2)} / {emsReadiness.iowa.totalRequired.toFixed(2)} hours
-                   </p>
-                   <p className="mt-1 text-xs text-neutral-400">
-                     Level: {activeIowaProfile?.certification_level?.toUpperCase() ?? "-"} • Number: {activeIowaProfile?.certification_number || "-"}
-                   </p>
-                   <p className="mt-1 text-xs text-neutral-400">Expiration: {activeIowaProfile?.expiration_date ? formatDateOnly(activeIowaProfile.expiration_date) : "No expiration"}</p>
-                   <p className="mt-1 text-xs text-neutral-400">Remaining: {emsReadiness.iowa.totalRemaining.toFixed(2)} hours</p>
-                   <div className="mt-3 space-y-2">
-                     {emsReadiness.iowa.topics.map((topic) => (
-                       <div key={topic.topic} className="flex items-center justify-between text-xs text-neutral-300">
-                         <span>{formatEmsTopicLabel(topic.topic)}</span>
-                         <span>{topic.completed.toFixed(2)} / {topic.required.toFixed(2)} hrs</span>
-                       </div>
-                     ))}
-                   </div>
-                 </div>
-
-                 <div className="rounded-xl border border-white/10 bg-[#141414] p-4">
-                   <div className="flex items-center justify-between gap-2">
-                     <p className="text-base font-semibold text-white">National Registry</p>
-                     <span className={`rounded-full border px-2.5 py-1 text-xs uppercase tracking-[0.12em] ${emsProgressStatusClasses(emsReadiness.nremt.status)}`}>
-                       {formatEmsProgressStatus(emsReadiness.nremt.status)}
-                     </span>
-                   </div>
-                   <p className="mt-2 text-sm text-neutral-300">
-                     {emsReadiness.nremt.totalCompleted.toFixed(2)} / {emsReadiness.nremt.totalRequired.toFixed(2)} hours
-                   </p>
-                   <p className="mt-1 text-xs text-neutral-400">
-                     Level: {activeNremtProfile?.certification_level?.toUpperCase() ?? "-"} • Number: {activeNremtProfile?.certification_number || "-"}
-                   </p>
-                   <p className="mt-1 text-xs text-neutral-400">
-                     Maintain Track: {activeNremtProfile?.maintain_track === true ? "Yes" : "No"} • Expiration: {activeNremtProfile?.expiration_date ? formatDateOnly(activeNremtProfile.expiration_date) : "No expiration"}
-                   </p>
-                   <p className="mt-1 text-xs text-neutral-400">National Component: {emsReadiness.nremt.nationalComponentCompleted.toFixed(2)} / {emsReadiness.nremt.nationalComponentRequired.toFixed(2)} hrs</p>
-                   <div className="mt-3 space-y-2">
-                     {emsReadiness.nremt.nationalTopics.map((topic) => (
-                       <div key={topic.topic} className="flex items-center justify-between text-xs text-neutral-300">
-                         <span>{formatEmsTopicLabel(topic.topic)}</span>
-                         <span>{topic.completed.toFixed(2)} / {topic.required.toFixed(2)} hrs</span>
-                       </div>
-                     ))}
-                   </div>
-                 </div>
-               </div>
-
-               {firefighterVisibleEmsWarnings.length > 0 ? (
-                 <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-                   {firefighterVisibleEmsWarnings.map((warning) => (
-                     <p key={warning}>{warning}</p>
-                   ))}
-                 </div>
-               ) : null}
-
-               {displayUnclassifiedRecordIds.length > 0 ? (
-                 <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-100">
-                   {displayUnclassifiedRecordIds.length} EMS record(s) are unclassified and marked for review.
-                 </div>
-               ) : null}
-             </>
-           )}
-         </section>
+        <EmsContinuingEducationSection
+          emsRecordsCounted={emsTrainingRecords.length}
+          iowaProfile={activeIowaProfile}
+          nremtProfile={activeNremtProfile}
+          emsReadiness={emsReadiness}
+          warnings={firefighterVisibleEmsWarnings}
+          unclassifiedCount={displayUnclassifiedRecordIds.length}
+          emptyMessage="No EMS track profile configured for this member yet. Set Iowa/NREMT status on the Personnel profile."
+        />
 
          <section className="rounded-2xl border border-white/10 bg-neutral-900/70 p-5">
            <div className="flex items-center justify-between gap-3 border-b border-neutral-800 pb-4">

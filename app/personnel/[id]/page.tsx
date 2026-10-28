@@ -3,6 +3,8 @@ import DepartmentRoleSelector from "@/components/personnel/DepartmentRoleSelecto
 import EditMemberButton from "@/components/personnel/EditMemberButton";
 import MemberReadinessCard from "@/components/personnel/MemberReadinessCard";
 import PersonnelEmsTracksSection from "@/components/personnel/PersonnelEmsTracksSection";
+import EmsContinuingEducationSection from "@/components/ems/EmsContinuingEducationSection";
+import { buildMemberEmsProgress } from "@/lib/ems/member-ems-progress";
 import PersonnelCertificationsSection from "@/components/personnel/PersonnelCertificationsSection";
 import RoleRequirementsSection from "@/components/personnel/RoleRequirementsSection";
 import CreateAuthAccountButton from "@/components/personnel/CreateAuthAccountButton";
@@ -111,6 +113,9 @@ type MemberTrainingEventRow = {
   training_type: string | null;
   instructor_name: string | null;
   location: string | null;
+  is_ems_training: boolean;
+  ems_core_topic: string | null;
+  ems_needs_review: boolean;
 };
 
 type MemberApprovedOutsideTrainingRow = {
@@ -121,6 +126,9 @@ type MemberApprovedOutsideTrainingRow = {
   hours: number | string | null;
   description: string | null;
   notes: string | null;
+  is_ems_training: boolean;
+  ems_core_topic: string | null;
+  ems_needs_review: boolean;
 };
 
 type TrainingCategoryLookupRow = {
@@ -437,14 +445,14 @@ export default async function PersonnelProfilePage({
     // direct participant-aware query is correct here. Dedup by submission id below.
     supabase
       .from("training_outside_submissions")
-      .select("id, title, category_id, training_date, hours, description, notes, member_id, training_outside_submission_members!inner(member_id)")
+      .select("id, title, category_id, training_date, hours, description, notes, is_ems_training, ems_core_topic, ems_needs_review, member_id, training_outside_submission_members!inner(member_id)")
       .eq("department_id", currentMember.departmentId)
       .eq("status", "approved")
       .eq("training_outside_submission_members.member_id", id)
       .order("training_date", { ascending: false }),
     supabase
       .from("training_outside_submissions")
-      .select("id, title, category_id, training_date, hours, description, notes")
+      .select("id, title, category_id, training_date, hours, description, notes, is_ems_training, ems_core_topic, ems_needs_review")
       .eq("department_id", currentMember.departmentId)
       .eq("member_id", id)
       .eq("status", "approved")
@@ -713,6 +721,9 @@ export default async function PersonnelProfilePage({
           : null,
       description: typeof row.description === "string" ? row.description : null,
       notes: typeof row.notes === "string" ? row.notes : null,
+      is_ems_training: row.is_ems_training === true,
+      ems_core_topic: typeof row.ems_core_topic === "string" ? row.ems_core_topic : null,
+      ems_needs_review: row.ems_needs_review === true,
     }));
 
   const readinessRequirements: ReadinessRequirementRow[] = (readinessRequirementsData ?? []) as ReadinessRequirementRow[];
@@ -744,7 +755,7 @@ export default async function PersonnelProfilePage({
   if (attendedEventIds.length > 0) {
     const { data: trainingEventsData, error: trainingEventsError } = await supabase
       .from("training_events")
-      .select("id, title, category_id, starts_at, hours_credit, training_type, instructor_name, location")
+      .select("id, title, category_id, starts_at, hours_credit, training_type, instructor_name, location, is_ems_training, ems_core_topic, ems_needs_review")
       .eq("department_id", currentMember.departmentId)
       .in("id", attendedEventIds)
       .order("starts_at", { ascending: false });
@@ -765,6 +776,9 @@ export default async function PersonnelProfilePage({
       training_type: typeof row.training_type === "string" ? row.training_type : null,
       instructor_name: typeof row.instructor_name === "string" ? row.instructor_name : null,
       location: typeof row.location === "string" ? row.location : null,
+      is_ems_training: row.is_ems_training === true,
+      ems_core_topic: typeof row.ems_core_topic === "string" ? row.ems_core_topic : null,
+      ems_needs_review: row.ems_needs_review === true,
     }));
   }
 
@@ -960,6 +974,14 @@ export default async function PersonnelProfilePage({
     categoryHours: Array.from(categoryHoursMap.values()).map((row) => ({ categoryId: row.categoryId, categoryName: row.categoryName, hours: row.hours })),
     deficiencyItems,
   });
+  // Read-only: same calculation as My Readiness; nothing is written or recalculated here.
+  const emsProgress = buildMemberEmsProgress({
+    iowaProfile: authoritativeReadiness.activeIowaProfile,
+    nremtProfile: authoritativeReadiness.activeNremtProfile,
+    events: trainingEvents,
+    outsideSubmissions: approvedOutsideTraining,
+  });
+
   const readinessScore = authoritativeReadiness.readiness;
   const readinessMessage = readinessScore.scorePercent === null
     ? readinessScore.configurationMessage
@@ -1084,6 +1106,18 @@ export default async function PersonnelProfilePage({
               memberId={String(member.id)}
               editorMemberId={currentMember.id}
               trackRows={emsTrackProfiles}
+            />
+          </div>
+
+          <div className="mt-6">
+            <EmsContinuingEducationSection
+              emsRecordsCounted={emsProgress.emsTrainingRecords.length}
+              iowaProfile={authoritativeReadiness.activeIowaProfile}
+              nremtProfile={authoritativeReadiness.activeNremtProfile}
+              emsReadiness={emsProgress.emsReadiness}
+              warnings={emsProgress.visibleWarnings}
+              unclassifiedCount={emsProgress.unclassifiedRecordIds.length}
+              emptyMessage="No EMS continuing education tracks are configured for this member."
             />
           </div>
         </>
