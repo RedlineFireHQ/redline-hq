@@ -1,5 +1,5 @@
 import { getCertificationStatus, type CertificationStatus } from "@/lib/readiness/member-readiness";
-import type { EmsCertificationLevel } from "@/lib/ems/requirements";
+import { assertEmsLevelForTrack, isEmsCertificationLevel, type EmsCertificationLevel } from "@/lib/ems/requirements";
 
 export type EmsAuthority = "iowa" | "nremt";
 
@@ -19,7 +19,7 @@ export type MemberCertificationAuthorityRow = {
 
 export type EmsTrackProfileAuthorityRow = {
   track: "iowa" | "nremt";
-  certification_level: "emr" | "emt" | "aemt" | "paramedic";
+  certification_level: "emr" | "emt" | "aemt" | "paramedic" | "ccp";
   track_status: "active" | "inactive" | "expired" | "not_maintained" | "needs_review";
   maintain_track: boolean;
   certification_number: string | null;
@@ -45,7 +45,7 @@ function normalizeAuthority(value: string | null): EmsAuthority | null {
 }
 
 function normalizeLevel(value: string | null): EmsCertificationLevel | null {
-  if (value === "emr" || value === "emt" || value === "aemt" || value === "paramedic") {
+  if (isEmsCertificationLevel(value)) {
     return value;
   }
 
@@ -80,9 +80,12 @@ function isLaterDate(left: string, right: string) {
 export function buildCertificationTypeMetaById(rows: CertificationTypeEmsMeta[]) {
   const byId = new Map<string, { authority: EmsAuthority | null; level: EmsCertificationLevel | null }>();
   for (const row of rows) {
+    const authority = normalizeAuthority(row.ems_authority);
+    const level = normalizeLevel(row.ems_certification_level);
+    if (authority && level) assertEmsLevelForTrack(authority, level);
     byId.set(row.id, {
-      authority: normalizeAuthority(row.ems_authority),
-      level: normalizeLevel(row.ems_certification_level),
+      authority,
+      level,
     });
   }
 

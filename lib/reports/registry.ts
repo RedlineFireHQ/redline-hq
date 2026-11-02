@@ -532,6 +532,7 @@ export const REPORT_SOURCES: ReportSourceConfig[] = [
 					{ value: "emt", label: "EMT" },
 					{ value: "aemt", label: "AEMT" },
 					{ value: "paramedic", label: "Paramedic" },
+					{ value: "ccp", label: "Critical Care Paramedic (CCP)" },
 				],
 			},
 			{

@@ -4,7 +4,7 @@ export type CredentialRequirementStatus = "required" | "additional";
 
 export type CredentialEmsAuthority = "iowa" | "nremt";
 
-export type CredentialEmsLevel = "emr" | "emt" | "aemt" | "paramedic";
+export type CredentialEmsLevel = "emr" | "emt" | "aemt" | "paramedic" | "ccp";
 
 export type CertificationCatalogRow = {
 	id: string;

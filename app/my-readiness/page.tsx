@@ -87,7 +87,7 @@ type OutsideSubmissionRow = {
 type EmsTrackProfileRow = {
   id: string;
   track: "iowa" | "nremt";
-  certification_level: "emr" | "emt" | "aemt" | "paramedic";
+  certification_level: "emr" | "emt" | "aemt" | "paramedic" | "ccp";
   track_status: "active" | "inactive" | "expired" | "not_maintained" | "needs_review";
   maintain_track: boolean;
   certification_number: string | null;
@@ -146,7 +146,7 @@ type CertificationTypeRow = {
   id: string;
   name: string;
   ems_authority: "iowa" | "nremt" | null;
-  ems_certification_level: "emr" | "emt" | "aemt" | "paramedic" | null;
+  ems_certification_level: "emr" | "emt" | "aemt" | "paramedic" | "ccp" | null;
 };
 
 type DocumentRow = {
@@ -273,7 +273,7 @@ function sourceLabel(source: HistoryItem["source"]) {
 }
 
 function isEmsLikeCertificationName(value: string) {
-  return /(ems|emt|aemt|paramedic|emergency medical|advanced life support|nremt)/i.test(value);
+  return /(ems|emt|aemt|paramedic|emergency medical|advanced life support|nremt|\bccp\b)/i.test(value);
 }
 
 function isActionableCoachMessage(actionNeeded: string) {

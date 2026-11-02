@@ -32,6 +32,7 @@ function inferEmsAuthority(name: string): "iowa" | "nremt" | null {
 
   if (
     normalized.includes("paramedic") ||
+    containsWord(normalized, "ccp") ||
     normalized.includes("advanced emt") ||
     normalized.includes("aemt") ||
     normalized.includes("emtb") ||
@@ -48,6 +49,10 @@ function inferEmsAuthority(name: string): "iowa" | "nremt" | null {
 
 function inferEmsLevel(name: string): EmsCertificationLevel | null {
   const normalized = normalize(name);
+
+  if (normalized.includes("critical care paramedic") || containsWord(normalized, "ccp")) {
+    return "ccp";
+  }
 
   if (normalized.includes("paramedic")) {
     return "paramedic";

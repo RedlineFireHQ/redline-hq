@@ -4,9 +4,12 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { triggerEmsAllocationRecalculation } from "@/lib/ems/recalculate-client";
 import { supabase } from "@/lib/supabase";
+import { assertEmsTrackLevelMatchesCredential } from "@/lib/ems/certification-selection";
+import { buildCertificationTypeMetaById, resolveAuthoritativeEmsCertificationsForMember, type CertificationTypeEmsMeta, type MemberCertificationAuthorityRow } from "@/lib/ems/authoritative-certifications";
+import { getEmsCertificationLevels } from "@/lib/ems/requirements";
 
 type EmsTrack = "iowa" | "nremt";
-type EmsLevel = "emr" | "emt" | "aemt" | "paramedic";
+type EmsLevel = "emr" | "emt" | "aemt" | "paramedic" | "ccp";
 type TrackStatus = "active" | "inactive" | "expired" | "not_maintained" | "needs_review";
 
 type EmsTrackRow = {
@@ -34,6 +37,8 @@ interface PersonnelEmsTracksSectionProps {
   memberId: string;
   editorMemberId: string;
   trackRows: EmsTrackRow[];
+  certificationTypes: CertificationTypeEmsMeta[];
+  memberCertifications: MemberCertificationAuthorityRow[];
 }
 
 function todayDateKey() {
@@ -68,6 +73,8 @@ export default function PersonnelEmsTracksSection({
   memberId,
   editorMemberId,
   trackRows,
+  certificationTypes,
+  memberCertifications,
 }: PersonnelEmsTracksSectionProps) {
   const router = useRouter();
   const [rows, setRows] = useState(trackRows);
@@ -99,6 +106,11 @@ export default function PersonnelEmsTracksSection({
     setSuccess(null);
 
     try {
+      const authoritative = resolveAuthoritativeEmsCertificationsForMember({
+        memberCertifications,
+        certificationTypeById: buildCertificationTypeMetaById(certificationTypes),
+      });
+      assertEmsTrackLevelMatchesCredential(track, form.level, authoritative[track]?.level ?? null);
       const payload = {
         department_id: departmentId,
         member_id: memberId,
@@ -187,7 +199,7 @@ export default function PersonnelEmsTracksSection({
       <div className="border-b border-neutral-800 pb-5">
         <h2 className="text-2xl font-semibold text-white">EMS Certification Tracks</h2>
         <p className="mt-2 text-sm text-neutral-400">
-          Track Iowa EMS and optional National Registry status for this member. Certification number and expiration are managed in Personnel Certifications and flow into EMS automatically.
+          Track Iowa EMS and optional National Registry status for this member. Certification authority, level, number, and expiration are managed in Personnel Certifications and flow into EMS automatically. A track level must match its assigned certification.
         </p>
       </div>
 
@@ -211,10 +223,7 @@ export default function PersonnelEmsTracksSection({
                 onChange={(event) => setIowaForm((current) => ({ ...current, level: event.target.value as EmsLevel }))}
                 className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-white"
               >
-                <option value="emr">EMR</option>
-                <option value="emt">EMT</option>
-                <option value="aemt">AEMT</option>
-                <option value="paramedic">Paramedic</option>
+                {getEmsCertificationLevels("iowa").map((level) => <option key={level.code} value={level.code}>{level.label}</option>)}
               </select>
             </label>
 
@@ -287,10 +296,7 @@ export default function PersonnelEmsTracksSection({
                 onChange={(event) => setNremtForm((current) => ({ ...current, level: event.target.value as EmsLevel }))}
                 className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-white"
               >
-                <option value="emr">EMR</option>
-                <option value="emt">EMT</option>
-                <option value="aemt">AEMT</option>
-                <option value="paramedic">Paramedic</option>
+                {getEmsCertificationLevels("nremt").map((level) => <option key={level.code} value={level.code}>{level.label}</option>)}
               </select>
             </label>
 

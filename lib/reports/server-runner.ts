@@ -1281,7 +1281,7 @@ function isEmsLikeValue(value: string | null | undefined): boolean {
 		return false;
 	}
 
-	return /(ems|emt|aemt|paramedic|emergency medical|advanced life support|nremt)/.test(candidate);
+	return /(ems|emt|aemt|paramedic|emergency medical|advanced life support|nremt|\bccp\b)/.test(candidate);
 }
 
 function classifySupplyStockLevel(params: {
@@ -1474,7 +1474,7 @@ type EmsTrackProfileReportRow = {
 	id: string;
 	member_id: string;
 	track: "iowa" | "nremt";
-	certification_level: "emr" | "emt" | "aemt" | "paramedic";
+	certification_level: "emr" | "emt" | "aemt" | "paramedic" | "ccp";
 	track_status: "active" | "inactive" | "expired" | "not_maintained" | "needs_review";
 	maintain_track: boolean;
 	certification_number: string | null;
@@ -1511,7 +1511,7 @@ type EmsCreditAllocationReportRow = {
 };
 
 function normalizeEmsLevel(value: string | null): EmsTrackProfileInput["level"] | null {
-	if (value === "emr" || value === "emt" || value === "aemt" || value === "paramedic") {
+	if (value === "emr" || value === "emt" || value === "aemt" || value === "paramedic" || value === "ccp") {
 		return value;
 	}
 
@@ -1539,6 +1539,8 @@ function normalizeEmsCoreTopic(value: string | null): EmsTrainingRecord["coreTop
 		value === "trauma" ||
 		value === "medical" ||
 		value === "operations" ||
+		value === "pediatric" ||
+		value === "critical_care_paramedic" ||
 		value === "other"
 	) {
 		return value;
@@ -1588,6 +1590,10 @@ function formatEmsLevelLabel(level: string | null) {
 
 	if (level === "paramedic") {
 		return "Paramedic";
+	}
+
+	if (level === "ccp") {
+		return "Critical Care Paramedic (CCP)";
 	}
 
 	return toTitleCaseLabel(level);

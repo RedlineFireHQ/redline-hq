@@ -84,7 +84,7 @@ const fakeClient = {
 };
 
 let PersonnelProfilePage: (props: { params: Promise<{ id: string }> }) => Promise<ReactNode>;
-let EmsContinuingEducationSection: unknown;
+let EmsContinuingEducationSection: typeof import("@/components/ems/EmsContinuingEducationSection").default;
 let buildMemberEmsProgress: typeof import("@/lib/ems/member-ems-progress").buildMemberEmsProgress;
 
 before(async () => {
@@ -129,6 +129,7 @@ beforeEach(() => {
   db.certifications = [
     { id: "cert-iowa", department_id: DEPT_A, name: "Iowa EMT-B", active: true, ems_authority: "iowa", ems_certification_level: "emt" },
   ];
+  db.member_certifications = [];
   db.ems_member_track_profiles = [
     { id: "p-iowa", department_id: DEPT_A, member_id: "m-ff", track: "iowa", certification_level: "emt", track_status: "active", maintain_track: true, certification_number: "IA-1", expiration_date: "2099-01-01", effective_start_date: "2026-01-01", effective_end_date: null, notes: null },
     { id: "p-nremt", department_id: DEPT_A, member_id: "m-ff", track: "nremt", certification_level: "emt", track_status: "active", maintain_track: true, certification_number: "NR-1", expiration_date: "2099-01-01", effective_start_date: "2026-01-01", effective_end_date: null, notes: null },
@@ -152,15 +153,7 @@ beforeEach(() => {
   ];
 });
 
-type EmsSectionProps = {
-  emsRecordsCounted: number;
-  iowaProfile: { certification_level: string; expiration_date: string | null } | null;
-  nremtProfile: { certification_level: string } | null;
-  emsReadiness: ReturnType<typeof buildMemberEmsProgress>["emsReadiness"];
-  warnings: string[];
-  unclassifiedCount: number;
-  emptyMessage: string;
-};
+type EmsSectionProps = Parameters<typeof EmsContinuingEducationSection>[0];
 
 function findSection(node: ReactNode): EmsSectionProps | null {
   if (Array.isArray(node)) {
@@ -179,6 +172,66 @@ async function openProfile(memberId: string) {
   const tree = await PersonnelProfilePage({ params: Promise.resolve({ id: memberId }) });
   return findSection(tree);
 }
+
+test("the Personnel CCP section renders the shared Iowa 46-hour and NREMT 30-hour requirements", async () => {
+  db.certifications[0].ems_certification_level = "ccp";
+  for (const profile of db.ems_member_track_profiles) {
+    if (profile.department_id === DEPT_A) profile.certification_level = profile.track === "iowa" ? "ccp" : "paramedic";
+  }
+  const topics = [
+    ["airway_respirations_ventilations", 6], ["cardiology", 7], ["trauma", 5],
+    ["medical", 8], ["operations", 4], ["pediatric", 4], ["critical_care_paramedic", 12],
+  ] as const;
+  db.training_events = topics.map(([topic, hours]) => ({
+    id: topic, department_id: DEPT_A, starts_at: "2026-09-01", title: topic,
+    category_id: null, hours_credit: hours, is_ems_training: true, ems_core_topic: topic, ems_needs_review: false,
+  }));
+  db.training_event_attendance = topics.map(([topic]) => ({
+    department_id: DEPT_A, member_id: "m-ff", training_event_id: topic, attendance_status: "attending",
+  }));
+  db.training_outside_submissions = [];
+  const section = await openProfile("m-ff");
+  assert.ok(section);
+  assert.equal(section.emsReadiness.iowa.totalCompleted, 46);
+  assert.equal(section.emsReadiness.iowa.status, "complete");
+  assert.equal(section.emsReadiness.nremt.totalCompleted, 30);
+  assert.equal(section.emsReadiness.nremt.status, "complete");
+  assert.equal(section.iowaProfile?.certification_level, "ccp");
+  assert.equal(section.nremtProfile?.certification_level, "paramedic");
+  const html = renderToStaticMarkup(EmsContinuingEducationSection(section));
+  assert.match(html, /46\.00 \/ 46\.00 hours/);
+  assert.match(html, /30\.00 \/ 30\.00 hours/);
+  assert.match(html, /Critical Care Paramedic \(CCP\)/);
+  const [iowa, nremt] = html.split(">National Registry<");
+  assert.match(iowa, />Pediatric</);
+  assert.match(iowa, />Critical Care Paramedic</);
+  assert.doesNotMatch(nremt, />Pediatric<|>Critical Care Paramedic</);
+  assert.equal(writeLog.length, 0);
+  assert.equal(rpcLog.length, 0);
+});
+
+test("a member assigned an explicit Iowa CCP credential gets 46-hour Personnel progress despite an older Paramedic track", async () => {
+  db.certifications = [
+    { id: "old-paramedic", department_id: DEPT_A, name: "Iowa EMS Paramedic", active: true, ems_authority: "iowa", ems_certification_level: "paramedic" },
+    { id: "new-ccp", department_id: DEPT_A, name: "Iowa EMS Critical Care Paramedic", active: true, ems_authority: "iowa", ems_certification_level: "ccp" },
+  ];
+  db.member_certifications = [
+    { id: "old-cert", department_id: DEPT_A, member_id: "m-ff", certification_id: "old-paramedic", issued_at: "2020-01-01", expires_at: "2099-01-01", certificate_number: "IA-OLD" },
+    { id: "new-cert", department_id: DEPT_A, member_id: "m-ff", certification_id: "new-ccp", issued_at: "2026-11-02", expires_at: "2099-01-01", certificate_number: "IA-CCP" },
+  ];
+  db.ems_member_track_profiles[0].certification_level = "paramedic";
+  const section = await openProfile("m-ff");
+  assert.ok(section);
+  assert.equal(section.iowaProfile?.certification_level, "ccp");
+  assert.equal(section.iowaProfile?.certification_number, "IA-CCP");
+  assert.equal(section.emsReadiness.iowa.totalRequired, 46);
+  assert.deepEqual(section.emsReadiness.iowa.topics.map((row) => row.required), [6, 7, 5, 8, 4, 4, 12]);
+  const html = renderToStaticMarkup(EmsContinuingEducationSection(section));
+  assert.match(html, /Critical Care Paramedic \(CCP\)/);
+  assert.match(html, /46\.00 hours/);
+  assert.equal(writeLog.length, 0);
+  assert.equal(rpcLog.length, 0);
+});
 
 test("an administrator sees the member's EMS section with the right Iowa and National Registry numbers", async () => {
   const section = await openProfile("m-ff");

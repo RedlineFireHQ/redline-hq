@@ -1,5 +1,13 @@
 export type EmsTrack = "iowa" | "nremt";
-export type EmsCertificationLevel = "emr" | "emt" | "aemt" | "paramedic";
+export type EmsCertificationLevel = "emr" | "emt" | "aemt" | "paramedic" | "ccp";
+
+export const EMS_CERTIFICATION_LEVELS: Array<{ code: EmsCertificationLevel; label: string }> = [
+  { code: "emr", label: "EMR" },
+  { code: "emt", label: "EMT" },
+  { code: "aemt", label: "AEMT" },
+  { code: "paramedic", label: "Paramedic" },
+  { code: "ccp", label: "Critical Care Paramedic (CCP)" },
+];
 
 export type EmsCoreTopicCode =
   | "airway_respirations_ventilations"
@@ -7,6 +15,8 @@ export type EmsCoreTopicCode =
   | "trauma"
   | "medical"
   | "operations"
+  | "pediatric"
+  | "critical_care_paramedic"
   | "other";
 
 export const EMS_CORE_TOPICS: Array<{ code: EmsCoreTopicCode; label: string }> = [
@@ -15,8 +25,34 @@ export const EMS_CORE_TOPICS: Array<{ code: EmsCoreTopicCode; label: string }> =
   { code: "trauma", label: "Trauma" },
   { code: "medical", label: "Medical" },
   { code: "operations", label: "Operations" },
+  { code: "pediatric", label: "Pediatric" },
+  { code: "critical_care_paramedic", label: "Critical Care Paramedic" },
   { code: "other", label: "Other" },
 ];
+
+export function isEmsCertificationLevel(value: unknown): value is EmsCertificationLevel {
+  return value === "emr" || value === "emt" || value === "aemt" || value === "paramedic" || value === "ccp";
+}
+
+export function getEmsCertificationLevels(track: EmsTrack) {
+  return EMS_CERTIFICATION_LEVELS.filter((level) => track === "iowa" || level.code !== "ccp");
+}
+
+export function assertEmsLevelForTrack(track: EmsTrack, level: EmsCertificationLevel) {
+  if (track === "nremt") getNremtRequirement(level);
+}
+
+export function isEmsCoreTopic(value: unknown): value is EmsCoreTopicCode {
+  return EMS_CORE_TOPICS.some((topic) => topic.code === value);
+}
+
+export function formatEmsLevelLabel(level: string) {
+  return level === "ccp" ? "Critical Care Paramedic (CCP)" : level.toUpperCase();
+}
+
+export function formatEmsTopicLabel(topic: string) {
+  return EMS_CORE_TOPICS.find((item) => item.code === topic)?.label ?? "Other";
+}
 
 export type TopicRequirement = {
   topic: Exclude<EmsCoreTopicCode, "other">;
@@ -82,9 +118,27 @@ export const IOWA_REQUIREMENTS: Record<EmsCertificationLevel, IowaRequirement> =
       { topic: "operations", requiredHours: 6 },
     ],
   },
+  ccp: {
+    totalRequiredHours: 46,
+    topicRequirements: [
+      { topic: "airway_respirations_ventilations", requiredHours: 6 },
+      { topic: "cardiology", requiredHours: 7 },
+      { topic: "trauma", requiredHours: 5 },
+      { topic: "medical", requiredHours: 8 },
+      { topic: "operations", requiredHours: 4 },
+      { topic: "pediatric", requiredHours: 4 },
+      { topic: "critical_care_paramedic", requiredHours: 12 },
+    ],
+  },
 };
 
-export const NREMT_REQUIREMENTS: Record<EmsCertificationLevel, NremtRequirement> = {
+export function getIowaTopicRequirements(level: EmsCertificationLevel): TopicRequirement[] {
+  const topics = IOWA_REQUIREMENTS[level].topicRequirements;
+  // Phase 1 exposes Pediatric for legacy levels without assigning Phase 2 hours.
+  return level === "ccp" ? topics : [...topics, { topic: "pediatric", requiredHours: 0 }];
+}
+
+export const NREMT_REQUIREMENTS: Record<Exclude<EmsCertificationLevel, "ccp">, NremtRequirement> = {
   emr: {
     totalNccpRequiredHours: 16,
     nationalComponentRequiredHours: 8,
@@ -140,7 +194,7 @@ export const NREMT_REQUIREMENTS: Record<EmsCertificationLevel, NremtRequirement>
     },
   },
   paramedic: {
-    totalNccpRequiredHours: 60,
+    totalNccpRequiredHours: 30,
     nationalComponentRequiredHours: 30,
     nationalTopicRequirements: [
       { topic: "airway_respirations_ventilations", requiredHours: 6 },
@@ -149,15 +203,39 @@ export const NREMT_REQUIREMENTS: Record<EmsCertificationLevel, NremtRequirement>
       { topic: "medical", requiredHours: 8 },
       { topic: "operations", requiredHours: 4 },
     ],
-    localStateComponentRequiredHours: null,
-    individualComponentRequiredHours: null,
+    localStateComponentRequiredHours: 0,
+    individualComponentRequiredHours: 0,
     pediatricRequirement: {
-      required: true,
-      ruleStatus: "needs_authoritative_verification",
-      note: "National Registry pediatric-content requirement exists in supplied material, but exact quantitative rule NEEDS AUTHORITATIVE VERIFICATION.",
+      required: false,
+      ruleStatus: "confirmed",
+      note: "The simplified National Registry Paramedic requirement consists only of the five national categories.",
     },
   },
 };
+
+export function getNremtRequirement(level: EmsCertificationLevel): NremtRequirement {
+  if (level === "ccp") {
+    throw new Error("Critical Care Paramedic is an Iowa EMS level only. Select a supported National Registry level.");
+  }
+  return NREMT_REQUIREMENTS[level];
+}
+
+export function isNremtNationalOnly(level: EmsCertificationLevel) {
+  const requirement = getNremtRequirement(level);
+  return requirement.localStateComponentRequiredHours === 0 && requirement.individualComponentRequiredHours === 0;
+}
+
+export function isTopicApplicableToTrack(
+  topic: EmsCoreTopicCode | null,
+  track: EmsTrack,
+  level: EmsCertificationLevel,
+): topic is Exclude<EmsCoreTopicCode, "other"> {
+  return topic !== null && topic !== "other" && (
+    track === "iowa"
+      ? getIowaTopicRequirements(level).some((requirement) => requirement.topic === topic)
+      : getNremtRequirement(level).nationalTopicRequirements.some((requirement) => requirement.topic === topic)
+  );
+}
 
 export const EMS_STANDARD_COURSE_NAMES = [
   "CPR-HCP",

@@ -46,6 +46,64 @@ Run invitation tests with `npx tsx --test lib/auth/invitation-flow.test.ts`.
 
 ## Learn More
 
+### EMS continuing education: Phase 1
+
+`lib/ems/requirements.ts` defines the shared Iowa/National Registry requirement
+tables used by Personnel and My Readiness. CCP (`ccp`) has Iowa requirements of
+Airway 6, Cardiology 7, Trauma 5, Medical 8, Operations 4, Pediatric 4, and Critical
+Care Paramedic 12 (46 total). National Registry Paramedic uses only the first five
+categories (30 total); Pediatric and Critical Care Paramedic credit cannot
+contribute to that track, including through manual allocations.
+
+Pediatric is selectable in EMS training entry on desktop and mobile, and appears
+in every Iowa level's CE progress. Existing Iowa levels retain all current
+category minimums and totals; Pediatric has no additional required hours for
+those levels in Phase 1. Critical Care Paramedic CE credit applies only to Iowa
+CCP. National Registry Paramedic requires 30 hours total, with zero Local/State
+and Individual hours; all five category minimums must be met. Other National
+Registry levels are unchanged. CCP is an Iowa-only level, not a National Registry option.
+
+Personnel certification creation/editing, new-member onboarding, and Settings
+catalog creation/editing expose **Authority** and **Certification Level**.
+Choose Iowa EMS → Critical Care Paramedic to save
+`certifications.ems_authority = 'iowa'` and
+`certifications.ems_certification_level = 'ccp'`. Member credentials reference
+that catalog entry through `member_certifications.certification_id`; no new
+authority, add-on credential class, or third CE track is introduced. National
+Registry Paramedic is independently selectable as authority `nremt`, level
+`paramedic`, alongside Iowa CCP for the same member.
+
+Changing one member's level reuses or creates the matching catalog entry and
+changes only that member credential's reference. It does not reclassify the
+shared Paramedic catalog entry. Editing a catalog entry in Settings intentionally
+applies its classification to all assigned members. Conflicting same-name
+entries with missing/different metadata must be corrected explicitly in Settings.
+
+Existing authoritative-credential precedence is unchanged: the most recently
+issued classified credential per authority supplies the effective level,
+number, and expiration to Personnel and My Readiness. Edit the existing member
+credential when correcting its level; track-only selections cannot contradict
+an assigned authoritative credential. New-member onboarding initializes its
+existing authority track's level from the assigned credential.
+
+The local migration `20261102173000_add_ems_ccp_and_pediatric_phase1.sql` expands
+the existing level/topic checks and seeds Iowa CCP requirements, optional Iowa
+Pediatric topics, and the published `2026-paramedic-30` National Registry Paramedic
+requirement version. Historical `2026-initial` rows remain unchanged; the allocator
+selects the current published version by effective date. The new Paramedic version
+has five national topics totaling 30 and explicit zero-hour Local/State and
+Individual components. No NREMT CCP requirement is seeded, and database checks
+reject NREMT CCP credentials and profiles. The migration must be reviewed and
+applied before using these new values
+against a database. This task does not apply it to remote Supabase.
+
+Phase 2 will separately update the other Iowa levels for the November 1, 2026
+state changes. No renewal cycles or automatic expiration alerts change here.
+
+Run the focused TypeScript tests with `npm run test:ems`. After applying the
+migration to a disposable local database, run `supabase/tests/ems_ccp_phase1.sql`
+with `psql -v ON_ERROR_STOP=1` to verify the seeded category hours and totals.
+
 To learn more about Next.js, take a look at the following resources:
 
 - [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.

@@ -8,7 +8,10 @@ import {
 } from "@/lib/ems/authoritative-certifications";
 import { calculateEmsReadiness, type EmsTrackProfileInput, type EmsTrainingRecord } from "@/lib/ems/calculation";
 import {
-  NREMT_REQUIREMENTS,
+  getNremtRequirement,
+  isNremtNationalOnly,
+  isEmsCoreTopic,
+  isTopicApplicableToTrack,
   type EmsCertificationLevel,
   type EmsCoreTopicCode,
 } from "@/lib/ems/requirements";
@@ -177,14 +180,7 @@ function parseHours(value: number | string | null | undefined) {
 }
 
 function normalizeTopic(value: string | null): EmsCoreTopicCode | null {
-  if (
-    value === "airway_respirations_ventilations" ||
-    value === "cardiology" ||
-    value === "trauma" ||
-    value === "medical" ||
-    value === "operations" ||
-    value === "other"
-  ) {
+  if (isEmsCoreTopic(value)) {
     return value;
   }
 
@@ -197,7 +193,9 @@ function isCoreTopic(topic: EmsCoreTopicCode | null): topic is Exclude<EmsCoreTo
     topic === "cardiology" ||
     topic === "trauma" ||
     topic === "medical" ||
-    topic === "operations"
+    topic === "operations" ||
+    topic === "pediatric" ||
+    topic === "critical_care_paramedic"
   );
 }
 
@@ -279,7 +277,7 @@ export function buildEmsAutoAllocationPlan(input: BuildAllocationPlanInput): Bui
     const iowaComponentId = input.iowaRefs.componentByCode.get("core") ?? null;
 
     for (const source of input.sources) {
-      if (source.needsReview || !isCoreTopic(source.coreTopic) || source.hours <= 0) {
+      if (source.needsReview || !input.iowaProfile || !isTopicApplicableToTrack(source.coreTopic, "iowa", input.iowaProfile.level) || source.hours <= 0) {
         continue;
       }
 
@@ -307,11 +305,13 @@ export function buildEmsAutoAllocationPlan(input: BuildAllocationPlanInput): Bui
 
   const nremtActive = input.nremtProfile?.maintainTrack === true && input.nremtProfile?.status !== "not_maintained";
   if (nremtActive && input.nremtRefs && input.nremtProfile) {
+    const nremtLevel = input.nremtProfile.level;
     const nationalComponentId = input.nremtRefs.componentByCode.get("national_component") ?? null;
     const individualComponentId = input.nremtRefs.componentByCode.get("individual_component") ?? null;
 
     const autoCreditableSources = input.sources
       .filter(isAutoCreditableSource)
+      .filter((source) => isTopicApplicableToTrack(source.coreTopic, "nremt", nremtLevel))
       .sort((left, right) => {
         const leftKey = `${left.occurredAt}-${left.sourceType}-${left.sourceRecordId}`;
         const rightKey = `${right.occurredAt}-${right.sourceType}-${right.sourceRecordId}`;
@@ -344,7 +344,7 @@ export function buildEmsAutoAllocationPlan(input: BuildAllocationPlanInput): Bui
     }
 
     const nremtTopicRequirements = new Map(
-      NREMT_REQUIREMENTS[input.nremtProfile.level].nationalTopicRequirements.map((row) => [row.topic, row.requiredHours]),
+      getNremtRequirement(input.nremtProfile.level).nationalTopicRequirements.map((row) => [row.topic, row.requiredHours]),
     );
 
     const remainingBySourceKey = new Map<string, number>();
@@ -376,7 +376,7 @@ export function buildEmsAutoAllocationPlan(input: BuildAllocationPlanInput): Bui
       }
     }
 
-    if (individualComponentId) {
+    if (individualComponentId && !isNremtNationalOnly(input.nremtProfile.level)) {
       for (const source of autoCreditableSources) {
         const key = makeSourceKey(source.sourceType, source.sourceRecordId);
         const leftover = roundHours(remainingBySourceKey.get(key) ?? 0);
@@ -727,7 +727,8 @@ export async function recalculateMemberEmsCreditAccounting(input: {
       row.certification_level === "emr" ||
       row.certification_level === "emt" ||
       row.certification_level === "aemt" ||
-      row.certification_level === "paramedic"
+      row.certification_level === "paramedic" ||
+      row.certification_level === "ccp"
         ? row.certification_level
         : "emt",
     track_status:

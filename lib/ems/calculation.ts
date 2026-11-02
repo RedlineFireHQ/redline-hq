@@ -1,6 +1,9 @@
 import {
   IOWA_REQUIREMENTS,
-  NREMT_REQUIREMENTS,
+  getNremtRequirement,
+  isNremtNationalOnly,
+  getIowaTopicRequirements,
+  isTopicApplicableToTrack,
   type EmsCertificationLevel,
   type EmsCoreTopicCode,
 } from "@/lib/ems/requirements";
@@ -71,7 +74,7 @@ type NremtProgress = {
   nationalTopics: TopicProgress[];
   pediatricRequirement: {
     required: boolean;
-    status: "needs_authoritative_verification" | "complete" | "incomplete";
+    status: "not_applicable" | "needs_authoritative_verification" | "complete" | "incomplete";
     note: string;
   };
 };
@@ -118,12 +121,8 @@ function isDateExpired(value: string | null) {
   return parsed.getTime() < today.getTime();
 }
 
-function isKnownTopic(topic: EmsCoreTopicCode | null): topic is Exclude<EmsCoreTopicCode, "other"> {
-  return topic === "airway_respirations_ventilations" || topic === "cardiology" || topic === "trauma" || topic === "medical" || topic === "operations";
-}
-
-function isAutoCreditableNremtRecord(record: EmsTrainingRecord) {
-  return record.eligibleForNremt && !record.needsReview && isKnownTopic(record.coreTopic);
+function isAutoCreditableNremtRecord(record: EmsTrainingRecord, level: EmsCertificationLevel) {
+  return record.eligibleForNremt && !record.needsReview && isTopicApplicableToTrack(record.coreTopic, "nremt", level);
 }
 
 export function calculateEmsReadiness(input: {
@@ -135,6 +134,7 @@ export function calculateEmsReadiness(input: {
   const warnings: string[] = [];
 
   const manualAllocations = (input.manualAllocations ?? []).filter((row) => normalizeHours(row.hours) > 0);
+  const topicByRecordId = new Map(input.trainingRecords.map((record) => [record.id, record.coreTopic]));
 
   const unclassifiedRecordIds = input.trainingRecords
     .filter((record) => record.needsReview || record.coreTopic === null || record.coreTopic === "other")
@@ -158,7 +158,8 @@ export function calculateEmsReadiness(input: {
   }
 
   const iowaRequirement = input.iowaProfile ? IOWA_REQUIREMENTS[input.iowaProfile.level] : null;
-  const nremtRequirement = input.nremtProfile ? NREMT_REQUIREMENTS[input.nremtProfile.level] : null;
+  const nremtRequirement = input.nremtProfile ? getNremtRequirement(input.nremtProfile.level) : null;
+  const nationalOnly = input.nremtProfile ? isNremtNationalOnly(input.nremtProfile.level) : false;
 
   const iowaTopicHours = new Map<Exclude<EmsCoreTopicCode, "other">, number>();
   const nremtNationalTopicHours = new Map<Exclude<EmsCoreTopicCode, "other">, number>();
@@ -173,16 +174,16 @@ export function calculateEmsReadiness(input: {
       continue;
     }
 
-    if (isAutoCreditableNremtRecord(record)) {
+    if (input.nremtProfile && isAutoCreditableNremtRecord(record, input.nremtProfile.level)) {
       remainingByRecordForNremt.set(record.id, normalizedHours);
     }
 
-    if (!record.needsReview && isKnownTopic(record.coreTopic)) {
-      if (applyIowa && record.eligibleForIowa) {
+    if (!record.needsReview) {
+      if (applyIowa && input.iowaProfile && record.eligibleForIowa && isTopicApplicableToTrack(record.coreTopic, "iowa", input.iowaProfile.level)) {
         iowaTopicHours.set(record.coreTopic, roundHours((iowaTopicHours.get(record.coreTopic) ?? 0) + normalizedHours));
       }
 
-      if (applyNremt && record.eligibleForNremt) {
+      if (applyNremt && input.nremtProfile && record.eligibleForNremt && isTopicApplicableToTrack(record.coreTopic, "nremt", input.nremtProfile.level)) {
         nremtNationalTopicHours.set(record.coreTopic, roundHours((nremtNationalTopicHours.get(record.coreTopic) ?? 0) + normalizedHours));
       }
     }
@@ -198,7 +199,7 @@ export function calculateEmsReadiness(input: {
       }
 
       for (const record of input.trainingRecords) {
-        if (!isAutoCreditableNremtRecord(record) || record.coreTopic !== topicRequirement.topic) {
+        if (!input.nremtProfile || !isAutoCreditableNremtRecord(record, input.nremtProfile.level) || record.coreTopic !== topicRequirement.topic) {
           continue;
         }
 
@@ -214,7 +215,9 @@ export function calculateEmsReadiness(input: {
 
     const leftoverNationalEligible = sum(Array.from(remainingByRecordForNremt.values()));
 
-    nremtIndividualHours = roundHours(nremtIndividualHours + leftoverNationalEligible);
+    if (!nationalOnly) {
+      nremtIndividualHours = roundHours(nremtIndividualHours + leftoverNationalEligible);
+    }
   }
 
   for (const allocation of manualAllocations) {
@@ -223,22 +226,35 @@ export function calculateEmsReadiness(input: {
       continue;
     }
 
-    if (allocation.track === "iowa" && applyIowa && isKnownTopic(allocation.topic)) {
+    if (allocation.track === "iowa" && applyIowa && input.iowaProfile && isTopicApplicableToTrack(allocation.topic, "iowa", input.iowaProfile.level)) {
       iowaTopicHours.set(allocation.topic, roundHours((iowaTopicHours.get(allocation.topic) ?? 0) + hours));
     }
 
     if (allocation.track === "nremt" && applyNremt) {
+      const sourceTopic = topicByRecordId.get(allocation.recordId);
+      if (
+        allocation.topic === "pediatric" || allocation.topic === "critical_care_paramedic" ||
+        sourceTopic === "pediatric" || sourceTopic === "critical_care_paramedic"
+      ) {
+        continue;
+      }
+      if (nationalOnly && input.nremtProfile && (
+        allocation.component !== "national_component" ||
+        !isTopicApplicableToTrack(allocation.topic, "nremt", input.nremtProfile.level)
+      )) {
+        continue;
+      }
       if (allocation.component === "local_state_component") {
         nremtLocalStateHours = roundHours(nremtLocalStateHours + hours);
       } else if (allocation.component === "individual_component") {
         nremtIndividualHours = roundHours(nremtIndividualHours + hours);
-      } else if (allocation.component === "national_component" && isKnownTopic(allocation.topic)) {
+      } else if (allocation.component === "national_component" && input.nremtProfile && isTopicApplicableToTrack(allocation.topic, "nremt", input.nremtProfile.level)) {
         nremtNationalTopicHours.set(allocation.topic, roundHours((nremtNationalTopicHours.get(allocation.topic) ?? 0) + hours));
       }
     }
   }
 
-  const iowaTopics: TopicProgress[] = (iowaRequirement?.topicRequirements ?? []).map((requirement) => {
+  const iowaTopics: TopicProgress[] = (input.iowaProfile ? getIowaTopicRequirements(input.iowaProfile.level) : []).map((requirement) => {
     const completed = roundHours(iowaTopicHours.get(requirement.topic) ?? 0);
     const remaining = clampNonNegative(requirement.requiredHours - completed);
     return {
@@ -308,7 +324,8 @@ export function calculateEmsReadiness(input: {
     const componentsComplete =
       nremtNationalComponentRemaining <= 0 &&
       (nremtLocalRemaining ?? 0) <= 0 &&
-      (nremtIndividualRemaining ?? 0) <= 0;
+      (nremtIndividualRemaining ?? 0) <= 0 &&
+      (!nationalOnly || nremtNationalTopics.every((topic) => topic.complete));
 
     if (nremtStatus !== "needs_attention" && componentQuantified && componentsComplete && nremtTotalRemaining <= 0) {
       nremtStatus = "complete";
@@ -329,7 +346,9 @@ export function calculateEmsReadiness(input: {
     note: "Pediatric requirement NEEDS AUTHORITATIVE VERIFICATION.",
   };
 
-  const pediatricStatus = pediatricRequirement.ruleStatus === "needs_authoritative_verification"
+  const pediatricStatus = !pediatricRequirement.required
+    ? "not_applicable"
+    : pediatricRequirement.ruleStatus === "needs_authoritative_verification"
     ? "needs_authoritative_verification"
     : input.trainingRecords.some((record) => record.pediatricTagged)
       ? "complete"

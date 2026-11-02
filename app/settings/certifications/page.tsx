@@ -4,8 +4,9 @@ import RoleRequirementsSection from "@/components/settings/RoleRequirementsSecti
 import { getCurrentMember } from "@/lib/current-member";
 import { hasDepartmentPermission } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import type { CertificationCatalogRow } from "@/lib/credentials/facade";
 
-type CertificationTypeRow = {
+type CertificationTypeRow = CertificationCatalogRow & {
   id: string;
   name: string;
   active: boolean;
@@ -52,7 +53,7 @@ export default async function CertificationManagementPage() {
   const [certificationResult, roleResult, requirementResult] = await Promise.all([
     supabase
       .from("certifications")
-      .select("id, name, active, created_at, updated_at")
+      .select("id, name, active, ems_authority, ems_certification_level, created_at, updated_at")
       .eq("department_id", currentMember.departmentId)
       .order("name", { ascending: true }),
     supabase

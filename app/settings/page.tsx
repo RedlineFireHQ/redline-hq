@@ -20,7 +20,7 @@ type CertificationTypeRow = {
   description: string | null;
   active: boolean;
   ems_authority: "iowa" | "nremt" | null;
-  ems_certification_level: "emr" | "emt" | "aemt" | "paramedic" | null;
+  ems_certification_level: "emr" | "emt" | "aemt" | "paramedic" | "ccp" | null;
   created_at: string;
   updated_at: string;
 };
@@ -267,7 +267,8 @@ export default async function SettingsPage() {
       row.ems_certification_level === "emr" ||
       row.ems_certification_level === "emt" ||
       row.ems_certification_level === "aemt" ||
-      row.ems_certification_level === "paramedic"
+      row.ems_certification_level === "paramedic" ||
+      row.ems_certification_level === "ccp"
         ? row.ems_certification_level
         : null,
     created_at: typeof row.created_at === "string" ? row.created_at : new Date().toISOString(),

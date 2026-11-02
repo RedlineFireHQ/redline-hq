@@ -56,7 +56,7 @@ type TrainingAssignmentRow = {
 type CertificationCatalogRow = {
   id: string;
   ems_authority: "iowa" | "nremt" | null;
-  ems_certification_level: "emr" | "emt" | "aemt" | "paramedic" | null;
+  ems_certification_level: "emr" | "emt" | "aemt" | "paramedic" | "ccp" | null;
 };
 
 type MemberCertificationRow = {
@@ -68,7 +68,7 @@ type MemberCertificationRow = {
 
 type EmsTrackProfileRow = {
   track: "iowa" | "nremt";
-  certification_level: "emr" | "emt" | "aemt" | "paramedic";
+  certification_level: "emr" | "emt" | "aemt" | "paramedic" | "ccp";
   track_status: "active" | "inactive" | "expired" | "not_maintained" | "needs_review";
   maintain_track: boolean;
   certification_number: string | null;
@@ -109,7 +109,9 @@ function normalizeCoreTopic(value: string | null): EmsCoreTopicCode | null {
     value === "cardiology" ||
     value === "trauma" ||
     value === "medical" ||
-    value === "operations"
+    value === "operations" ||
+    value === "pediatric" ||
+    value === "critical_care_paramedic"
   ) {
     return value;
   }

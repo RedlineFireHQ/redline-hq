@@ -1,5 +1,6 @@
 import type { EmsReadinessResult } from "@/lib/ems/calculation";
 import type { EmsTrackProfileAuthorityRow } from "@/lib/ems/authoritative-certifications";
+import { formatEmsLevelLabel, formatEmsTopicLabel } from "@/lib/ems/requirements";
 
 function formatDateOnly(value: string) {
   const parsed = new Date(value);
@@ -12,30 +13,6 @@ function formatDateOnly(value: string) {
     day: "numeric",
     year: "numeric",
   });
-}
-
-function formatEmsTopicLabel(topic: string) {
-  if (topic === "airway_respirations_ventilations") {
-    return "Airway, Respirations, Ventilations";
-  }
-
-  if (topic === "cardiology") {
-    return "Cardiology";
-  }
-
-  if (topic === "trauma") {
-    return "Trauma";
-  }
-
-  if (topic === "medical") {
-    return "Medical";
-  }
-
-  if (topic === "operations") {
-    return "Operations";
-  }
-
-  return "Other";
 }
 
 function formatEmsProgressStatus(status: string) {
@@ -124,7 +101,7 @@ export default function EmsContinuingEducationSection({
                {emsReadiness.iowa.totalCompleted.toFixed(2)} / {emsReadiness.iowa.totalRequired.toFixed(2)} hours
              </p>
              <p className="mt-1 text-xs text-neutral-400">
-               Level: {iowaProfile?.certification_level?.toUpperCase() ?? "-"} • Number: {iowaProfile?.certification_number || "-"}
+               Level: {iowaProfile ? formatEmsLevelLabel(iowaProfile.certification_level) : "-"} • Number: {iowaProfile?.certification_number || "-"}
              </p>
              <p className="mt-1 text-xs text-neutral-400">Expiration: {iowaProfile?.expiration_date ? formatDateOnly(iowaProfile.expiration_date) : "No expiration"}</p>
              <p className="mt-1 text-xs text-neutral-400">Remaining: {emsReadiness.iowa.totalRemaining.toFixed(2)} hours</p>
@@ -149,7 +126,7 @@ export default function EmsContinuingEducationSection({
                {emsReadiness.nremt.totalCompleted.toFixed(2)} / {emsReadiness.nremt.totalRequired.toFixed(2)} hours
              </p>
              <p className="mt-1 text-xs text-neutral-400">
-               Level: {nremtProfile?.certification_level?.toUpperCase() ?? "-"} • Number: {nremtProfile?.certification_number || "-"}
+               Level: {nremtProfile ? formatEmsLevelLabel(nremtProfile.certification_level) : "-"} • Number: {nremtProfile?.certification_number || "-"}
              </p>
              <p className="mt-1 text-xs text-neutral-400">
                Maintain Track: {nremtProfile?.maintain_track === true ? "Yes" : "No"} • Expiration: {nremtProfile?.expiration_date ? formatDateOnly(nremtProfile.expiration_date) : "No expiration"}

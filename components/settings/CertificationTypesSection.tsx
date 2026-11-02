@@ -3,8 +3,11 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import EmsCertificationFields from "@/components/ems/EmsCertificationFields";
+import { certificationMetadata, defaultEmsCertificationName, selectionFromCertification, type EmsCertificationSelection } from "@/lib/ems/certification-selection";
+import type { CertificationCatalogRow } from "@/lib/credentials/facade";
 
-type CertificationTypeRow = {
+type CertificationTypeRow = CertificationCatalogRow & {
   id: string;
   name: string;
   active: boolean;
@@ -12,7 +15,7 @@ type CertificationTypeRow = {
   updated_at: string;
 };
 
-type CertificationTypeFormState = {
+type CertificationTypeFormState = EmsCertificationSelection & {
   name: string;
   active: boolean;
 };
@@ -27,6 +30,8 @@ function emptyFormState(): CertificationTypeFormState {
   return {
     name: "",
     active: true,
+    emsAuthority: "",
+    emsLevel: "",
   };
 }
 
@@ -60,6 +65,7 @@ export default function CertificationTypesSection({
     setFormState({
       name: type.name,
       active: type.active,
+      ...selectionFromCertification(type),
     });
     setIsModalOpen(true);
   }
@@ -78,7 +84,15 @@ export default function CertificationTypesSection({
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const name = formState.name.trim();
+    let metadata: ReturnType<typeof certificationMetadata>;
+    let name: string;
+    try {
+      metadata = certificationMetadata(formState);
+      name = formState.name.trim() || defaultEmsCertificationName(formState);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Unable to identify EMS certification.");
+      return;
+    }
 
     if (!name) {
       setSaveError("Certification type name is required.");
@@ -108,6 +122,7 @@ export default function CertificationTypesSection({
           .update({
             name,
             active: formState.active,
+            ...metadata,
             updated_by: currentMemberId,
           })
           .eq("id", editingTypeId)
@@ -130,6 +145,7 @@ export default function CertificationTypesSection({
                   ...type,
                   name,
                   active: formState.active,
+                  ...metadata,
                   updated_at: new Date().toISOString(),
                 }
               : type,
@@ -142,10 +158,11 @@ export default function CertificationTypesSection({
             department_id: departmentId,
             name,
             active: formState.active,
+            ...metadata,
             created_by: currentMemberId,
             updated_by: currentMemberId,
           })
-          .select("id, name, active, created_at, updated_at")
+          .select("id, name, active, ems_authority, ems_certification_level, created_at, updated_at")
           .single();
 
         if (error || !data) {
@@ -162,6 +179,7 @@ export default function CertificationTypesSection({
           id: String(data.id),
           name: typeof data.name === "string" ? data.name : name,
           active: typeof data.active === "boolean" ? data.active : formState.active,
+          ...metadata,
           created_at: typeof data.created_at === "string" ? data.created_at : new Date().toISOString(),
           updated_at: typeof data.updated_at === "string" ? data.updated_at : new Date().toISOString(),
         };
@@ -263,10 +281,13 @@ export default function CertificationTypesSection({
               ) : null}
 
               <div className="grid gap-5">
+                <EmsCertificationFields value={formState} onChange={(selection) => setFormState((current) => ({ ...current, ...selection }))} />
+                {editingTypeId ? <p className="text-sm text-neutral-400">Authority and level changes apply to every member assigned this catalog entry. To change only one member, edit that member&apos;s certification instead.</p> : null}
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Name *</span>
+                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Name (required for non-EMS)</span>
                   <input
                     value={formState.name}
+                    placeholder={formState.emsAuthority ? "Defaults to selected EMS authority and level" : "Certification name"}
                     onChange={(event) => setFormState((current) => ({ ...current, name: event.target.value }))}
                     className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
                   />

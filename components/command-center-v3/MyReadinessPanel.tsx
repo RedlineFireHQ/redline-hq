@@ -36,7 +36,7 @@ type CertificationCatalogRow = {
   id: string;
   name: string;
   ems_authority: "iowa" | "nremt" | null;
-  ems_certification_level: "emr" | "emt" | "aemt" | "paramedic" | null;
+  ems_certification_level: "emr" | "emt" | "aemt" | "paramedic" | "ccp" | null;
 };
 
 type MemberTrainingAttendanceRow = {

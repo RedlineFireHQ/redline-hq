@@ -3,8 +3,11 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import EmsCertificationFields from "@/components/ems/EmsCertificationFields";
+import { resolveCertificationCatalogEntry, selectionFromCertification, type EmsCertificationSelection } from "@/lib/ems/certification-selection";
+import type { CertificationCatalogRow } from "@/lib/credentials/facade";
 
-type CertificationTypeRow = {
+type CertificationTypeRow = CertificationCatalogRow & {
   id: string;
   name: string;
   description: string | null;
@@ -34,7 +37,7 @@ type DepartmentDocumentRow = {
   status: string | null;
 };
 
-type CertificationFormState = {
+type CertificationFormState = EmsCertificationSelection & {
   certificationSource: "catalog" | "custom";
   certificationId: string;
   certificationSearch: string;
@@ -197,6 +200,8 @@ function emptyFormState(): CertificationFormState {
     certificationId: "",
     certificationSearch: "",
     customCertificationName: "",
+    emsAuthority: "",
+    emsLevel: "",
     certificateNumber: "",
     issuedAt: getLocalDateString(),
     expiresAt: "",
@@ -211,11 +216,12 @@ export default function PersonnelCertificationsSection({
   departmentId,
   memberId,
   warningDays,
-  certificationTypes,
+  certificationTypes: initialCertificationTypes,
   memberCertifications,
   departmentDocuments,
 }: PersonnelCertificationsSectionProps) {
   const router = useRouter();
+  const [certificationTypes, setCertificationTypes] = useState(initialCertificationTypes);
   const [records, setRecords] = useState(memberCertifications);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -321,6 +327,7 @@ export default function PersonnelCertificationsSection({
       ...emptyFormState(),
       certificationSource: addableCertificationTypes.length > 0 ? "catalog" : "custom",
       certificationId: addableCertificationTypes[0]?.id ?? "",
+      ...selectionFromCertification(addableCertificationTypes[0]),
     });
     setIsModalOpen(true);
   }
@@ -333,6 +340,7 @@ export default function PersonnelCertificationsSection({
       certificationId: record.certification_id,
       certificationSearch: "",
       customCertificationName: "",
+      ...selectionFromCertification(certificationTypeLookup.get(record.certification_id)),
       certificateNumber: record.certificate_number ?? "",
       issuedAt: record.issued_at || getLocalDateString(),
       expiresAt: record.expires_at ?? "",
@@ -386,12 +394,12 @@ export default function PersonnelCertificationsSection({
       }
 
       const selectedType = certificationTypeLookup.get(formState.certificationId);
-      if (selectedType && selectedType.name.trim().toLowerCase() === "emt") {
+      if (selectedType && selectedType.name.trim().toLowerCase() === "emt" && !formState.emsAuthority) {
         setSaveError("Use Iowa EMT or NREMT EMT for new EMS certifications. Standalone EMT is not available for new entries.");
         return;
       }
     } else {
-      if (!customCertificationName) {
+      if (!customCertificationName && !formState.emsAuthority) {
         setSaveError("Enter a custom certification name.");
         return;
       }
@@ -404,6 +412,11 @@ export default function PersonnelCertificationsSection({
 
     if (!formState.issuedAt) {
       setSaveError("Issue date is required.");
+      return;
+    }
+
+    if (formState.emsAuthority && formState.expirationMode !== "has-expiration") {
+      setSaveError("EMS certifications must use an expiration date.");
       return;
     }
 
@@ -426,64 +439,28 @@ export default function PersonnelCertificationsSection({
     setIsSaving(true);
     setSaveError(null);
 
-    let resolvedCertificationId = formState.certificationId;
-
-    if (!editingRecordId && formState.certificationSource === "custom") {
-      const existingType = certificationTypes.find(
-        (certificationType) => certificationType.name.trim().toLowerCase() === customCertificationName.toLowerCase(),
-      );
-
-      if (existingType) {
-        if (existingType.name.trim().toLowerCase() === "emt") {
-          setSaveError("Standalone EMT is not available for new entries. Use Iowa EMT or NREMT EMT.");
-          setIsSaving(false);
-          return;
-        }
-
-        resolvedCertificationId = existingType.id;
-      } else {
-        const { data: newCertificationType, error: newCertificationTypeError } = await supabase
-          .from("certifications")
-          .insert({
-            department_id: departmentId,
-            name: customCertificationName,
-            description: null,
-            active: true,
-            created_by: editorMemberId,
-            updated_by: editorMemberId,
-          })
-          .select("id")
-          .single();
-
-        if (newCertificationTypeError || !newCertificationType) {
-          setSaveError(newCertificationTypeError?.message || "Unable to create custom certification type.");
-          setIsSaving(false);
-          return;
-        }
-
-        resolvedCertificationId = String(newCertificationType.id);
-      }
-    }
-
-    if (!resolvedCertificationId) {
-      setSaveError("Select a certification type before saving.");
-      setIsSaving(false);
-      return;
-    }
-
-    const payload = {
-      certification_id: resolvedCertificationId,
-      certificate_number: formState.certificateNumber.trim() || null,
-      issued_at: formState.issuedAt,
-      expires_at: formState.expirationMode === "has-expiration" ? formState.expiresAt || null : null,
-      supporting_document_id: documentId,
-      notes: formState.notes.trim() || null,
-      created_by: editingRecordId ? undefined : editorMemberId,
-      updated_by: editorMemberId,
-      department_id: departmentId,
-    };
-
     try {
+      const certification = await resolveCertificationCatalogEntry({
+        supabase, departmentId, editorMemberId, catalog: certificationTypes,
+        selectedId: formState.certificationSource === "catalog" ? formState.certificationId || null : null,
+        name: formState.certificationSource === "custom" ? customCertificationName : "",
+        selection: formState,
+      });
+      setCertificationTypes((current) => current.some((row) => row.id === certification.id)
+        ? current : [...current, { ...certification, description: null }]);
+
+      const payload = {
+        certification_id: certification.id,
+        certificate_number: formState.certificateNumber.trim() || null,
+        issued_at: formState.issuedAt,
+        expires_at: formState.expirationMode === "has-expiration" ? formState.expiresAt || null : null,
+        supporting_document_id: documentId,
+        notes: formState.notes.trim() || null,
+        created_by: editingRecordId ? undefined : editorMemberId,
+        updated_by: editorMemberId,
+        department_id: departmentId,
+      };
+
       if (editingRecordId) {
         const { error } = await supabase
           .from("member_certifications")
@@ -709,7 +686,10 @@ export default function PersonnelCertificationsSection({
                   {editingRecordId ? (
                     <select
                       value={formState.certificationId}
-                      onChange={(event) => setFormState((current) => ({ ...current, certificationId: event.target.value }))}
+                      onChange={(event) => setFormState((current) => ({
+                        ...current, certificationId: event.target.value,
+                        ...selectionFromCertification(certificationTypeLookup.get(event.target.value)),
+                      }))}
                       className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
                     >
                       <option value="">Select certification type</option>
@@ -730,6 +710,7 @@ export default function PersonnelCertificationsSection({
                               certificationSource: "catalog",
                               customCertificationName: "",
                               certificationId: current.certificationId || addableCertificationTypes[0]?.id || "",
+                              ...selectionFromCertification(certificationTypeLookup.get(current.certificationId) ?? addableCertificationTypes[0]),
                             }))
                           }
                           className={`rounded-lg border px-3 py-2 text-sm font-semibold transition ${formState.certificationSource === "catalog" ? "border-red-500/40 bg-red-500/10 text-red-100" : "border-white/10 bg-[#1b1b1b] text-neutral-300 hover:border-white/20"}`}
@@ -744,6 +725,8 @@ export default function PersonnelCertificationsSection({
                               certificationSource: "custom",
                               certificationId: "",
                               certificationSearch: "",
+                              emsAuthority: "",
+                              emsLevel: "",
                             }))
                           }
                           className={`rounded-lg border px-3 py-2 text-sm font-semibold transition ${formState.certificationSource === "custom" ? "border-red-500/40 bg-red-500/10 text-red-100" : "border-white/10 bg-[#1b1b1b] text-neutral-300 hover:border-white/20"}`}
@@ -779,6 +762,7 @@ export default function PersonnelCertificationsSection({
                                     setFormState((current) => ({
                                       ...current,
                                       certificationId: certificationType.id,
+                                      ...selectionFromCertification(certificationType),
                                     }))
                                   }
                                   className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm transition ${formState.certificationId === certificationType.id ? "border-red-500/40 bg-red-500/10 text-red-100" : "border-white/10 bg-[#1b1b1b] text-white hover:border-white/20"}`}
@@ -799,17 +783,21 @@ export default function PersonnelCertificationsSection({
                                 customCertificationName: event.target.value,
                               }))
                             }
-                            placeholder="Enter custom certification name"
+                            placeholder={formState.emsAuthority ? "Optional name; defaults to selected EMS authority and level" : "Enter custom certification name"}
                             className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
                           />
                           <p className="mt-1 text-[11px] text-neutral-500">
-                            Custom certifications are created in the department catalog without EMS authority metadata.
+                            EMS certifications use the authority and level selected below. Leave the name blank to use that classification as the name.
                           </p>
                         </div>
                       )}
                     </div>
                   )}
                 </label>
+
+                <EmsCertificationFields value={formState} onChange={(selection) => setFormState((current) => ({
+                  ...current, ...selection,
+                }))} />
 
                 <div className="block md:col-span-2">
                   <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Expiration</span>

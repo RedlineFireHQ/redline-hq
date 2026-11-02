@@ -18,6 +18,10 @@ import {
 } from "@/lib/credentials/facade";
 import { getRoleRequirementStatus } from "@/lib/role-requirements";
 import { supabase } from "@/lib/supabase";
+import EmsCertificationFields from "@/components/ems/EmsCertificationFields";
+import { assertEmsTrackLevelMatchesCredential, resolveCertificationCatalogEntry, selectionFromCertification, type EmsCertificationSelection } from "@/lib/ems/certification-selection";
+import { buildCertificationTypeMetaById, resolveAuthoritativeEmsCertificationsForMember } from "@/lib/ems/authoritative-certifications";
+import { getEmsCertificationLevels } from "@/lib/ems/requirements";
 
 type WizardStep = "basic" | "role" | "credentials" | "ems" | "account" | "review";
 
@@ -48,7 +52,7 @@ type DepartmentRoleRow = {
   sort_order: number;
 };
 
-type CredentialFormState = {
+type CredentialFormState = EmsCertificationSelection & {
   certificationSource: "existing" | "new";
   certificationId: string;
   newCertificationName: string;
@@ -61,7 +65,7 @@ type CredentialFormState = {
 };
 
 type EmsTrack = "iowa" | "nremt";
-type EmsLevel = "emr" | "emt" | "aemt" | "paramedic";
+type EmsLevel = "emr" | "emt" | "aemt" | "paramedic" | "ccp";
 type TrackStatus = "active" | "inactive" | "expired" | "not_maintained" | "needs_review";
 
 type EmsTrackFormState = {
@@ -112,6 +116,8 @@ function emptyCredentialState(defaultCredentialId = ""): CredentialFormState {
     certificationSource: "existing",
     certificationId: defaultCredentialId,
     newCertificationName: "",
+    emsAuthority: "",
+    emsLevel: "",
     expirationChoice: "yes",
     achievedAt: getLocalDateString(),
     expiresAt: "",
@@ -151,10 +157,6 @@ function sortRoles(roles: DepartmentRoleRow[]) {
 
     return left.name.localeCompare(right.name);
   });
-}
-
-function normalizeName(value: string) {
-  return value.trim().toLowerCase();
 }
 
 function stepTitle(step: WizardStep) {
@@ -431,7 +433,8 @@ export default function AddMemberButton({
         row.ems_certification_level === "emr" ||
         row.ems_certification_level === "emt" ||
         row.ems_certification_level === "aemt" ||
-        row.ems_certification_level === "paramedic"
+        row.ems_certification_level === "paramedic" ||
+        row.ems_certification_level === "ccp"
           ? row.ems_certification_level
           : null,
     }));
@@ -476,7 +479,10 @@ export default function AddMemberButton({
 
     const firstActiveCredentialId = certifications.find((item) => item.active)?.id;
 
-    setCredentialForm(emptyCredentialState(firstActiveCredentialId ?? ""));
+    setCredentialForm({
+      ...emptyCredentialState(firstActiveCredentialId ?? ""),
+      ...selectionFromCertification(certifications.find((row) => row.id === firstActiveCredentialId)),
+    });
     setCredentialDraftDirty(false);
     setIsLoadingConfig(false);
   }
@@ -551,11 +557,21 @@ export default function AddMemberButton({
 
     setMemberCertificationRows((current) => [inserted, ...current]);
 
+    if (selectedCertification.ems_certification_level) {
+      const level = selectedCertification.ems_certification_level;
+      if (selectedCertification.ems_authority === "iowa") {
+        setIowaForm((current) => ({ ...current, level }));
+      } else if (selectedCertification.ems_authority === "nremt") {
+        setNremtForm((current) => ({ ...current, level }));
+      }
+    }
+
     setCredentialForm((current) => ({
       ...emptyCredentialState(current.certificationId),
       certificationSource: "existing",
       certificationId: current.certificationSource === "new" ? "" : current.certificationId,
       achievedAt: current.achievedAt,
+      ...selectionFromCertification(current.certificationSource === "existing" ? selectedCertification : undefined),
     }));
     setCredentialDraftDirty(false);
 
@@ -563,61 +579,14 @@ export default function AddMemberButton({
   }
 
   async function findOrCreateCertificationFromForm() {
-    if (credentialForm.certificationSource === "existing") {
-      if (!credentialForm.certificationId) {
-        throw new Error("Select a certification.");
-      }
-
-      const selected = certificationTypes.find((row) => row.id === credentialForm.certificationId) ?? null;
-      if (!selected) {
-        throw new Error("Selected certification is no longer available.");
-      }
-
-      return selected;
-    }
-
-    const enteredName = credentialForm.newCertificationName.trim();
-    if (!enteredName) {
-      throw new Error("Enter a certification name.");
-    }
-
-    const existing = certificationTypes.find((row) => normalizeName(row.name) === normalizeName(enteredName)) ?? null;
-    if (existing) {
-      return existing;
-    }
-
-    const { data, error } = await supabase
-      .from("certifications")
-      .insert({
-        department_id: departmentId,
-        name: enteredName,
-        active: true,
-        created_by: currentMemberId,
-        updated_by: currentMemberId,
-      })
-      .select("id, name, active, ems_authority, ems_certification_level")
-      .single();
-
-    if (error || !data) {
-      throw new Error(error?.message || "Unable to create certification.");
-    }
-
-    const inserted: CertificationCatalogRow = {
-      id: String(data.id),
-      name: typeof data.name === "string" ? data.name : enteredName,
-      active: data.active !== false,
-      ems_authority: data.ems_authority === "iowa" || data.ems_authority === "nremt" ? data.ems_authority : null,
-      ems_certification_level:
-        data.ems_certification_level === "emr" ||
-        data.ems_certification_level === "emt" ||
-        data.ems_certification_level === "aemt" ||
-        data.ems_certification_level === "paramedic"
-          ? data.ems_certification_level
-          : null,
-    };
-
-    setCertificationTypes((current) => [...current, inserted]);
-    return inserted;
+    const certification = await resolveCertificationCatalogEntry({
+      supabase, departmentId, editorMemberId: currentMemberId, catalog: certificationTypes,
+      selectedId: credentialForm.certificationSource === "existing" ? credentialForm.certificationId || null : null,
+      name: credentialForm.certificationSource === "new" ? credentialForm.newCertificationName : "",
+      selection: credentialForm,
+    });
+    setCertificationTypes((current) => current.some((row) => row.id === certification.id) ? current : [...current, certification]);
+    return certification;
   }
 
   function openModal() {
@@ -852,6 +821,12 @@ export default function AddMemberButton({
     setIsSaving(true);
 
     try {
+      const authoritative = resolveAuthoritativeEmsCertificationsForMember({
+        certificationTypeById: buildCertificationTypeMetaById(certificationTypes),
+        memberCertifications: memberCertificationRows.map((row) => ({ ...row, certificate_number: null })),
+      });
+      assertEmsTrackLevelMatchesCredential("iowa", iowaForm.level, authoritative.iowa?.level ?? null);
+      assertEmsTrackLevelMatchesCredential("nremt", nremtForm.level, authoritative.nremt?.level ?? null);
       await upsertEmsTrack("iowa", iowaForm);
       await upsertEmsTrack("nremt", nremtForm);
       setActiveStep("account");
@@ -1196,6 +1171,7 @@ export default function AddMemberButton({
                           setCredentialForm((current) => ({
                             ...current,
                             certificationId: nextId,
+                            ...selectionFromCertification(certificationTypes.find((row) => row.id === nextId)),
                           }));
                         }}
                         className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-white"
@@ -1214,7 +1190,7 @@ export default function AddMemberButton({
                           setCredentialDraftDirty(true);
                           setCredentialForm((current) => ({ ...current, newCertificationName: event.target.value }));
                         }}
-                        placeholder="Enter new certification name"
+                        placeholder={credentialForm.emsAuthority ? "Optional name; defaults to selected EMS authority and level" : "Enter new certification name"}
                         className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-white"
                       />
                     )}
@@ -1231,6 +1207,8 @@ export default function AddMemberButton({
                               ...current,
                               certificationSource: "new",
                               certificationId: "",
+                              emsAuthority: "",
+                              emsLevel: "",
                             }));
                           }
                         }
@@ -1248,6 +1226,7 @@ export default function AddMemberButton({
                               ...current,
                               certificationSource: "existing",
                               newCertificationName: "",
+                              ...selectionFromCertification(certificationTypes.find((row) => row.id === current.certificationId)),
                             }));
                           }
                         }
@@ -1257,6 +1236,14 @@ export default function AddMemberButton({
                       </button>
                     )}
                   </div>
+
+                  <EmsCertificationFields value={credentialForm} onChange={(selection) => {
+                    setCredentialDraftDirty(true);
+                    setCredentialForm((current) => ({
+                      ...current, ...selection, certificationSource: "new", certificationId: "",
+                      newCertificationName: current.certificationSource === "new" ? current.newCertificationName : "",
+                    }));
+                  }} />
 
                   <fieldset className="text-sm text-neutral-300 md:col-span-2">
                     <legend className="mb-2">Does this certification expire?</legend>
@@ -1454,10 +1441,7 @@ export default function AddMemberButton({
                         }
                         className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-white"
                       >
-                        <option value="emr">EMR</option>
-                        <option value="emt">EMT</option>
-                        <option value="aemt">AEMT</option>
-                        <option value="paramedic">Paramedic</option>
+                        {getEmsCertificationLevels("iowa").map((level) => <option key={level.code} value={level.code}>{level.label}</option>)}
                       </select>
                     </label>
 
@@ -1521,10 +1505,7 @@ export default function AddMemberButton({
                         }
                         className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-white"
                       >
-                        <option value="emr">EMR</option>
-                        <option value="emt">EMT</option>
-                        <option value="aemt">AEMT</option>
-                        <option value="paramedic">Paramedic</option>
+                        {getEmsCertificationLevels("nremt").map((level) => <option key={level.code} value={level.code}>{level.label}</option>)}
                       </select>
                     </label>
 

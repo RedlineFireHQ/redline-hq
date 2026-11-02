@@ -108,7 +108,7 @@ type CertificationTypeRow = {
   id: string;
   name: string;
   ems_authority: "iowa" | "nremt" | null;
-  ems_certification_level: "emr" | "emt" | "aemt" | "paramedic" | null;
+  ems_certification_level: "emr" | "emt" | "aemt" | "paramedic" | "ccp" | null;
 };
 
 type DepartmentRoleRow = {
@@ -897,7 +897,8 @@ export async function getDepartmentReadinessData(
         row.certification_level === "emr" ||
         row.certification_level === "emt" ||
         row.certification_level === "aemt" ||
-        row.certification_level === "paramedic"
+        row.certification_level === "paramedic" ||
+        row.certification_level === "ccp"
           ? row.certification_level
           : "emt",
       track_status:

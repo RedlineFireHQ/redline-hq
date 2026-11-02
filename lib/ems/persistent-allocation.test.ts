@@ -15,6 +15,8 @@ function buildRefs(versionLabel = "2026-initial") {
         ["trauma", "top-iowa-trauma"],
         ["medical", "top-iowa-medical"],
         ["operations", "top-iowa-operations"],
+        ["pediatric", "top-iowa-pediatric"],
+        ["critical_care_paramedic", "top-iowa-ccp"],
       ]),
       cycleId: "cycle-iowa",
     },
@@ -53,6 +55,62 @@ function baseProfiles() {
     },
   };
 }
+
+test("Iowa CCP and NREMT Paramedic persisted allocations exclude Iowa-only topics and suppress individual overflow", () => {
+  const refs = buildRefs("2026-ccp-phase1");
+  const profile = { level: "ccp" as const, status: "active" as const, expirationDate: "2099-01-01", maintainTrack: true };
+  const topics = [
+    ["airway_respirations_ventilations", 6], ["cardiology", 7], ["trauma", 5],
+    ["medical", 8], ["operations", 4], ["pediatric", 4], ["critical_care_paramedic", 12],
+  ] as const;
+  const sources = topics.map(([coreTopic, hours]) => ({
+    sourceType: "training_event_attendance" as const, sourceRecordId: coreTopic,
+    occurredAt: "2026-01-01", title: coreTopic, hours, categoryId: null,
+    coreTopic, needsReview: false, providerName: null, courseDefinitionId: null, metadata: {},
+  }));
+  const input = {
+    allocatorVersion: "test-ccp", sources, iowaProfile: profile, nremtProfile: { ...profile, level: "paramedic" as const },
+    iowaRefs: refs.iowa, nremtRefs: refs.nremt,
+  };
+  const result = buildEmsAllocationPlanForTests(input);
+  const iowa = result.persistedAllocations.filter((row) => row.requirement_set_id === refs.iowa.requirementSetId);
+  const nremt = result.persistedAllocations.filter((row) => row.requirement_set_id === refs.nremt.requirementSetId);
+  assert.equal(iowa.length, 7);
+  assert.equal(iowa.reduce((sum, row) => sum + row.allocated_hours, 0), 46);
+  assert.equal(nremt.length, 5);
+  assert.equal(nremt.reduce((sum, row) => sum + row.allocated_hours, 0), 30);
+  assert.ok(nremt.every((row) => row.requirement_component_id === "cmp-nremt-national"));
+  assert.ok(nremt.every((row) => row.source_record_id !== "pediatric" && row.source_record_id !== "critical_care_paramedic"));
+  assert.equal(result.readiness.iowa.status, "complete");
+  assert.equal(result.readiness.nremt.status, "complete");
+  const overage = buildEmsAllocationPlanForTests({
+    ...input, sources: [...sources, { ...sources[0], sourceRecordId: "extra-airway", hours: 10 }],
+  });
+  assert.ok(overage.persistedAllocations.every((row) => row.requirement_component_id !== "cmp-nremt-individual"));
+  assert.equal(overage.readiness.nremt.individualComponentCompleted, 0);
+  assert.deepEqual(buildEmsAllocationPlanForTests(input), result);
+});
+
+test("legacy Iowa levels persist Pediatric but never the CCP-only category", () => {
+  const refs = buildRefs();
+  for (const level of ["emr", "emt", "aemt", "paramedic"] as const) {
+    const profile = { ...baseProfiles().iowaProfile, level };
+    const result = buildEmsAllocationPlanForTests({
+      allocatorVersion: "test-pediatric", iowaProfile: profile, nremtProfile: profile,
+      iowaRefs: refs.iowa, nremtRefs: refs.nremt,
+      sources: (["pediatric", "critical_care_paramedic"] as const).map((coreTopic) => ({
+        sourceType: "training_outside_submission" as const, sourceRecordId: coreTopic,
+        occurredAt: "2026-01-01", title: coreTopic, hours: 4, categoryId: null,
+        coreTopic, needsReview: false, providerName: null, courseDefinitionId: null, metadata: {},
+      })),
+    });
+    assert.equal(result.persistedAllocations.length, 1);
+    assert.equal(result.persistedAllocations[0].requirement_set_id, refs.iowa.requirementSetId);
+    assert.equal(result.persistedAllocations[0].requirement_topic_id, "top-iowa-pediatric");
+    assert.equal(result.readiness.iowa.totalCompleted, 4);
+    assert.equal(result.readiness.nremt.totalCompleted, 0);
+  }
+});
 
 test("one EMS source can produce multiple allocation records", () => {
   const refs = buildRefs();

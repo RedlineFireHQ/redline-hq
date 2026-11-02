@@ -35,7 +35,7 @@ type CertificationTypeRow = {
   description: string | null;
   active: boolean | null;
   ems_authority: "iowa" | "nremt" | null;
-  ems_certification_level: "emr" | "emt" | "aemt" | "paramedic" | null;
+  ems_certification_level: "emr" | "emt" | "aemt" | "paramedic" | "ccp" | null;
 };
 
 type QualificationRow = {
@@ -139,7 +139,7 @@ type TrainingCategoryLookupRow = {
 type EmsTrackRow = {
   id: string;
   track: "iowa" | "nremt";
-  certification_level: "emr" | "emt" | "aemt" | "paramedic";
+  certification_level: "emr" | "emt" | "aemt" | "paramedic" | "ccp";
   track_status: "active" | "inactive" | "expired" | "not_maintained" | "needs_review";
   maintain_track: boolean;
   certification_number: string | null;
@@ -591,7 +591,8 @@ export default async function PersonnelProfilePage({
       row.certification_level === "emr" ||
       row.certification_level === "emt" ||
       row.certification_level === "aemt" ||
-      row.certification_level === "paramedic"
+      row.certification_level === "paramedic" ||
+      row.certification_level === "ccp"
         ? row.certification_level
         : "emt",
     track_status:
@@ -627,7 +628,8 @@ export default async function PersonnelProfilePage({
       row.ems_certification_level === "emr" ||
       row.ems_certification_level === "emt" ||
       row.ems_certification_level === "aemt" ||
-      row.ems_certification_level === "paramedic"
+      row.ems_certification_level === "paramedic" ||
+      row.ems_certification_level === "ccp"
         ? row.ems_certification_level
         : null,
   }));
@@ -1106,6 +1108,8 @@ export default async function PersonnelProfilePage({
               memberId={String(member.id)}
               editorMemberId={currentMember.id}
               trackRows={emsTrackProfiles}
+              certificationTypes={certificationTypes}
+              memberCertifications={canonicalMemberCertificationRows}
             />
           </div>
 

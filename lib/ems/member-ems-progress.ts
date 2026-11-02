@@ -1,5 +1,5 @@
 import { calculateEmsReadiness, type EmsReadinessResult, type EmsTrackProfileInput, type EmsTrainingRecord } from "@/lib/ems/calculation";
-import type { EmsCertificationLevel, EmsCoreTopicCode } from "@/lib/ems/requirements";
+import { isEmsCertificationLevel, isEmsCoreTopic, type EmsCertificationLevel, type EmsCoreTopicCode } from "@/lib/ems/requirements";
 import { parseHours } from "@/lib/readiness/member-readiness";
 
 export type EmsProfileForProgress = {
@@ -35,14 +35,7 @@ export type MemberEmsProgress = {
 };
 
 export function normalizeEmsTopic(value: string | null | undefined): EmsCoreTopicCode | null {
-  if (
-    value === "airway_respirations_ventilations" ||
-    value === "cardiology" ||
-    value === "trauma" ||
-    value === "medical" ||
-    value === "operations" ||
-    value === "other"
-  ) {
+  if (isEmsCoreTopic(value)) {
     return value;
   }
 
@@ -50,7 +43,7 @@ export function normalizeEmsTopic(value: string | null | undefined): EmsCoreTopi
 }
 
 export function normalizeEmsLevel(value: string): EmsCertificationLevel {
-  if (value === "emr" || value === "emt" || value === "aemt" || value === "paramedic") {
+  if (isEmsCertificationLevel(value)) {
     return value;
   }
 
