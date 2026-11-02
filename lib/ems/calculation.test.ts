@@ -9,7 +9,8 @@ function topic(result: ReturnType<typeof calculateEmsReadiness>, code: "airway_r
   return row;
 }
 
-test("EMT shared-credit overlap does not require 20 + 40 duplicate hours", () => {
+test("EMT shared-credit overlap does not require 22 + 40 duplicate hours", (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-11-02T12:00:00Z") });
   const result = calculateEmsReadiness({
     iowaProfile: {
       level: "emt",
@@ -24,28 +25,29 @@ test("EMT shared-credit overlap does not require 20 + 40 duplicate hours", () =>
       maintainTrack: true,
     },
     trainingRecords: [
-      { id: "a", occurredAt: "2026-01-01", hours: 1, coreTopic: "airway_respirations_ventilations", needsReview: false, eligibleForIowa: true, eligibleForNremt: true },
-      { id: "b", occurredAt: "2026-01-02", hours: 6, coreTopic: "cardiology", needsReview: false, eligibleForIowa: true, eligibleForNremt: true },
-      { id: "c", occurredAt: "2026-01-03", hours: 2, coreTopic: "trauma", needsReview: false, eligibleForIowa: true, eligibleForNremt: true },
+      { id: "a", occurredAt: "2026-01-01", hours: 4, coreTopic: "airway_respirations_ventilations", needsReview: false, eligibleForIowa: true, eligibleForNremt: true },
+      { id: "b", occurredAt: "2026-01-02", hours: 5, coreTopic: "cardiology", needsReview: false, eligibleForIowa: true, eligibleForNremt: true },
+      { id: "c", occurredAt: "2026-01-03", hours: 3, coreTopic: "trauma", needsReview: false, eligibleForIowa: true, eligibleForNremt: true },
       { id: "d", occurredAt: "2026-01-04", hours: 6, coreTopic: "medical", needsReview: false, eligibleForIowa: true, eligibleForNremt: true },
-      { id: "e", occurredAt: "2026-01-05", hours: 5, coreTopic: "operations", needsReview: false, eligibleForIowa: true, eligibleForNremt: true },
+      { id: "e", occurredAt: "2026-01-05", hours: 2, coreTopic: "operations", needsReview: false, eligibleForIowa: true, eligibleForNremt: true },
+      { id: "f", occurredAt: "2026-01-06", hours: 2, coreTopic: "pediatric", needsReview: false, eligibleForIowa: true, eligibleForNremt: true },
     ],
   });
 
-  assert.equal(result.iowa.totalRequired, 20);
-  assert.equal(result.iowa.totalCompleted, 20);
+  assert.equal(result.iowa.totalRequired, 22);
+  assert.equal(result.iowa.totalCompleted, 22);
   assert.equal(result.iowa.totalRemaining, 0);
 
-  assert.equal(topic(result, "airway_respirations_ventilations").remaining, 3);
+  assert.equal(topic(result, "airway_respirations_ventilations").remaining, 0);
   assert.equal(topic(result, "cardiology").remaining, 0);
-  assert.equal(topic(result, "trauma").remaining, 1);
+  assert.equal(topic(result, "trauma").remaining, 0);
   assert.equal(topic(result, "medical").remaining, 0);
   assert.equal(topic(result, "operations").remaining, 0);
 
   assert.equal(result.nremt.nationalComponentCompleted, 20);
-  assert.equal(result.nremt.totalCompleted >= 20, true);
+  assert.equal(result.nremt.totalCompleted, 20);
   assert.equal(result.nremt.totalRequired, 40);
-  assert.equal(result.nremt.totalRemaining <= 20, true);
+  assert.equal(result.nremt.totalRemaining, 20);
 });
 
 test("NREMT optional member can stay Iowa-active and NREMT not maintained", () => {

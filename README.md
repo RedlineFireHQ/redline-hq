@@ -46,7 +46,7 @@ Run invitation tests with `npx tsx --test lib/auth/invitation-flow.test.ts`.
 
 ## Learn More
 
-### EMS continuing education: Phase 1
+### EMS continuing education
 
 `lib/ems/requirements.ts` defines the shared Iowa/National Registry requirement
 tables used by Personnel and My Readiness. CCP (`ccp`) has Iowa requirements of
@@ -56,9 +56,21 @@ categories (30 total); Pediatric and Critical Care Paramedic credit cannot
 contribute to that track, including through manual allocations.
 
 Pediatric is selectable in EMS training entry on desktop and mobile, and appears
-in every Iowa level's CE progress. Existing Iowa levels retain all current
-category minimums and totals; Pediatric has no additional required hours for
-those levels in Phase 1. Critical Care Paramedic CE credit applies only to Iowa
+in every Iowa level's CE progress. Effective November 1, 2026, Iowa requirements
+are:
+
+| Category | EMR | EMT | AEMT | Paramedic |
+| --- | ---: | ---: | ---: | ---: |
+| Airway | 1.5 | 4 | 5 | 6 |
+| Cardiology | 2 | 5 | 6 | 7 |
+| Trauma | 1 | 3 | 4 | 5 |
+| Medical | 2.5 | 6 | 7 | 8 |
+| Operations | 1 | 2 | 3 | 4 |
+| Pediatric | 1 | 2 | 3 | 4 |
+| Total | 9 | 22 | 28 | 34 |
+
+Earlier Iowa definitions remain available before the effective date, with
+Pediatric optional at zero required hours. Critical Care Paramedic CE credit applies only to Iowa
 CCP. National Registry Paramedic requires 30 hours total, with zero Local/State
 and Individual hours; all five category minimums must be met. Other National
 Registry levels are unchanged. CCP is an Iowa-only level, not a National Registry option.
@@ -97,12 +109,24 @@ reject NREMT CCP credentials and profiles. The migration must be reviewed and
 applied before using these new values
 against a database. This task does not apply it to remote Supabase.
 
-Phase 2 will separately update the other Iowa levels for the November 1, 2026
-state changes. No renewal cycles or automatic expiration alerts change here.
+The local migration `20261102194500_update_iowa_ems_requirements_nov2026.sql`
+adds published `2026-iowa-nov1` versions effective `2026-11-01` for Iowa EMR,
+EMT, AEMT and Paramedic, with one core component and six required topics each.
+It only inserts new version rows; all historical definitions, training records,
+Iowa CCP and National Registry requirements remain unchanged. The shared
+TypeScript lookup also selects Iowa definitions by effective date; historical
+training dates do not prevent those records from counting under current requirements.
+Apply the Phase 1 migration first if needed, then this migration before deploying
+the application update. These local implementation changes do not apply remote
+migrations. No credential/authority selection, allocation/exclusion rules,
+renewal cycles or automatic expiration alerts change here.
 
 Run the focused TypeScript tests with `npm run test:ems`. After applying the
 migration to a disposable local database, run `supabase/tests/ems_ccp_phase1.sql`
 with `psql -v ON_ERROR_STOP=1` to verify the seeded category hours and totals.
+After the November update migration, also run
+`supabase/tests/ems_iowa_nov2026.sql` to verify exact category hours, effective
+dates and totals.
 
 To learn more about Next.js, take a look at the following resources:
 

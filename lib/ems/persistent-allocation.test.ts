@@ -428,7 +428,8 @@ test("allocation rows carry requirement version trace", () => {
   );
 });
 
-test("EMT shared-credit example produces expected Iowa and NREMT totals", () => {
+test("historical EMT training uses updated Iowa minimums without changing NREMT accounting", (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-11-02T12:00:00Z") });
   const refs = buildRefs();
   const profiles = baseProfiles();
 
@@ -508,7 +509,9 @@ test("EMT shared-credit example produces expected Iowa and NREMT totals", () => 
   });
 
   assert.equal(result.readiness.iowa.totalCompleted, 20);
-  assert.equal(result.readiness.iowa.totalRemaining, 0);
+  assert.equal(result.readiness.iowa.totalRequired, 22);
+  assert.equal(result.readiness.iowa.totalRemaining, 2);
+  assert.notEqual(result.readiness.iowa.status, "complete");
   assert.equal(result.readiness.nremt.nationalComponentCompleted, 20);
   assert.equal(result.readiness.nremt.totalCompleted, 24);
   assert.equal(result.readiness.nremt.totalRemaining, 16);

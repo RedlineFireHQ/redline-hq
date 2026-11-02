@@ -104,6 +104,7 @@ begin
     join public.ems_requirement_components c on c.requirement_set_id = s.id
     left join public.ems_requirement_topics t on t.requirement_component_id = c.id and t.topic_code = 'pediatric'
     where s.authority = 'iowa' and s.certification_level in ('emr', 'emt', 'aemt', 'paramedic')
+      and s.version_label <> '2026-iowa-nov1'
       and c.component_code = 'core'
       and (t.id is null or t.required_hours <> 0 or not t.active)
   ) then

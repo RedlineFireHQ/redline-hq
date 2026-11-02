@@ -77,7 +77,7 @@ export type NremtRequirement = {
   };
 };
 
-export const IOWA_REQUIREMENTS: Record<EmsCertificationLevel, IowaRequirement> = {
+const HISTORICAL_IOWA_REQUIREMENTS: Record<EmsCertificationLevel, IowaRequirement> = {
   emr: {
     totalRequiredHours: 8,
     topicRequirements: [
@@ -132,10 +132,67 @@ export const IOWA_REQUIREMENTS: Record<EmsCertificationLevel, IowaRequirement> =
   },
 };
 
-export function getIowaTopicRequirements(level: EmsCertificationLevel): TopicRequirement[] {
-  const topics = IOWA_REQUIREMENTS[level].topicRequirements;
-  // Phase 1 exposes Pediatric for legacy levels without assigning Phase 2 hours.
-  return level === "ccp" ? topics : [...topics, { topic: "pediatric", requiredHours: 0 }];
+export const IOWA_REQUIREMENTS_EFFECTIVE_DATE = "2026-11-01";
+
+export const IOWA_REQUIREMENTS: Record<EmsCertificationLevel, IowaRequirement> = {
+  emr: {
+    totalRequiredHours: 9,
+    topicRequirements: [
+      { topic: "airway_respirations_ventilations", requiredHours: 1.5 },
+      { topic: "cardiology", requiredHours: 2 },
+      { topic: "trauma", requiredHours: 1 },
+      { topic: "medical", requiredHours: 2.5 },
+      { topic: "operations", requiredHours: 1 },
+      { topic: "pediatric", requiredHours: 1 },
+    ],
+  },
+  emt: {
+    totalRequiredHours: 22,
+    topicRequirements: [
+      { topic: "airway_respirations_ventilations", requiredHours: 4 },
+      { topic: "cardiology", requiredHours: 5 },
+      { topic: "trauma", requiredHours: 3 },
+      { topic: "medical", requiredHours: 6 },
+      { topic: "operations", requiredHours: 2 },
+      { topic: "pediatric", requiredHours: 2 },
+    ],
+  },
+  aemt: {
+    totalRequiredHours: 28,
+    topicRequirements: [
+      { topic: "airway_respirations_ventilations", requiredHours: 5 },
+      { topic: "cardiology", requiredHours: 6 },
+      { topic: "trauma", requiredHours: 4 },
+      { topic: "medical", requiredHours: 7 },
+      { topic: "operations", requiredHours: 3 },
+      { topic: "pediatric", requiredHours: 3 },
+    ],
+  },
+  paramedic: {
+    totalRequiredHours: 34,
+    topicRequirements: [
+      { topic: "airway_respirations_ventilations", requiredHours: 6 },
+      { topic: "cardiology", requiredHours: 7 },
+      { topic: "trauma", requiredHours: 5 },
+      { topic: "medical", requiredHours: 8 },
+      { topic: "operations", requiredHours: 4 },
+      { topic: "pediatric", requiredHours: 4 },
+    ],
+  },
+  ccp: HISTORICAL_IOWA_REQUIREMENTS.ccp,
+};
+
+export function getIowaRequirement(level: EmsCertificationLevel, asOf = new Date()): IowaRequirement {
+  return asOf.toISOString().slice(0, 10) < IOWA_REQUIREMENTS_EFFECTIVE_DATE
+    ? HISTORICAL_IOWA_REQUIREMENTS[level]
+    : IOWA_REQUIREMENTS[level];
+}
+
+export function getIowaTopicRequirements(level: EmsCertificationLevel, asOf = new Date()): TopicRequirement[] {
+  const topics = getIowaRequirement(level, asOf).topicRequirements;
+  return topics.some((requirement) => requirement.topic === "pediatric")
+    ? topics
+    : [...topics, { topic: "pediatric", requiredHours: 0 }];
 }
 
 export const NREMT_REQUIREMENTS: Record<Exclude<EmsCertificationLevel, "ccp">, NremtRequirement> = {

@@ -173,6 +173,53 @@ async function openProfile(memberId: string) {
   return findSection(tree);
 }
 
+for (const row of [
+  { level: "emr", hours: [1.5, 2, 1, 2.5, 1, 1], total: 9 },
+  { level: "emt", hours: [4, 5, 3, 6, 2, 2], total: 22 },
+  { level: "aemt", hours: [5, 6, 4, 7, 3, 3], total: 28 },
+  { level: "paramedic", hours: [6, 7, 5, 8, 4, 4], total: 34 },
+] as const) {
+  test(`Personnel renders Iowa ${row.level} ${row.total}-hour requirements matching My Readiness`, async (t) => {
+    t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-11-02T12:00:00Z") });
+    const topics = ["airway_respirations_ventilations", "cardiology", "trauma", "medical", "operations", "pediatric"];
+    db.certifications[0].ems_certification_level = row.level;
+    for (const profile of db.ems_member_track_profiles) {
+      if (profile.department_id === DEPT_A) profile.certification_level = profile.track === "iowa" ? row.level : "paramedic";
+    }
+    db.training_events = topics.map((topic, index) => ({
+      id: topic, department_id: DEPT_A, starts_at: "2026-09-01", title: topic,
+      category_id: null, hours_credit: row.hours[index], is_ems_training: true, ems_core_topic: topic, ems_needs_review: false,
+    }));
+    db.training_event_attendance = topics.map((topic) => ({
+      department_id: DEPT_A, member_id: "m-ff", training_event_id: topic, attendance_status: "attending",
+    }));
+    db.training_outside_submissions = [];
+    const section = await openProfile("m-ff");
+    assert.ok(section);
+    const readiness = buildMemberEmsProgress({
+      iowaProfile: { certification_level: row.level, track_status: "active", expiration_date: "2099-01-01", maintain_track: true },
+      nremtProfile: { certification_level: "paramedic", track_status: "active", expiration_date: "2099-01-01", maintain_track: true },
+      events: topics.map((topic, index) => ({
+        id: topic, starts_at: "2026-09-01", hours_credit: row.hours[index],
+        is_ems_training: true, ems_core_topic: topic, ems_needs_review: false,
+      })),
+      outsideSubmissions: [],
+    });
+    assert.deepEqual(section.emsReadiness, readiness.emsReadiness);
+    assert.equal(section.emsReadiness.iowa.totalRequired, row.total);
+    assert.equal(section.emsReadiness.iowa.totalCompleted, row.total);
+    assert.equal(section.emsReadiness.iowa.status, "complete");
+    assert.deepEqual(section.emsReadiness.iowa.topics.map((topic) => topic.required), row.hours);
+    assert.equal(section.emsReadiness.nremt.totalRequired, 30);
+    const html = renderToStaticMarkup(EmsContinuingEducationSection(section));
+    assert.ok(html.includes(`${row.total.toFixed(2)} / ${row.total.toFixed(2)} hours`));
+    assert.match(html, />Pediatric</);
+    assert.match(html, /30\.00 hours/);
+    assert.deepEqual(writeLog, []);
+    assert.deepEqual(rpcLog, []);
+  });
+}
+
 test("the Personnel CCP section renders the shared Iowa 46-hour and NREMT 30-hour requirements", async () => {
   db.certifications[0].ems_certification_level = "ccp";
   for (const profile of db.ems_member_track_profiles) {

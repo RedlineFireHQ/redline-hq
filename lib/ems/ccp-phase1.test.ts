@@ -11,6 +11,7 @@ import {
   EMS_CORE_TOPICS,
   IOWA_REQUIREMENTS,
   NREMT_REQUIREMENTS,
+  getIowaRequirement,
   getIowaTopicRequirements,
   getEmsCertificationLevels,
   isTopicApplicableToTrack,
@@ -185,7 +186,8 @@ test("unapproved CCP/Pediatric training is excluded without changing expiration 
   assert.equal(expired.nremt.status, "needs_attention");
 });
 
-test("all Iowa requirements and other NREMT levels remain unchanged; only NREMT Paramedic is simplified", () => {
+test("historical Iowa requirements and all National Registry requirements remain preserved", (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-31T12:00:00Z") });
   const frozen = [
     { level: "emr", iowaTotal: 8, iowa: [1, 2, 1, 3, 1], nremtTotal: 16, national: [1.5, 2, 1, 2.5, 1] },
     { level: "emt", iowaTotal: 20, iowa: [1, 6, 2, 6, 5], nremtTotal: 40, national: [4, 5, 3, 6, 2] },
@@ -193,7 +195,7 @@ test("all Iowa requirements and other NREMT levels remain unchanged; only NREMT 
     { level: "paramedic", iowaTotal: 30, iowa: [3, 9, 3, 9, 6], nremtTotal: 30, national: [6, 7, 5, 8, 4] },
   ] as const;
   for (const row of frozen) {
-    const iowa = IOWA_REQUIREMENTS[row.level];
+    const iowa = getIowaRequirement(row.level);
     const nremt = NREMT_REQUIREMENTS[row.level];
     assert.equal(iowa.totalRequiredHours, row.iowaTotal);
     assert.deepEqual(iowa.topicRequirements.map((topic) => topic.topic), topicCodes.slice(0, 5));
@@ -218,14 +220,16 @@ test("all Iowa requirements and other NREMT levels remain unchanged; only NREMT 
   }
 });
 
-test("Pediatric is selectable and credited for every Iowa level without adding legacy minimums", () => {
+test("Pediatric is selectable and credited for every Iowa level with its current minimum", (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-11-02T12:00:00Z") });
+  const pediatricHours = { emr: 1, emt: 2, aemt: 3, paramedic: 4, ccp: 4 };
   assert.ok(EMS_CORE_TOPICS.some((topic) => topic.code === "pediatric" && topic.label === "Pediatric"));
   for (const level of ["emr", "emt", "aemt", "paramedic", "ccp"] as const) {
     assert.ok(isTopicApplicableToTrack("pediatric", "iowa", level));
     assert.equal(isTopicApplicableToTrack("critical_care_paramedic", "iowa", level), level === "ccp");
     if (level !== "ccp") assert.equal(isTopicApplicableToTrack("pediatric", "nremt", level), false);
     const pediatric = getIowaTopicRequirements(level).find((topic) => topic.topic === "pediatric");
-    assert.equal(pediatric?.requiredHours, level === "ccp" ? 4 : 0);
+    assert.equal(pediatric?.requiredHours, pediatricHours[level]);
     const result = calculateEmsReadiness({
       iowaProfile: { ...profile, level }, nremtProfile: { ...profile, level: "paramedic" }, trainingRecords: records.slice(5),
     });

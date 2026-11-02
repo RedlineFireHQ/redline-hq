@@ -1,5 +1,5 @@
 import {
-  IOWA_REQUIREMENTS,
+  getIowaRequirement,
   getNremtRequirement,
   isNremtNationalOnly,
   getIowaTopicRequirements,
@@ -157,7 +157,7 @@ export function calculateEmsReadiness(input: {
     warnings.push("NREMT certification is expired based on track expiration date.");
   }
 
-  const iowaRequirement = input.iowaProfile ? IOWA_REQUIREMENTS[input.iowaProfile.level] : null;
+  const iowaRequirement = input.iowaProfile ? getIowaRequirement(input.iowaProfile.level) : null;
   const nremtRequirement = input.nremtProfile ? getNremtRequirement(input.nremtProfile.level) : null;
   const nationalOnly = input.nremtProfile ? isNremtNationalOnly(input.nremtProfile.level) : false;
 
