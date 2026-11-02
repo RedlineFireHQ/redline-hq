@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
-export const activeDepartmentCookieName = "redline_active_department_id";
+const activeDepartmentCookieName = "redline_active_department_id";
 
 function jsonResponse(payload: unknown, status = 200) {
   return NextResponse.json(payload, { status });
