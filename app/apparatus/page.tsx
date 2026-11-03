@@ -111,7 +111,7 @@ export default async function ApparatusPage() {
       readiness: readiness?.scorePercent === null || readiness?.scorePercent === undefined
         ? "NOT SCORED"
         : `${Math.round(readiness.scorePercent)}%`,
-      imageUrl: getApparatusImagePath(unit.name),
+      imageUrl: getApparatusImagePath(unit, currentMember?.departmentId),
     };
   });
 

@@ -92,7 +92,8 @@ export default async function ApparatusInformationPage({
   if (!truck) {
     notFound();
   }
-  const apparatusImageUrl = getApparatusImagePath(truck.name);
+  const currentMember = await getCurrentMember(supabase);
+  const apparatusImageUrl = getApparatusImagePath(truck, currentMember?.departmentId);
 
   const statusValue =
     truck.status === "out_of_service"
@@ -117,7 +118,6 @@ export default async function ApparatusInformationPage({
       })
     : "Not Set";
 
-  const currentMember = await getCurrentMember(supabase);
   const canManageThisApparatus = currentMember?.departmentId
     ? await hasApparatusManagementPermission(supabase, currentMember.departmentId, currentMember.role)
     : false;

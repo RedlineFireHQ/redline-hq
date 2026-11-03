@@ -4,6 +4,7 @@ import ApparatusHistoryCards from "@/components/apparatus/ApparatusHistoryCards"
 import AssignedInventoryPanel from "@/components/apparatus/AssignedInventoryPanel";
 import { getApparatusImagePath } from "@/lib/apparatus-images";
 import { getApparatusById } from "@/lib/database";
+import { getCurrentMember } from "@/lib/current-member";
 import { calculateApparatusReadinessForApparatusId } from "@/lib/readiness/apparatus-readiness-data";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import Link from "next/link";
@@ -64,7 +65,8 @@ export default async function ApparatusDetailPage({
     notFound();
   }
 
-  const apparatusImageUrl = getApparatusImagePath(truck.name);
+  const currentMember = await getCurrentMember(supabase);
+  const apparatusImageUrl = getApparatusImagePath(truck, currentMember?.departmentId);
   const readinessEvaluation = await calculateApparatusReadinessForApparatusId(truck.id);
   const readiness = readinessEvaluation?.readiness ?? null;
 

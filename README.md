@@ -1,5 +1,20 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Apparatus photos
+
+`lib/apparatus-images.ts` selects bundled photos by department UUID and unit
+name. Every caller passes the apparatus record and the authenticated current
+member's department; mismatched, missing, or unknown departments and unmapped
+names return `null` for the existing no-image fallback. Both existing Elliott
+department identities retain their Elliott mappings and unit-number aliases.
+Cedar Bluff and Red Oak each use only their own mappings.
+
+The 17 Red Oak photos under `public/apparatus/redoak/` are existing approved
+assets, not Supabase Storage uploads. Bundled photos remain public URLs;
+department-aware selection prevents incorrect photos, not direct URL access.
+Validate mappings, asset files, isolation, and caller wiring with
+`node --import tsx --test lib/apparatus-images.test.ts`.
+
 ## Daily Log
 
 The forward-only `20261103180000_create_daily_logs.sql` migration adds the

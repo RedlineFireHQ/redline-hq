@@ -55,7 +55,7 @@ export default async function ArchivedApparatusPage() {
         ) : (
           <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
             {archivedApparatus.map((unit) => {
-              const imageUrl = getApparatusImagePath(unit.name);
+              const imageUrl = getApparatusImagePath(unit, currentMember?.departmentId);
               const apparatusName = unit.name?.trim() || unit.id;
               const apparatusType = unit.type?.trim() || "Unknown";
 
