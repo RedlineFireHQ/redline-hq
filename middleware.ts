@@ -5,8 +5,17 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 export async function middleware(request: NextRequest) {
-	if (request.nextUrl.pathname === "/auth/invite") {
+	if (request.nextUrl.pathname === "/auth/invite" || request.nextUrl.pathname === "/auth/recovery" || request.nextUrl.pathname === "/api/cron/notification-emails") {
 		return NextResponse.next({ request });
+	}
+
+	// Exchange older PKCE recovery links before authenticated-login redirects.
+	if (request.nextUrl.pathname === "/login" && (request.nextUrl.searchParams.has("code") || request.nextUrl.searchParams.has("error"))) {
+		const url = request.nextUrl.clone();
+		url.pathname = "/auth/recovery";
+		return NextResponse.redirect(url, {
+			headers: { "Cache-Control": "private, no-store", "Referrer-Policy": "no-referrer" },
+		});
 	}
 
 	let response = NextResponse.next({

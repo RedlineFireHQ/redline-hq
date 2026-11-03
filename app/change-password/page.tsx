@@ -11,6 +11,7 @@ function ChangePasswordForm() {
 	const router = useRouter();
 	const searchParams = useSearchParams();
 	const isFirstLogin = searchParams.get("first") === "1";
+	const isRecovery = searchParams.get("recovery") === "1";
 	const { session, user, isLoading, refreshSession } = useAuth();
 
 	const [newPassword, setNewPassword] = useState("");
@@ -113,7 +114,7 @@ function ChangePasswordForm() {
 						<div className="pt-2 lg:pt-4">
 							<div className="mb-8">
 								<h1 className="text-[2.1rem] font-semibold tracking-tight text-white sm:text-[3.1rem] lg:text-[3.3rem]">
-									{isFirstLogin ? "Create Your Password" : "Change Password"}
+									{isFirstLogin ? "Create Your Password" : isRecovery ? "Reset Your Password" : "Change Password"}
 								</h1>
 								<p className="mt-2 text-[1.15rem] leading-7 text-zinc-400">
 									{isFirstLogin

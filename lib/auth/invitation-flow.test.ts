@@ -75,7 +75,7 @@ for (const options of [
   });
 }
 
-for (const status of [0, 500, 503]) {
+for (const status of [0, 429, 500, 503]) {
   test(`reports temporary Auth failures explicitly: ${status}`, async (t) => {
     t.mock.method(console, "error", () => {});
     const { client } = createClient({ error: { code: "unexpected_failure", status } });
@@ -97,8 +97,9 @@ test("untrusted redirect parameters do not affect invitation verification", asyn
 
 test("email template points to server verification, not the implicit Auth URL", () => {
   const template = readFileSync(new URL("../../supabase/templates/invite.html", import.meta.url), "utf8");
-  assert(template.includes("{{ .SiteURL }}/auth/invite?token_hash={{ .TokenHash }}&amp;type=invite"));
+  assert(template.includes("https://redlinefirehq.com/auth/invite?token_hash={{ .TokenHash }}&amp;type=invite"));
   assert(!template.includes(".ConfirmationURL"));
+  assert(!template.includes(".SiteURL"));
 });
 
 test("only the exact invitation endpoint bypasses middleware authentication", () => {

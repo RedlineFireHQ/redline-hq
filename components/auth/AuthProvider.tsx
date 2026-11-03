@@ -146,17 +146,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
 		email: string;
 		password: string;
 	}) {
-		console.log("[auth] signInWithPassword request", {
-			email: credentials.email,
-			passwordLength: credentials.password.length,
-		});
-
 		const { data, error } = await supabase.auth.signInWithPassword(credentials);
-
-		console.log("[auth] signInWithPassword response", {
-			data,
-			error,
-		});
 
 		if (!error) {
 			setSession(data.session);

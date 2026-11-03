@@ -1,5 +1,86 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Operational certification and EMS emails (development; disabled)
+
+The forward migrations `20261103031000_enforce_ems_notification_department.sql`
+and `20261103032000_operational_email_notifications.sql` are development-only
+until separately approved for deployment. Do not reapply historical assignment
+email migrations or enable these features as part of an authentication release.
+
+Both rows in the private `operational_email_rollouts` table default to
+`enabled = false`: `certification_expiration` and `ems_supply_withdrawal`.
+The worker can read, but cannot update, these controls. No browser settings or
+environment-variable override enables them. Production migration application,
+rollout enablement, and real email tests each require owner approval.
+
+Certification reminders run on the exact Chicago calendar date 60, 30, 14, or
+7 days before a finite expiration date, independent of readiness warning
+settings. There is no historical backfill or catch-up of missed milestone days.
+An already-started provider delivery uses the bounded retry policy. Credentials
+without expiration dates receive no reminder. Only the active, same-department
+holder receives an email, with no administrative copies or fallback.
+
+Catalog credentials use their recorded expiration. Current EMS profiles without
+a catalog representation can supply their own date. EMS mirrors require exactly
+one matching authority, level, nonblank certificate number, and expiration date.
+Conflicting/multiple representations and potential legacy `EMT` mirrors are
+recorded as `needs_review`; matching dates or names alone never merge credentials.
+Catalog/profile disagreement, foreign ownership, and missing authoritative
+identity must be reviewed separately without automatically editing personnel.
+Legacy candidates must first be identified as EMS credentials (the existing
+generic `EMT` catalog identity); matching dates or numbers never implicate
+unrelated fire/other credentials. Same-authority/level catalog records sharing
+an expiration require review if either normalized certificate number is missing.
+Expiration date changes start a new cycle; unique source and canonical event
+keys prevent repeated scans from sending the same milestone twice.
+
+EMS emails originate from committed `Checkout` transaction items with a negative
+delta and a resulting quantity at or below the reorder threshold. Each item ID
+is a separate event, including every additional withdrawal while already low.
+Returns, restocks, corrections, inventory creation, and threshold-only changes
+do not generate withdrawal emails. Existing in-app alerts still occur only on
+threshold crossings. The composite recipient/member department foreign key
+also prevents moving a designated member to another department. The isolation
+migration stops on existing mismatches; it never reassigns or deletes settings.
+
+Enqueue recovery retains the original withdrawal, threshold, and designated
+recipient snapshot. Changing a designation invalidates the old delivery; only
+subsequent withdrawals use the new recipient. Final preparation checks source
+ownership and eligibility again. Provider messages, recipients, and idempotency
+keys freeze before the first attempt; an accepted/in-flight email cannot be
+recalled. Do not reroute uncertain retries.
+
+The single existing five-minute cron balances deficiency, certification, and
+withdrawal queues in round-robin order, starting with deficiencies. All queues
+use the existing Resend sender/key, exclusive leases, abortable timeouts,
+exponential backoff, at most eight attempts, and a 23-hour provider retry window.
+Deficiency assignment emails are available to all existing departments after
+`20261103154500_enable_assignment_emails_all_departments.sql`. Assignment,
+ownership, active same-department recipient, and valid-email checks remain
+mandatory at enqueue and dispatch. This migration does not automatically replay
+historical notifications. A new queue failure is explicit and does not prevent
+healthy queues from processing.
+Inspect `failed`, `needs_review`, and enqueue-recovery states operationally;
+`sent` means provider acceptance, not confirmed inbox delivery.
+
+All-department assignment regression coverage is in
+`supabase/tests/notification_assignment_all_departments.sql`, using an empty,
+owned schema-only database named `redline_assignment_email_dev_20261103` after
+the assignment and operational migrations and the forward expansion migration.
+It rolls back synthetic fixtures and never sends email. The older
+`notification_assignment_emails.sql` retains the pre-expansion Cedar-only
+baseline and must run before the expansion migration.
+
+Local validation uses synthetic records in an owned schema-only database named
+`redline_operational_email_dev_20261103`, never Production or copied customer rows.
+Run `supabase/tests/operational_email_notifications.sql` through local psql.
+It rolls back fixtures and temporary rollout enablement. The concurrency tests
+require `REDLINE_NOTIFICATION_TEST_CONTAINER=<owned-local-container-id>`:
+`npx tsx --test supabase/tests/operational_email_concurrency.test.ts`.
+They commit synthetic fixtures only in that owned database; discard the database
+after validation. Notification application tests use mocked providers:
+`npx tsx --test lib/notifications/*.test.ts`. Never point tests at a live provider.
+
 ## Getting Started
 
 First, run the development server:
@@ -20,31 +101,180 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
-## Administrator invitations
+## Authentication emails (local repair; deployment pending)
 
 Keep the browser Supabase client on its default PKCE flow. Administrator
-invitations must use the link format in `supabase/templates/invite.html`.
-Supabase's default mailer cannot customize invitation templates. Use the
-supported `auth.admin.generateLink({ type: "invite", email, options: { data } })`
-API and the existing verified email provider to deliver the invitation, without
-changing global SMTP, signup, or recovery settings.
+invitations must use the link format in `supabase/templates/invite.html`;
+password recovery uses `supabase/templates/recovery.html`. Both proposed
+Production templates explicitly target `https://redlinefirehq.com`, not
+`.SiteURL` or `.ConfirmationURL`. This avoids the current localhost fallback.
+Do not install these templates unchanged in a local or non-Production project;
+replace the origin with that environment's trusted application origin.
 
 The invitation link sends Supabase's single-use token hash to `/auth/invite`.
 This server-only endpoint verifies `type=invite`, establishes the normal SSR
 session cookies, and redirects to `/change-password?first=1`. It does not accept
 implicit access-token fragments or arbitrary redirect destinations.
 
-Include `data: { first_name, last_name, must_change_password: true }`. Render
-`.SiteURL` as the trusted application's HTTPS origin and `.TokenHash` as the
-returned `properties.hashed_token`; never send the default `action_link`, which
-uses an implicit callback. Never log invitation tokens. Do not supply a
-password: the invitee creates their own password after accepting the email.
-Check the email provider's send result separately from link generation; a send
-success does not prove inbox delivery.
+The recovery callback `/auth/recovery` verifies `type=recovery` token hashes
+and redirects to the existing `/change-password?recovery=1` screen. Token-hash
+links do not depend on the browser that requested recovery. The callback also
+supports existing PKCE authorization codes, including `sb_flow_id`, using the
+normal SSR verifier cookies; these older links must open in the same browser
+that requested recovery. Middleware forwards `/login?code=...` callbacks before
+normal signed-in login redirects. A missing verifier or rejected token shows
+an explicit error instead of an ordinary login form. Both callbacks require a
+matching Auth user/session, use fixed internal destinations, and return
+no-store/no-referrer responses. They do not create or claim department
+memberships. An invitation still needs its existing authorized member association;
+no department or permission is accepted from callback parameters.
 
-Run invitation tests with `npx tsx --test lib/auth/invitation-flow.test.ts`.
+Password entry and validation live only on `/change-password`. The existing
+eight-character minimum, confirmation check, provider errors, and forced
+first-login metadata handling are preserved. Ordinary desktop/mobile sign-in
+destinations remain unchanged. No token, password, or full Auth response should
+be logged.
+
+### Production configuration and approval-required deployment
+
+Read-only verification on November 2, 2026 confirmed custom Resend SMTP is
+enabled, the saved invitation/recovery templates contain the direct links above,
+and both `https://redlinefirehq.com/login` and
+`https://redlinefirehq.com/auth/recovery` are allowlisted. These settings were
+configured separately by the owner; deploying this code does not modify them.
+The Site URL remains `http://localhost:3000`. These two direct-link templates do
+not use that fallback; other Auth flows may still do so.
+
+Retain the existing `/login` redirect, SMTP configuration, and Site URL.
+Do not change `DEMO_REQUEST_SENDER` or `RESEND_API_KEY`. No database migration or
+RLS change is required for this authentication repair. Deployment and live
+test emails still require separate approval.
+
+The approved invitation scope is Supabase-generated invitation emails only.
+The existing personnel account-creation endpoint still creates an account with
+a temporary password; it does not send an invitation and is unchanged here.
+
+An alternative for invitations is the supported server-side
+`auth.admin.generateLink({ type: "invite", email, options: { data } })` API and
+the existing verified provider, rendering `.TokenHash` from
+`properties.hashed_token` into the trusted callback URL. Include
+`data: { first_name, last_name, must_change_password: true }`; do not supply a
+password, send the default `action_link`, or log the returned tokens. No new
+sender service or public reset endpoint is implemented here. Choosing this
+alternative instead of SMTP requires a separate reviewed delivery design,
+particularly for recovery abuse/rate limiting.
+
+After approved deployment/configuration, authorize new controlled test emails
+separately. Verify real delivery, password update, subsequent sign-in, and live
+department isolation using only approved test identities. Until then these are
+locally tested flows, not a claim of Production success.
+
+Run local authentication tests with
+`npx tsx --test lib/auth/invitation-flow.test.ts lib/auth/recovery-flow.test.ts lib/auth/email-auth-integration.test.ts lib/auth/auth-middleware.test.ts`.
+The integration tests use the real Supabase SSR SDK with an in-memory Auth
+transport; they do not contact Supabase, send emails, or create accounts.
 
 ## Learn More
+
+### Deficiency assignment emails
+
+**Initial Production rollout: Cedar Bluff Fire & Rescue only**
+(`44a25960-7d46-45c4-94e9-115833072da8`). A private, immutable database
+allowlist is enforced before enqueue/recovery and again at claim and final
+dispatch. Elliott, Red Oak, and every other department remain excluded from email
+generation and sending, including preexisting or forged outbox rows. Their
+existing assignment and in-app notification behavior is unchanged. Browser
+settings cannot enable another department; expansion requires an approved
+migration. There is no historical backfill.
+
+The local migration `20261102210000_queue_deficiency_assignment_emails.sql`
+adds a private `notification_email_deliveries` outbox. It queues only new
+`deficiency_assigned` in-app events; it does not backfill old notifications or
+replace existing assignment, category-assignment, history, notification triggers,
+or notification permissions. An unassigned deficiency or unchanged assignment
+does not create an assignment event. Reassignment creates an event for the new
+assignee only.
+
+The queue snapshots the assigned member's email and deficiency details. Only an
+active member in the same department is eligible. Department ownership is resolved
+independently from every populated equipment, reporter, inspection, and check-session
+link, not from the deficiency's writable `department_id`. All links must resolve
+and agree with the deficiency, notification, and assignee departments; missing,
+unresolved, ambiguous, or mismatched ownership is recorded as `skipped`.
+Priority names are resolved through the actual `deficiency_priorities` UUID FK.
+These checks do not modify existing assignment or in-app notification rules.
+
+The worker checks eligibility at claim and again at the final prepare/dispatch
+RPC, including already-frozen retries. Prepare waits for in-progress assignment
+and member updates using row locks, then validates with a fresh snapshot and
+rechecks its lease. Changes before that gate cancel the delivery without a provider
+call. The gate and provider submission are not one distributed transaction:
+changes after dispatch authorization cannot recall an email already in flight.
+Canceled deliveries are never redirected to another recipient.
+
+`GET /api/cron/notification-emails` uses service-role-only queue RPCs and requires
+`Authorization: Bearer <CRON_SECRET>`. This exact route bypasses browser-session
+middleware; all other authentication behavior is unchanged. Set a random
+Production `CRON_SECRET` of at least 16 characters before deployment. The worker
+reuses `RESEND_API_KEY` and **exactly** `DEMO_REQUEST_SENDER`; do not change the
+existing sender configuration. Links use the trusted `https://redlinefirehq.com`
+origin, not request headers or client-supplied destinations.
+
+`vercel.json` schedules the worker every five minutes (requires Vercel Pro).
+Deployment requires separate authorization: apply the reviewed migration first,
+configure `CRON_SECRET`, then deploy. No remote configuration or migration is
+performed by these local changes. Do not invoke the worker locally against a
+Production Supabase URL. The migration is transactional, with a five-second lock
+timeout and 30-second statement timeout. It fails explicitly before recreating
+an existing outbox; do not rerun it manually or use `IF NOT EXISTS` to hide schema
+drift. Successful installation must be tracked by migration history.
+
+An outbox insert failure is isolated from the existing assignment and in-app
+notification. A database warning and private `notification_email_enqueue_failures`
+record retain the notification ID, reserved event order, SQLSTATE, attempts and
+retry time. Claims recover at most ten due enqueue failures with backoff and an
+eight-attempt `needs_review` limit; recovery cannot reorder old A-to-B-to-A events.
+These records have RLS and service-role SELECT only, with no ordinary-user access.
+If the database cannot persist even a recovery record, the original transaction
+fails explicitly rather than silently losing an assignment email. No historical
+notifications are backfilled.
+
+Each notification has one unique queue row. Atomic `FOR UPDATE SKIP LOCKED`
+claims use a two-minute lease and unique lease token. The exact rendered request,
+including sender and recipient, is frozen before the first provider call and
+reused with `notification-email/<delivery-id>` as Resend's idempotency key.
+Provider errors/timeouts retain retry state with exponential backoff; stale
+leases can be reclaimed. At most eight attempts are allowed, and uncertain
+deliveries stop at 23 hours, before Resend's 24-hour idempotency retention ends.
+`needs_review` must be reconciled with Resend logs before any manual resend;
+never reset its attempt timestamp, payload, or idempotency key blindly. If Resend
+accepts a request but saving success fails, the reclaimed lease uses the same
+frozen request and provider key within that window, so Resend returns the original
+acceptance instead of sending a second email.
+
+Inspect `status`, `attempt_count`, `last_error`, `provider_message_id`,
+`first_attempt_at`, and `sent_at` through privileged operations. `sent` means
+Resend accepted the email, not confirmed inbox delivery. Bounce/delivery webhooks
+are not included. No Chief/admin/reporter fallback, CC, BCC, supply emails, or
+certification reminders are implemented. The worker handles at most ten events
+per invocation with a 40-second loop budget, five-second RPC timeouts and a
+ten-second provider timeout that aborts the underlying Resend HTTP request.
+The final iteration can extend beyond the loop budget; the route has a 60-second
+Vercel limit. Aborting cannot undo provider acceptance, so the same idempotency
+safeguards apply. Backlogs may require multiple cron runs.
+
+Run `npx tsx --test lib/notifications/assignment-email.test.ts` for mocked
+provider/worker tests (no emails sent). Run
+`psql -X -v ON_ERROR_STOP=1 -d notification_email_test -f supabase/tests/notification_email_local_fixture.sql`
+only against a new disposable local database. The fixture loads the actual
+existing assignment triggers and the new migration, then runs rollback-only
+assignment, retry, lease, duplicate, permission, enqueue-failure recovery, existing
+notification RLS, post-claim eligibility changes, and ownership-isolation assertions.
+The fixture uses the real priority FK shape and broad default grants to verify
+explicit revocations. It is not a Production migration or a full-schema integration
+test. Before authorized deployment, rehearse against a schema-only copy of the
+live database in an isolated local database; no additional website is required.
+The minimal fixture alone does not establish the absence of Production schema drift.
 
 ### EMS continuing education
 

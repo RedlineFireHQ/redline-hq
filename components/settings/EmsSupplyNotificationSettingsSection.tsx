@@ -124,6 +124,11 @@ export default function EmsSupplyNotificationSettingsSection({
           Notifications are sent once each time an item crosses the threshold, not for every
           further reduction.
         </p>
+        <p className="mt-2 max-w-3xl text-sm text-neutral-400">
+          When EMS reorder emails are enabled for rollout, this same responsible member receives
+          one email for every checkout item left at or below its reorder threshold, including
+          additional withdrawals while already low. No copies are sent to other members.
+        </p>
       </div>
 
       {error ? (

@@ -31,7 +31,7 @@ export async function verifyInvitation(url: URL, client: InvitationClient) {
       code: error?.code,
       status: error?.status,
     });
-    return { ok: false as const, status: error && (!error.status || error.status >= 500) ? 503 : 400 };
+    return { ok: false as const, status: error && (!error.status || error.status === 429 || error.status >= 500) ? 503 : 400 };
   }
 
   return { ok: true as const };

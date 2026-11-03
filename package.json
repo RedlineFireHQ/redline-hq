@@ -19,7 +19,7 @@
     "@supabase/supabase-js": "^2.110.7",
     "html5-qrcode": "^2.3.8",
     "lucide-react": "^1.25.0",
-    "next": "16.3.5",
+    "next": "16.4.4",
     "pdf-parse": "^1.1.1",
     "pdfjs-dist": "5.4.296",
     "qrcode": "^1.5.4",
@@ -37,7 +37,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.3.5",
+    "eslint-config-next": "16.4.4",
     "tailwindcss": "^4",
     "tsx": "^4.23.12",
     "typescript": "^5"
