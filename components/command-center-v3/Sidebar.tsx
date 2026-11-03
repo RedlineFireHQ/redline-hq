@@ -14,6 +14,7 @@ import {
   AlertTriangle,
   BarChart3,
   CalendarDays,
+  BookOpen,
   FolderOpen,
   Building2,
   Settings,
@@ -34,6 +35,7 @@ const navigationItems = [
   { label: "Deficiencies", icon: AlertTriangle, href: "/deficiencies" },
   { label: "Reports", icon: BarChart3, href: "/reports" },
   { label: "Calendar", icon: CalendarDays, href: "/calendar" },
+  { label: "Daily Log", icon: BookOpen, href: "/daily-log" },
   { label: "Documents", icon: FolderOpen, href: "/documents" },
   { label: "Settings", icon: Settings, href: "/settings" },
 ];

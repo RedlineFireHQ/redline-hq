@@ -1,5 +1,31 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Daily Log
+
+The forward-only `20261103180000_create_daily_logs.sql` migration adds the
+department activity journal at `/daily-log` and `/mobile/daily-log`. All five
+entry fields are optional; new forms default date/time to the user's local
+clock. History sorts entered dates/times descending, then creation time, with
+undated entries last. Search covers Activity, Location, Unit and entered dates
+(`MM/DD/YYYY`, `YYYY-MM-DD`, or abbreviated month dates). Results page in groups
+of 50; long activity text has a bounded, expandable reader.
+
+Active department members may read and add entries. Only the original creator
+or an active department Administrator may edit; only an active department
+Administrator may archive. The database derives identity from `auth.uid()` and
+the department's active membership, stamps audit metadata itself, and rejects
+stale edits. Archival hides entries from history/search but retains content,
+creator/creation time, editor/edit time and archiver/archive time internally.
+No hard-delete or direct write grant is exposed to application roles. Audit
+member references do not cascade on member deletion.
+Daily Log is the last Field Actions button on mobile.
+
+Validate with `node --import tsx --test lib/daily-log.test.ts`. Run
+`supabase/tests/daily_logs.sql` after restoring the schema and applying the new
+migration in an empty, owned local database named `redline_daily_log_dev_*`.
+The SQL tests use synthetic users and roll back every fixture. Do not apply
+this migration to Production as part of local validation.
+
 ## Operational certification and EMS emails (development; disabled)
 
 The forward migrations `20261103031000_enforce_ems_notification_department.sql`

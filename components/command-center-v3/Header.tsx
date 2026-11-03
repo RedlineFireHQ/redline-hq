@@ -52,6 +52,7 @@ const pageTitleRoutes = [
   { href: "/documents", title: "Documents" },
   { href: "/settings", title: "Settings" },
   { href: "/calendar", title: "Calendar" },
+  { href: "/daily-log", title: "Daily Log" },
   { href: "/department-readiness", title: "Department Readiness" },
   { href: "/qualification-tracks", title: "Qualification Tracks" },
 ] as const;
