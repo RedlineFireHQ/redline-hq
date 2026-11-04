@@ -38,6 +38,19 @@ test("callback errors are handled by the recovery endpoint rather than silently 
   assert.equal(new URL(response.headers.get("location")!).pathname, "/auth/recovery");
 });
 
+test("anonymous sign-out can only clear context; other context methods remain authenticated", async () => {
+  const { middleware } = await middlewareModule;
+  const cleared = await middleware(new NextRequest("https://app.invalid/api/auth/current-member", { method: "DELETE" }));
+  assert.equal(cleared.headers.get("x-middleware-next"), "1");
+  for (const [path, method] of [
+    ["/api/auth/current-member", "GET"],
+    ["/api/auth/set-active-department", "POST"],
+  ]) {
+    const response = await middleware(new NextRequest("https://app.invalid" + path, { method }));
+    assert.equal(response.status, 307);
+  }
+});
+
 for (const path of ["/login", "/", "/privacy", "/delete-account"]) {
   test(`existing anonymous public route remains available: ${path}`, async () => {
     const { middleware } = await middlewareModule;
@@ -72,6 +85,10 @@ for (const mustChangePassword of [false, true]) {
     assert.equal(protectedPage.status, mustChangePassword ? 307 : 200);
     const passwordPage = await middleware(request("/change-password?recovery=1"));
     assert.equal(passwordPage.status, 200);
+    for (const path of ["/api/auth/current-member", "/api/auth/set-active-department"]) {
+      const context = await middleware(request(path));
+      assert.equal(context.headers.get("x-middleware-next"), "1", "Context resolution must not block password-change UI");
+    }
     const callback = await middleware(request("/login?code=local-code&sb_flow_id=local_flow"));
     assert.equal(new URL(callback.headers.get("location")!).pathname, "/auth/recovery");
   });

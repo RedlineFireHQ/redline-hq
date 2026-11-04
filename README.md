@@ -33,7 +33,8 @@ unchanged for compatibility. Add and Edit use the explicit-context overloads;
 no transaction-wide session-context override or permission expansion is used.
 Personnel Add/Edit opt into strict active-cookie membership matching: an invalid
 or stale selected department is rejected rather than falling back to another
-membership. Other existing `getCurrentMember` callers retain their behavior.
+membership. All `getCurrentMember` callers require an explicit valid selection
+for multi-department accounts rather than choosing the first membership.
 Apply this migration before releasing the new API and confirm PostgREST has
 refreshed its function cache. Do not deploy only the API.
 
@@ -63,6 +64,17 @@ request metadata; independent legacy creation RPCs do not use this protection.
 
 Edit continues using the existing separate member-details and role RPCs and
 reports explicitly if details saved but the role save failed.
+
+Authentication bootstrap and sign-in reconcile the active-department cookie
+through `/api/auth/current-member`: a sole membership is selected automatically,
+a valid multi-department selection is preserved, and an invalid or missing
+multi-department selection requires an explicit choice before the application
+opens. Choices are checked server-side using the same membership resolver as
+Personnel. Sign-out expires the httpOnly cookie through that endpoint's DELETE
+handler. Desktop and mobile switches refresh the shared auth context and server
+pages after the verified cookie update. No database changes are required.
+Test account switching and isolation with `node --import tsx --test
+lib/auth/active-department.test.tsx lib/auth/auth-middleware.test.ts`.
 
 Test with `node --import tsx lib/personnel-role-workflow.test.tsx` and
 `node --import tsx 'app/personnel/[id]/page.test.tsx'`.

@@ -1,33 +1,17 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-
-const activeDepartmentCookieName = "redline_active_department_id";
+import { getMemberMemberships } from "@/lib/current-member";
+import { setActiveDepartmentCookie } from "@/lib/auth/active-department-cookie";
 
 function jsonResponse(payload: unknown, status = 200) {
   return NextResponse.json(payload, { status });
 }
 
-function shouldUseSecureCookie(requestUrl: URL) {
-  return (
-    requestUrl.protocol === "https:" ||
-    requestUrl.hostname === "localhost" ||
-    requestUrl.hostname === "127.0.0.1"
-  );
-}
-
 export async function POST(request: Request) {
   try {
-    const requestUrl = new URL(request.url);
     const supabase = await createSupabaseServerClient();
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    const authUserId = typeof user?.id === "string" ? user.id : "";
-    const email = user?.email?.trim() ?? "";
-
-    if (!authUserId && !email) {
+    const { rows: membershipRows } = await getMemberMemberships(supabase);
+    if (membershipRows.length === 0) {
       return jsonResponse({ ok: false, error: "Not authenticated." }, 401);
     }
 
@@ -37,22 +21,6 @@ export async function POST(request: Request) {
 
     if (!requestedDepartmentId) {
       return jsonResponse({ ok: false, error: "A department is required." }, 400);
-    }
-
-    // Resolve every department membership for this user. RLS on members already
-    // restricts this to the user's own rows; we additionally scope by identity.
-    let membershipQuery = supabase.from("members").select("department_id");
-
-    if (authUserId) {
-      membershipQuery = membershipQuery.eq("auth_user_id", authUserId);
-    } else {
-      membershipQuery = membershipQuery.eq("email", email);
-    }
-
-    const { data: membershipRows, error: membershipError } = await membershipQuery;
-
-    if (membershipError) {
-      return jsonResponse({ ok: false, error: "Unable to verify department membership." }, 400);
     }
 
     const allowedDepartmentIds = new Set(
@@ -68,13 +36,7 @@ export async function POST(request: Request) {
 
     const response = jsonResponse({ ok: true, departmentId: requestedDepartmentId });
 
-    response.cookies.set(activeDepartmentCookieName, requestedDepartmentId, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: shouldUseSecureCookie(requestUrl),
-      path: "/",
-      maxAge: 60 * 60 * 24 * 365,
-    });
+    setActiveDepartmentCookie(response, requestedDepartmentId);
 
     return response;
   } catch (error) {

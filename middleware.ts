@@ -52,16 +52,18 @@ export async function middleware(request: NextRequest) {
 	const isPublicRootRoute = pathname === "/";
 	const isPublicDemoRequestRoute = pathname === "/api/demo-request";
 	const isChangePasswordRoute = pathname === "/change-password";
+	const isAuthContextRoute = pathname === "/api/auth/current-member" || pathname === "/api/auth/set-active-department";
+	const isClearDepartmentRoute = pathname === "/api/auth/current-member" && request.method === "DELETE";
 	const mustChangePassword = user?.user_metadata?.must_change_password === true;
 
-	if (!user && !isLoginRoute && !isDeleteAccountRoute && !isPrivacyRoute && !isPublicRootRoute && !isPublicDemoRequestRoute) {
+	if (!user && !isLoginRoute && !isDeleteAccountRoute && !isPrivacyRoute && !isPublicRootRoute && !isPublicDemoRequestRoute && !isClearDepartmentRoute) {
 		const url = request.nextUrl.clone();
 		url.pathname = "/login";
 		url.search = "";
 		return NextResponse.redirect(url);
 	}
 
-	if (user && mustChangePassword && !isChangePasswordRoute) {
+	if (user && mustChangePassword && !isChangePasswordRoute && !isAuthContextRoute) {
 		const url = request.nextUrl.clone();
 		url.pathname = "/change-password";
 		url.search = "?first=1";
