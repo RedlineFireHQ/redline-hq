@@ -287,3 +287,23 @@ test("actual AuthProvider blocks application behind explicit multi-department se
   assert.ok(p.render().some(element => element.props.id === "app"));
   assert.ok(p.events.includes("refresh"));
 });
+
+test("shared client member hook follows department switches and sign-out instead of caching initial membership", async () => {
+  const h = harness();
+  const p = providerHarness(h);
+  const hook = load("lib/use-active-member.ts", {
+    react: { useMemo: (factory: () => unknown) => factory() },
+    "@/components/auth/AuthProvider": { useAuth: p.context },
+  }).useActiveMember;
+  assert.ok(typeof hook === "function");
+  await p.context().signInWithPassword({ email: "synthetic", password: "synthetic" });
+  assert.equal(hook().member.departmentId, cedar);
+  h.state.memberships[0].auth_user_id = "cedar-user";
+  await h.switch(redOak);
+  await p.context().refreshSession();
+  assert.equal(hook().member.departmentId, redOak);
+  assert.equal(hook().member.name, "Red Admin");
+  assert.equal(hook().member.role, "Administrator");
+  await p.context().signOut();
+  assert.equal(hook().member, null);
+});

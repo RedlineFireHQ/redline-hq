@@ -72,7 +72,9 @@ multi-department selection requires an explicit choice before the application
 opens. Choices are checked server-side using the same membership resolver as
 Personnel. Sign-out expires the httpOnly cookie through that endpoint's DELETE
 handler. Desktop and mobile switches refresh the shared auth context and server
-pages after the verified cookie update. No database changes are required.
+pages after the verified cookie update. `useActiveMember` consumes that shared
+context so client pages also follow department switches, rather than caching
+the initial membership. No database changes are required.
 Test account switching and isolation with `node --import tsx --test
 lib/auth/active-department.test.tsx lib/auth/auth-middleware.test.ts`.
 
