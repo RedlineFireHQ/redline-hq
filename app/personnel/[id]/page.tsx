@@ -1060,7 +1060,7 @@ export default async function PersonnelProfilePage({
                   initialLastName={lastName}
                   initialEmail={email === "-" ? "" : email}
                   initialPhone={phone === "-" ? "" : phone}
-                  initialRank={rank === "Unassigned" ? "Firefighter" : rank}
+                  initialRank={rank === "Unassigned" ? "" : rank}
                   initialActive={memberActive}
                   initialHireStartDate={hireStartDate ?? ""}
                   initialInactiveDate={inactiveDate ?? ""}

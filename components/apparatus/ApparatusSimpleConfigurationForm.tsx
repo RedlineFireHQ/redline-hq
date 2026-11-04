@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+import { bayScheduleLabel, type BayScheduleSummary } from "@/lib/apparatus-bay-schedules";
 import {
   CHECK_FREQUENCY_OPTIONS,
   MAINTENANCE_INTERVAL_UNIT_OPTIONS,
@@ -22,6 +25,7 @@ type ApparatusSimpleConfigurationFormProps = {
   value: SimpleApparatusConfigurationDraft;
   onChange: (nextValue: SimpleApparatusConfigurationDraft) => void;
   canEdit: boolean;
+  departmentId: string | null;
   departmentCheckDefaultIntervalDays?: number | null;
   onApplyDepartmentDefaults?: () => void;
 };
@@ -49,11 +53,54 @@ export default function ApparatusSimpleConfigurationForm({
   value,
   onChange,
   canEdit,
+  departmentId,
   departmentCheckDefaultIntervalDays,
   onApplyDepartmentDefaults,
 }: ApparatusSimpleConfigurationFormProps) {
   const canUseDepartmentDefaults =
     typeof departmentCheckDefaultIntervalDays === "number" && Number.isFinite(departmentCheckDefaultIntervalDays);
+
+  // Bay options are scoped to the member's department by row-level security.
+  const [bayOptions, setBayOptions] = useState<BayScheduleSummary[]>([]);
+  const [bayError, setBayError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadBayOptions() {
+      if (!departmentId) {
+        setBayError("An authenticated department is required to load bay schedules.");
+        return;
+      }
+      const { data, error } = await supabase
+        .from("department_bay_schedules")
+        .select("id, bay_label, check_weekday")
+        .eq("department_id", departmentId)
+        .eq("is_active", true)
+        .order("bay_label", { ascending: true });
+
+      if (!isMounted) {
+        return;
+      }
+      if (error) {
+        setBayError(error.message || "Unable to load bay schedules.");
+        return;
+      }
+      setBayError(null);
+
+      setBayOptions(
+        ((data ?? []) as Array<{ id: string; bay_label: string | null; check_weekday: number | null }>)
+          .filter((row) => typeof row.id === "string" && typeof row.bay_label === "string" && typeof row.check_weekday === "number")
+          .map((row) => ({ id: row.id, bayLabel: row.bay_label as string, checkWeekday: row.check_weekday as number })),
+      );
+    }
+
+    loadBayOptions();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [departmentId]);
 
   function setCheckFrequency(checkFrequency: CheckFrequencyOption | "") {
     onChange({
@@ -101,10 +148,10 @@ export default function ApparatusSimpleConfigurationForm({
               value={value.checkFrequency}
               onChange={(event) => setCheckFrequency(event.target.value as CheckFrequencyOption | "")}
               disabled={!canEdit}
-              required={canEdit}
+              required={canEdit && !value.bayScheduleId}
               className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-white outline-none transition focus:border-red-500/60 disabled:cursor-not-allowed disabled:opacity-70"
             >
-              <option value="">Select a check frequency</option>
+              <option value="">Select a frequency or use an assigned bay</option>
               {CHECK_FREQUENCY_OPTIONS.map((option) => (
                 <option key={option} value={option}>
                   {option}
@@ -140,6 +187,38 @@ export default function ApparatusSimpleConfigurationForm({
           </p>
         ) : null}
       </section>
+
+      {bayError ? <p role="alert" className="text-sm text-red-200">{bayError}</p> : null}
+      {bayOptions.length > 0 || value.bayScheduleId ? (
+        <section className="space-y-3 rounded-xl border border-white/10 bg-[#111111] p-4">
+          {renderFieldLabel(
+            "Bay Assignment",
+            "Assigning a bay anchors this apparatus's scheduled check to the bay's weekday instead of the interval since its last check.",
+          )}
+          <select
+            aria-label="Bay assignment"
+            value={value.bayScheduleId ?? ""}
+            onChange={(event) =>
+              onChange({
+                ...value,
+                bayScheduleId: event.target.value || null,
+              })
+            }
+            disabled={!canEdit}
+            className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-white outline-none transition focus:border-red-500/60 disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {value.bayScheduleId && !bayOptions.some((bay) => bay.id === value.bayScheduleId) ? (
+              <option value={value.bayScheduleId}>Current bay unavailable - choose an active bay before saving</option>
+            ) : null}
+            <option value="">No bay assignment (use check frequency)</option>
+            {bayOptions.map((bay) => (
+              <option key={bay.id} value={bay.id}>
+                {bayScheduleLabel(bay)}
+              </option>
+            ))}
+          </select>
+        </section>
+      ) : null}
 
       <section className="space-y-3 rounded-xl border border-white/10 bg-[#111111] p-4">
         {renderFieldLabel(

@@ -10,6 +10,7 @@ import {
 
 type AddApparatusButtonProps = {
   canAdd: boolean;
+  departmentId: string | null;
   departmentCheckDefaultIntervalDays?: number | null;
 };
 
@@ -20,6 +21,7 @@ type AddApparatusFormState = {
   make: string;
   model: string;
   vin: string;
+  jobNumber: string;
   pumpCapacity: string;
   waterTankCapacity: string;
   mileage: string;
@@ -33,6 +35,7 @@ const initialFormState: AddApparatusFormState = {
   make: "",
   model: "",
   vin: "",
+  jobNumber: "",
   pumpCapacity: "",
   waterTankCapacity: "",
   mileage: "",
@@ -41,6 +44,7 @@ const initialFormState: AddApparatusFormState = {
 
 export default function AddApparatusButton({
   canAdd,
+  departmentId,
   departmentCheckDefaultIntervalDays,
 }: AddApparatusButtonProps) {
   const router = useRouter();
@@ -76,6 +80,7 @@ export default function AddApparatusButton({
           make: formState.make,
           model: formState.model,
           vin: formState.vin,
+          jobNumber: formState.jobNumber,
           pumpCapacity: formState.pumpCapacity,
           waterTankCapacity: formState.waterTankCapacity,
           mileage: formState.mileage,
@@ -187,6 +192,16 @@ export default function AddApparatusButton({
                 </label>
 
                 <label className="text-sm text-neutral-300">
+                  Job Number
+                  <input
+                    value={formState.jobNumber}
+                    onChange={(event) => setFormState((current) => ({ ...current, jobNumber: event.target.value }))}
+                    placeholder="Optional"
+                    className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-white outline-none transition focus:border-red-500/60"
+                  />
+                </label>
+
+                <label className="text-sm text-neutral-300">
                   Pump Capacity (GPM)
                   <input
                     type="number"
@@ -230,6 +245,7 @@ export default function AddApparatusButton({
               </div>
 
               <ApparatusSimpleConfigurationForm
+                departmentId={departmentId}
                 value={configuration}
                 onChange={setConfiguration}
                 canEdit={true}

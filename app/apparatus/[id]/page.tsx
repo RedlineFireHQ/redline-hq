@@ -9,6 +9,7 @@ import { calculateApparatusReadinessForApparatusId } from "@/lib/readiness/appar
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { canStartApparatusCheck } from "@/lib/apparatus/check-eligibility";
 
 type InspectionHistoryRow = {
   id: string;
@@ -1037,12 +1038,12 @@ export default async function ApparatusDetailPage({
                 ) : null}
 
                 <div className="flex flex-wrap gap-2">
-                  <Link
+                  {canStartApparatusCheck(truck, currentMember?.departmentId) ? <Link
                     href={`/apparatus/${truck.id}/daily-check`}
                     className="rounded-lg border border-red-500/30 bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700"
                   >
                     Start Apparatus Check
-                  </Link>
+                  </Link> : null}
                   <Link
                     href={`/deficiencies/report?apparatusId=${truck.id}`}
                     className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"

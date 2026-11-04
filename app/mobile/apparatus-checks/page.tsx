@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getApparatus } from "@/lib/database";
 import { getCurrentMember } from "@/lib/current-member";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { canStartApparatusCheck } from "@/lib/apparatus/check-eligibility";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -16,7 +17,7 @@ export default async function MobileApparatusChecksPage() {
   }
 
   const apparatus = (await getApparatus(supabase)).filter(
-    (unit) => unit.department_id === currentMember.departmentId,
+    (unit) => canStartApparatusCheck(unit, currentMember.departmentId),
   );
 
   return (

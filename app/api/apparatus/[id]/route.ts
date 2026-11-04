@@ -57,6 +57,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       water_tank_capacity?: unknown;
       mileage?: unknown;
       engine_hours?: unknown;
+      job_number?: unknown;
     };
 
     const supabase = await createSupabaseServerClient();
@@ -105,6 +106,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       water_tank_capacity: normalizeOptionalNumber(payload.water_tank_capacity),
       mileage: normalizeOptionalNumber(payload.mileage),
       engine_hours: normalizeOptionalNumber(payload.engine_hours),
+      job_number: normalizeText(payload.job_number),
     };
 
     const { error } = await supabase

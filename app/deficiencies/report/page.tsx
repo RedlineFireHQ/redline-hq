@@ -501,6 +501,7 @@ function ReportDeficiencyPageContent() {
 
   const returnToParam = searchParams.get("returnTo");
   const apparatusIdParam = searchParams.get("apparatusId");
+  const descriptionParam = searchParams.get("description");
   const checkSessionIdParam = searchParams.get("checkSessionId");
   const inventoryCategoryParam = searchParams.get("inventoryCategory");
   const inventoryItemIdParam = searchParams.get("inventoryItemId");
@@ -557,6 +558,7 @@ function ReportDeficiencyPageContent() {
   const [formState, setFormState] = useState<ReportFormState>({
     ...initialFormState,
     apparatusId: apparatusIdParam ?? "",
+    description: descriptionParam ?? "",
     pagerId: isPagerDeficiencyLaunch ? inventoryItemId : "",
   });
   const [categories, setCategories] = useState<SelectOption[]>([]);

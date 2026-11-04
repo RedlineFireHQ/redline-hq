@@ -16,9 +16,11 @@ import type { SimpleApparatusConfigurationDraft } from "@/lib/apparatus-configur
 type ServiceSpecifications = {
   oil_type: string | null;
   oil_capacity: string | null;
+  oil_plug_size: string | null;
   oil_filter_part_number: string | null;
   fuel_filter_part_number: string | null;
   air_filter_part_number: string | null;
+  cabin_air_filter_part_number: string | null;
   hydraulic_fluid: string | null;
   transmission_fluid: string | null;
   coolant_type: string | null;
@@ -204,6 +206,7 @@ export default async function ApparatusInformationPage({
         : "",
     checklistRequiredOverride:
       typeof truck.checklist_required_override === "boolean" ? truck.checklist_required_override : null,
+    bayScheduleId: typeof truck.bay_schedule_id === "string" ? truck.bay_schedule_id : null,
     maintenanceRequirements: ((maintenanceRequirementRowsResult.data ?? []) as Array<Record<string, unknown>>).map((row) => {
       const methods = maintenanceByRequirementId.get(typeof row.id === "string" ? row.id : "") ?? [];
       const firstMethod = methods[0] ?? null;
@@ -235,6 +238,7 @@ export default async function ApparatusInformationPage({
   const departmentCheckDefaultIntervalDays = typeof departmentDefaultResult.data?.interval_days === "number" ? departmentDefaultResult.data.interval_days : null;
 
   const quickFactsValues = {
+    job_number: typeof truck.job_number === "string" ? truck.job_number : null,
     type: typeof truck.type === "string" ? truck.type : null,
     check_frequency: typeof truck.check_frequency === "string" ? truck.check_frequency : null,
     year: typeof truck.year === "number" ? truck.year : null,
@@ -248,6 +252,8 @@ export default async function ApparatusInformationPage({
   };
 
   const serviceSpecifications: ServiceSpecifications = {
+    oil_plug_size: typeof truck.oil_plug_size === "string" ? truck.oil_plug_size : null,
+    cabin_air_filter_part_number: typeof truck.cabin_air_filter_part_number === "string" ? truck.cabin_air_filter_part_number : null,
     oil_type: typeof truck.oil_type === "string" ? truck.oil_type : null,
     oil_capacity: typeof truck.oil_capacity === "string" ? truck.oil_capacity : null,
     oil_filter_part_number:
@@ -372,6 +378,7 @@ export default async function ApparatusInformationPage({
         />
 
         <ApparatusSimpleConfigurationCard
+          departmentId={currentMember?.departmentId ?? null}
           apparatusId={truck.id}
           canEdit={canManageThisApparatus}
           departmentCheckDefaultIntervalDays={departmentCheckDefaultIntervalDays}

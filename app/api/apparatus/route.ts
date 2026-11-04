@@ -1,6 +1,6 @@
 import { getCurrentMember } from "@/lib/current-member";
 import { canManageApparatus } from "@/lib/member-permissions";
-import { applyApparatusConfiguration, normalizeCheckFrequencyIntervalDays } from "@/lib/apparatus-configuration-simple";
+import { applyApparatusConfiguration, validateApparatusSchedule } from "@/lib/apparatus-configuration-simple";
 import type { SimpleApparatusConfigurationDraft } from "@/lib/apparatus-configuration-simple";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -54,6 +54,7 @@ export async function POST(request: Request) {
       engineHours?: unknown;
       checkFrequency?: unknown;
       status?: unknown;
+      jobNumber?: unknown;
       configuration?: unknown;
     };
 
@@ -84,10 +85,12 @@ export async function POST(request: Request) {
     const waterTankCapacity = normalizeOptionalNumber(payload.waterTankCapacity);
     const mileage = normalizeOptionalNumber(payload.mileage);
     const engineHours = normalizeOptionalNumber(payload.engineHours);
+    const jobNumber = normalizeText(payload.jobNumber);
     const configuration = (payload.configuration ?? {}) as {
       checkFrequency?: unknown;
       customCheckFrequency?: unknown;
       maintenanceRequirements?: unknown;
+      bayScheduleId?: unknown;
     };
     const configurationCheckFrequency = normalizeText(configuration.checkFrequency);
     const configurationCustomCheckFrequency = normalizeText(configuration.customCheckFrequency);
@@ -95,13 +98,8 @@ export async function POST(request: Request) {
       configurationCheckFrequency === "Custom" && configurationCustomCheckFrequency
         ? configurationCustomCheckFrequency
         : configurationCheckFrequency || normalizeText(payload.checkFrequency);
-    const intervalDays = configurationCheckFrequency
-      ? normalizeCheckFrequencyIntervalDays(configurationCheckFrequency, configurationCustomCheckFrequency)
-      : null;
-
-    if (intervalDays === null) {
-      return jsonResponse({ ok: false, error: "Choose a valid check frequency before creating the apparatus." }, 400);
-    }
+    const schedule = await validateApparatusSchedule(supabase, currentMember.departmentId, configuration);
+    if (!schedule.ok) return jsonResponse({ ok: false, error: schedule.error }, 400);
     const status = normalizeText(payload.status);
 
     if (!name) {
@@ -121,6 +119,7 @@ export async function POST(request: Request) {
         make: make || null,
         model: model || null,
         vin: vin || null,
+        job_number: jobNumber || null,
         pump_capacity: pumpCapacity !== null ? pumpCapacity : null,
         water_tank_capacity: waterTankCapacity !== null ? waterTankCapacity : null,
         mileage: mileage !== null ? mileage : null,

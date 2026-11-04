@@ -4,20 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { DrugInspectionSummary } from "@/lib/drug-boxes/data";
-
-function formatDateTime(value: string) {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return "Unknown";
-  }
-  return parsed.toLocaleString("en-US", {
-    month: "short",
-    day: "2-digit",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
+import InspectionDateTime from "@/components/ui/InspectionDateTime";
 
 type DrugInspectionHistoryProps = {
   inspections: DrugInspectionSummary[];
@@ -51,7 +38,7 @@ export default function DrugInspectionHistory({ inspections, canDelete }: DrugIn
                 <div>
                   <p className="text-sm font-semibold text-white">Squad {inspection.squadNumber}</p>
                   <p className="mt-0.5 text-xs text-neutral-400">
-                    Inspector: {inspection.inspectorName} · {formatDateTime(inspection.createdAt)} · {inspection.checkedCount}/
+                    Inspector: {inspection.inspectorName} · <InspectionDateTime value={inspection.createdAt} /> · {inspection.checkedCount}/
                     {inspection.itemCount} present
                   </p>
                 </div>

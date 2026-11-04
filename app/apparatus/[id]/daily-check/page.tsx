@@ -10,6 +10,9 @@ import {
 } from "@/lib/apparatus/checklist";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { applicableChecklistItems, canStartApparatusCheck, isRedOakDailyChecks } from "@/lib/apparatus/check-eligibility";
+import { bayScheduleLabel as formatBayScheduleLabel } from "@/lib/apparatus-bay-schedules";
+import { isSaturday, isScheduledChecklistItemRequired } from "@/lib/apparatus/daily-checks";
 
 interface DailyCheckPageProps {
   params: Promise<{
@@ -208,6 +211,21 @@ export default async function DailyCheckPage({
   }
 
   const currentMember = await getCurrentMember(supabase);
+  if (!currentMember?.departmentId) redirect("/login");
+  if (!apparatus || !canStartApparatusCheck(apparatus, currentMember.departmentId)) {
+    redirect("/apparatus");
+  }
+  const specialMode = isRedOakDailyChecks(apparatus, currentMember.departmentId);
+  let bayScheduleLabel: string | null = null;
+  if (apparatus.bay_schedule_id) {
+    const { data: bay, error } = await supabase.from("department_bay_schedules")
+      .select("bay_label, check_weekday")
+      .eq("department_id", currentMember.departmentId)
+      .eq("id", apparatus.bay_schedule_id)
+      .maybeSingle();
+    if (error) throw new Error(`Unable to load bay schedule: ${error.message}`);
+    if (bay) bayScheduleLabel = formatBayScheduleLabel({ bayLabel: bay.bay_label, checkWeekday: bay.check_weekday });
+  }
 
   let inspectorName = "Unknown Inspector";
   let currentMemberId: string | null = null;
@@ -526,7 +544,7 @@ export default async function DailyCheckPage({
       .maybeSingle(),
     supabase
       .from("apparatus_inspection_checklist_items")
-      .select("id, is_required")
+      .select("id, is_required, item_label, section_name")
       .eq("department_id", apparatus?.department_id ?? "")
       .eq("apparatus_id", id)
       .eq("is_active", true),
@@ -544,12 +562,13 @@ export default async function DailyCheckPage({
     typeof apparatus?.checklist_required_override === "boolean"
       ? apparatus.checklist_required_override
       : checklistSettingRow?.require_checklist === true;
-  const checklistItems = ((checklistItemRowsData ?? []) as Array<{ id: string; is_required: boolean }>).map(
+  const checklistItems = applicableChecklistItems(((checklistItemRowsData ?? []) as Array<{ id: string; is_required: boolean; item_label: string; section_name: string }>).map(
     (row) => ({
       id: row.id,
-      isRequired: row.is_required === true,
+      isRequired: isScheduledChecklistItemRequired({ isRequired: row.is_required === true, sectionName: row.section_name }, specialMode, isSaturday()),
+      itemLabel: row.item_label,
     }),
-  );
+  ), specialMode);
   const checklistProgressRows = ((checklistProgressRowsData ?? []) as Array<{ checklist_item_id: string; status: string }>).map(
     (row) => ({
       checklistItemId: row.checklist_item_id,
@@ -683,8 +702,8 @@ export default async function DailyCheckPage({
 
   return (
     <PageLayout
-      environmentBackgroundUrl="/branding/images/apparatuspageimage.png"
-      environmentBackgroundPosition="left center"
+      environmentBackgroundUrl={specialMode ? "/branding/images/Cinematic%20Fire%20Station%20Engine%20Bay.png" : "/branding/images/apparatuspageimage.png"}
+      environmentBackgroundPosition={specialMode ? "right center" : "left center"}
     >
       <div className="mx-auto max-w-3xl space-y-8">
         <div>
@@ -702,6 +721,7 @@ export default async function DailyCheckPage({
           <p className="mt-3 text-neutral-400">
             Record the operational result of an inspection already completed.
           </p>
+          {bayScheduleLabel ? <p className="mt-3 text-sm text-neutral-300">{bayScheduleLabel}</p> : null}
         </div>
 
         <div className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-5">

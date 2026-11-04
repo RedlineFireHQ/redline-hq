@@ -1,3 +1,5 @@
+import { apparatusCalendarDay } from "@/lib/calendar-day";
+
 export type ApparatusCheckScoreProfile = "daily" | "monthly";
 
 export type MaintenanceMethodType = "time_days" | "mileage" | "engine_hours";
@@ -24,6 +26,11 @@ export type ApparatusCheckInput = {
   lastCompletedAt: string | null;
   intervalDays: number | null;
   scoreProfile: ApparatusCheckScoreProfile | null;
+  // When set (0 = Sunday ... 6 = Saturday), the apparatus is assigned to a bay
+  // and its check is anchored to that recurring calendar weekday instead of
+  // the interval since the last completed check. Null preserves the locked
+  // interval-based behavior.
+  scheduledWeekday?: number | null;
 };
 
 type ApparatusCheckCadenceMode = "daily" | "scaled_custom" | "extended";
@@ -104,6 +111,82 @@ function getDaysOverdue(now: Date, dueAt: Date): number {
   return Math.floor((nowStart.getTime() - dueStart.getTime()) / millisPerDay);
 }
 
+// Most recent occurrence of the configured weekday, including today when today
+// is that weekday. This is the recurring calendar anchor for bay-assigned
+// apparatus; completing a check never moves it.
+export function getWeekdayAnchorDueDay(now: Date, scheduledWeekday: number): Date {
+  const today = apparatusCalendarDay(now);
+  const daysSinceWeekday = (today.getUTCDay() - scheduledWeekday + 7) % 7;
+  const anchor = new Date(today);
+  anchor.setUTCDate(anchor.getUTCDate() - daysSinceWeekday);
+  return anchor;
+}
+
+// Weekday-anchored check cycle scoring for bay-assigned apparatus.
+//
+// Cycle definition (day granularity, local time):
+// - currentDueDay = most recent occurrence of the scheduled weekday (today counts).
+// - previousDueDay = currentDueDay - 7 days.
+// - A completed check satisfies the current cycle when its calendar day is
+//   strictly after previousDueDay. This intentionally counts early completion
+//   (before the assigned weekday) and late completion (after it): any check in
+//   the window (previousDueDay, today] covers the current cycle.
+// - When unsatisfied, the score follows the approved daily decay measured in
+//   whole days since currentDueDay: due today 15, 1 day 10, 2 days 5, 3+ days 0.
+export function calculateWeekdayAnchoredCheckScore(
+  lastCompletedAt: string | null,
+  scheduledWeekday: number,
+  now: Date,
+): { score: number | null; blockingGap: string | null } {
+  if (!Number.isInteger(scheduledWeekday) || scheduledWeekday < 0 || scheduledWeekday > 6) {
+    return {
+      score: null,
+      blockingGap: "Invalid apparatus check weekday configuration.",
+    };
+  }
+
+  const dueDay = getWeekdayAnchorDueDay(now, scheduledWeekday);
+  const previousDueDay = new Date(dueDay);
+  previousDueDay.setUTCDate(previousDueDay.getUTCDate() - 7);
+
+  let satisfied = false;
+  if (lastCompletedAt) {
+    const completedAt = new Date(lastCompletedAt);
+    if (Number.isNaN(completedAt.getTime())) {
+      return {
+        score: null,
+        blockingGap: "Invalid apparatus check completion timestamp.",
+      };
+    }
+    if (completedAt.getTime() > now.getTime()) {
+      return { score: null, blockingGap: "Apparatus check completion timestamp is in the future." };
+    }
+    satisfied = apparatusCalendarDay(completedAt).getTime() > previousDueDay.getTime();
+  }
+
+  if (satisfied) {
+    return { score: 20, blockingGap: null };
+  }
+
+  const daysOverdue = Math.round(
+    (apparatusCalendarDay(now).getTime() - dueDay.getTime()) / 86_400_000,
+  );
+
+  if (daysOverdue <= 0) {
+    return { score: 15, blockingGap: null };
+  }
+
+  if (daysOverdue === 1) {
+    return { score: 10, blockingGap: null };
+  }
+
+  if (daysOverdue === 2) {
+    return { score: 5, blockingGap: null };
+  }
+
+  return { score: 0, blockingGap: null };
+}
+
 function resolveCadenceMode(intervalDays: number): ApparatusCheckCadenceMode {
   if (intervalDays === 1) {
     return "daily";
@@ -131,6 +214,10 @@ export function calculateScaledCustomCheckBoundaries(intervalDays: number) {
 }
 
 export function calculateApparatusChecksBucketScore(input: ApparatusCheckInput, now: Date) {
+  if (input.scheduledWeekday !== null && input.scheduledWeekday !== undefined) {
+    return calculateWeekdayAnchoredCheckScore(input.lastCompletedAt, input.scheduledWeekday, now);
+  }
+
   if (!input.intervalDays) {
     return {
       score: null as number | null,

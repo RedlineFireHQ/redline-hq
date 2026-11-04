@@ -24,12 +24,13 @@ function applyFilters(rows: Row[], filters: Array<{ key: string; op: "eq" | "in"
   );
 }
 
-function createSupabaseMock(tableData: TableData) {
+function createSupabaseMock(tableData: TableData, errorTable?: string) {
   class QueryBuilder {
     private readonly rows: Row[];
     private readonly filters: Array<{ key: string; op: "eq" | "in"; value: unknown }> = [];
     private readonly orderBy: Array<{ key: string; ascending: boolean }> = [];
-    constructor(tableName: string) {
+    private bounds: [number, number] | null = null;
+    constructor(private readonly tableName: string) {
       this.rows = tableData[tableName] ?? [];
     }
     select() {
@@ -47,8 +48,13 @@ function createSupabaseMock(tableData: TableData) {
       this.orderBy.push({ key, ascending: options?.ascending !== false });
       return this;
     }
-    then(resolve: (value: { data: Row[]; error: null }) => unknown, reject?: (reason: unknown) => unknown) {
+    range(from: number, to: number) {
+      this.bounds = [from, to];
+      return this;
+    }
+    then(resolve: (value: { data: Row[]; error: { message: string } | null }) => unknown, reject?: (reason: unknown) => unknown) {
       try {
+        if (this.tableName === errorTable) return Promise.resolve(resolve({ data: [], error: { message: `Read denied for ${errorTable}` } }));
         let data = applyFilters(this.rows, this.filters);
         for (const order of this.orderBy) {
           data = [...data].sort((l, r) => {
@@ -57,6 +63,7 @@ function createSupabaseMock(tableData: TableData) {
             return order.ascending ? lv.localeCompare(rv) : rv.localeCompare(lv);
           });
         }
+        if (this.bounds) data = data.slice(this.bounds[0], this.bounds[1] + 1);
         return Promise.resolve(resolve({ data, error: null }));
       } catch (error) {
         if (reject) return Promise.resolve(reject(error));
@@ -78,8 +85,8 @@ function makeRequest(filters: Record<string, string>, dateRange?: { from: string
   };
 }
 
-function buildContext(tableData: TableData, departmentId: string) {
-  return { supabase: createSupabaseMock(tableData), departmentId, departmentName: "Department A", memberRole: "administrator" } as never;
+function buildContext(tableData: TableData, departmentId: string, errorTable?: string) {
+  return {   supabase: createSupabaseMock(tableData, errorTable), departmentId, departmentName: "Department A", memberRole: "administrator" } as never;
 }
 
 function okRows(response: ReportRunResponse): ReportRow[] {
@@ -158,6 +165,7 @@ test("DRUGRPT4. multiple inspections for the same squad on the same day appear i
 test("DRUGRPT5. department isolation — another department's inspections never appear", async () => {
   const response = await runReport(makeRequest({ squad_number: "all" }), buildContext(seed(), DEP_A));
   const rows = okRows(response);
+  assert.equal(rows.length, 3, "isolation must also return this department's inspections");
   assert.ok(rows.every((r) => r.box_lock_number !== "BX"), "other department rows must not appear");
   assert.ok(rows.every((r) => r.inspector !== "Riley Other"));
 });
@@ -168,4 +176,89 @@ test("DRUGRPT6. date filter limits which inspections appear", async () => {
   const rows = okRows(juneOnly);
   assert.equal(rows.length, 1);
   assert.equal(rows[0]?.squad_number, "115");
+});
+
+test("Drug Box empty history is a valid empty report", async () => {
+  const response = await runReport(makeRequest({}), buildContext({}, DEP_A));
+  assert.ok(response.ok);
+  assert.equal(response.totalRows, 0);
+  assert.deepEqual(response.rows, []);
+});
+
+test("Drug Box snapshot details, locks and stored assisting personnel are returned", async () => {
+  const data = seed();
+  data.drug_box_inspections[0].assisting_personnel = ["Casey Lee", "Alex Jones"];
+  Object.assign(data.drug_box_checklist_results[0], {
+    section_name_snapshot: "Medication", item_label_snapshot: "Stored item label",
+    required_quantity_snapshot: 2, source_quantity_text_snapshot: "2 vials",
+  });
+  const row = okRows(await runReport(makeRequest({}), buildContext(data, DEP_A))).find((row) => row.inspection_id === "i1");
+  assert.ok(row);
+  assert.equal(row.cs_lock_number, "C1");
+  assert.equal(row.ez_io_number, "E1");
+  assert.equal(row.unit_number, "114");
+  assert.equal(row.assisting_personnel, "Casey Lee, Alex Jones");
+  assert.match(String(row.checklist_results), /Medication \/ Stored item label \(2 vials\): checked/);
+});
+
+test("Drug Box foreign snapshots and inspector references cannot leak into own inspections", async () => {
+  const data = seed();
+  data.drug_box_checklist_results.push({
+    department_id: DEP_B, inspection_id: "i1", is_checked: false,
+    item_label_snapshot: "SECRET FOREIGN ITEM",
+  });
+  data.drug_box_inspections[0].member_id = "m2";
+  const result = okRows(await runReport(makeRequest({}), buildContext(data, DEP_A)));
+  assert.equal(result.length, 3);
+  const row = result.find((row) => row.inspection_id === "i1");
+  assert.equal(row?.inspector, "Unknown");
+  assert.equal(row?.item_count, 63);
+  assert.equal(row?.items_missing, "0");
+  assert.doesNotMatch(JSON.stringify(result), /SECRET|Riley Other/);
+});
+
+test("Drug Box date bounds include the entire last day but exclude the next day", async () => {
+  const data = seed();
+  data.drug_box_inspections[0].created_at = "2026-06-30T23:59:59.999Z";
+  data.drug_box_inspections[1].created_at = "2026-07-01T00:00:00.000Z";
+  const result = okRows(await runReport(makeRequest({}, { from: "2026-06-30", to: "2026-06-30" }), buildContext(data, DEP_A)));
+  assert.deepEqual(result.map((row) => row.inspection_id), ["i1"]);
+});
+
+test("Drug Box result and search filtering and pagination preserve complete counts", async () => {
+  const request = makeRequest({ result_status: "Items Expired" });
+  request.searchTerm = "C2";
+  const result = okRows(await runReport(request, buildContext(seed(), DEP_A)));
+  assert.deepEqual(result.map((row) => row.inspection_id), ["i2"]);
+  const response = await runReport({ ...makeRequest({}), page: 2, pageSize: 1 }, buildContext(seed(), DEP_A));
+  assert.ok(response.ok);
+  assert.equal(response.totalRows, 3);
+  assert.equal(response.rows[0].inspection_id, "i2");
+  assert.equal(response.rows[0].items_missing, "2");
+});
+
+test("Drug Box snapshot fetching does not truncate at the API page limit", async () => {
+  const data = seed();
+  data.drug_box_checklist_results = snapshot("i1", DEP_A, 1105, 1001);
+  const result = okRows(await runReport(makeRequest({ squad_number: "114" }), buildContext(data, DEP_A)));
+  const row = result.find((row) => row.inspection_id === "i1");
+  assert.equal(row?.item_count, 1105);
+  assert.equal(row?.items_missing, "1001");
+  assert.equal(row?.overall_result, "Items Expired");
+});
+
+test("Drug Box missing snapshots are reported rather than considered ready", async () => {
+  const data = seed();
+  data.drug_box_checklist_results = [];
+  const rows = okRows(await runReport(makeRequest({}), buildContext(data, DEP_A)));
+  assert.equal(rows.length, 3);
+  assert.ok(rows.every((row) => row.overall_result === "Snapshot Unavailable" && row.items_missing === null));
+});
+
+test("Drug Box query failures surface as errors, including failed roster lookups", async () => {
+  for (const table of ["drug_box_inspections", "drug_box_checklist_results", "members"]) {
+    const response = await runReport(makeRequest({}), buildContext(seed(), DEP_A, table));
+    assert.equal(response.ok, false);
+    if (!response.ok) assert.equal(response.errorCode, "QUERY_ERROR");
+  }
 });

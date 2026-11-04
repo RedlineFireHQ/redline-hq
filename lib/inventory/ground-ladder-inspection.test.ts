@@ -15,6 +15,12 @@ test("ground ladder inspection records always include a parseable completion sta
     timestamp,
   });
 
-  assert.match(notes, /Inspection \(9\/6\/2026, 4:33:11 PM\): Ready for Duty\./i, "Inspection notes should always include a parseable completion stamp");
+  assert.ok(
+    notes.includes(`Inspection (${timestamp.toLocaleString("en-US")}): Ready for Duty.`),
+    "Inspection notes should include the completion stamp in the runtime's local timezone",
+  );
+  const completionStamp = notes.match(/Inspection \(([^)]+)\): Ready for Duty\./)?.[1];
+  assert.ok(completionStamp, "Inspection notes should always include a parseable completion stamp");
+  assert.equal(new Date(completionStamp).getTime(), timestamp.getTime(), "The completion stamp must preserve the actual instant");
   assert.equal(getGroundLadderInspectionDateFromNotes(notes), "2026-09-06");
 });

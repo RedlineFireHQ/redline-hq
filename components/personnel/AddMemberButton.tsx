@@ -1003,7 +1003,7 @@ export default function AddMemberButton({
                   </label>
 
                   <label className="text-sm text-neutral-300">
-                    Rank
+                    Legacy rank (optional)
                     <select
                       value={formState.rank}
                       onChange={(event) =>
@@ -1011,6 +1011,7 @@ export default function AddMemberButton({
                       }
                       className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-white"
                     >
+                      <option value="">Unassigned</option>
                       {MEMBER_RANK_OPTIONS.map((rank) => (
                         <option key={rank} value={rank}>
                           {rank}

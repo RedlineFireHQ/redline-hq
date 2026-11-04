@@ -1,5 +1,6 @@
-import { createSupabaseServerClient } from "@/lib/supabase-server";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isExcludedFromApparatusChecks } from "@/lib/apparatus/check-eligibility";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
 import {
   type ApparatusMaintenanceRequirementEvaluation,
   type ApparatusReadinessResult,
@@ -17,6 +18,7 @@ type ApparatusRow = {
   last_inspection_at: string | null;
   mileage: number | null;
   engine_hours: number | null;
+  bay_schedule_id?: string | null;
 };
 
 type DeficiencyRow = {
@@ -95,6 +97,9 @@ type EquipmentOperationalMap = Record<string, boolean>;
 export type ApparatusReadinessListRow = {
   apparatus: ApparatusRow;
   readiness: ApparatusReadinessResult;
+  // Recurring check weekday (0 = Sunday ... 6 = Saturday) when the apparatus is
+  // assigned to a bay; null/undefined when it uses interval-based scheduling.
+  scheduledWeekday?: number | null;
   simulationData: {
     maintenanceRequirements: ApparatusMaintenanceRequirementEvaluation[];
   };
@@ -351,12 +356,12 @@ function isEffectiveNow(
   return true;
 }
 
-export async function calculateApparatusReadinessForApparatusId(apparatusId: string) {
-  const supabase = await createSupabaseServerClient();
+export async function calculateApparatusReadinessForApparatusId(apparatusId: string, supabaseOverride?: SupabaseClient) {
+  const supabase = supabaseOverride ?? await createSupabaseServerClient();
 
   const { data: apparatusRowData } = await supabase
     .from("apparatus")
-    .select("id, department_id, name, type, include_in_department_readiness, lifecycle_status, status, last_inspection_at, mileage, engine_hours")
+    .select("id, department_id, name, type, include_in_department_readiness, lifecycle_status, status, last_inspection_at, mileage, engine_hours, bay_schedule_id")
     .eq("id", apparatusId)
     .maybeSingle();
 
@@ -365,7 +370,31 @@ export async function calculateApparatusReadinessForApparatusId(apparatusId: str
   }
 
   const apparatus = apparatusRowData as ApparatusRow;
+  if (isExcludedFromApparatusChecks(apparatus)) return null;
   const evaluationNow = new Date();
+
+  // Resolve the assigned bay's recurring check weekday, scoped to the owning
+  // department. The composite foreign key already makes cross-department
+  // assignments impossible; the department filter here is defense in depth.
+  let scheduledWeekday: number | null = null;
+  if (typeof apparatus.bay_schedule_id === "string" && apparatus.bay_schedule_id) {
+    const { data: bayRowData, error: bayError } = await supabase
+      .from("department_bay_schedules")
+      .select("check_weekday")
+      .eq("id", apparatus.bay_schedule_id)
+      .eq("department_id", apparatus.department_id)
+      .eq("is_active", true)
+      .maybeSingle();
+    if (bayError) {
+      console.error("[apparatus-readiness] bay schedule lookup failed", bayError);
+      throw new Error(bayError.message);
+    }
+
+    if (typeof bayRowData?.check_weekday !== "number") {
+      throw new Error("Assigned apparatus bay schedule is inactive, missing, or invalid.");
+    }
+    scheduledWeekday = bayRowData.check_weekday;
+  }
 
   const { data: apparatusCheckRequirementRowsData } = await supabase
     .from("apparatus_check_requirements")
@@ -572,6 +601,7 @@ export async function calculateApparatusReadinessForApparatusId(apparatusId: str
     explicitOutOfService: (apparatus.status ?? "").trim().toLowerCase() === "out_of_service",
     apparatusCheck: {
       lastCompletedAt: inspectionData?.created_at ?? apparatus.last_inspection_at,
+      scheduledWeekday,
       intervalDays:
         typeof activeApparatusCheckRequirement?.interval_days === "number"
           ? activeApparatusCheckRequirement.interval_days
@@ -632,6 +662,7 @@ export async function calculateApparatusReadinessForApparatusId(apparatusId: str
   return {
     apparatus,
     readiness: readinessResult,
+    scheduledWeekday,
     simulationData: {
       maintenanceRequirements: maintenanceRequirementEvaluations,
     },
@@ -644,6 +675,7 @@ export function ensureApparatusReadinessRowContract(
     | {
         apparatus: ApparatusRow;
         readiness: ApparatusReadinessResult;
+        scheduledWeekday?: number | null;
         simulationData: {
           maintenanceRequirements: ApparatusMaintenanceRequirementEvaluation[];
         };
@@ -651,12 +683,14 @@ export function ensureApparatusReadinessRowContract(
     | null
     | undefined,
   now: Date,
-  failureReason: "missing_evaluation_result" | "evaluation_exception" = "missing_evaluation_result"
+  failureReason: "missing_evaluation_result" | "evaluation_exception" = "missing_evaluation_result",
+  fallbackScheduledWeekday?: number | null
 ): ApparatusReadinessListRow {
   if (evaluated && "readiness" in evaluated && evaluated.readiness) {
     return {
       apparatus: evaluated.apparatus,
       readiness: evaluated.readiness,
+      scheduledWeekday: evaluated.scheduledWeekday ?? fallbackScheduledWeekday ?? null,
       simulationData: evaluated.simulationData,
       readinessState: "evaluated",
       evaluationErrorReason: "none",
@@ -670,6 +704,7 @@ export function ensureApparatusReadinessRowContract(
     explicitOutOfService: (apparatus.status ?? "").trim().toLowerCase() === "out_of_service",
     apparatusCheck: {
       lastCompletedAt: apparatus.last_inspection_at,
+      scheduledWeekday: fallbackScheduledWeekday ?? null,
       intervalDays: null,
       scoreProfile: null,
     },
@@ -681,6 +716,7 @@ export function ensureApparatusReadinessRowContract(
   return {
     apparatus,
     readiness: fallbackReadiness,
+    scheduledWeekday: fallbackScheduledWeekday ?? null,
     simulationData: {
       maintenanceRequirements: [],
     },
@@ -697,24 +733,59 @@ export async function getApparatusReadinessList(departmentId?: string | null, cl
   }
 
   const supabase = client ?? (await createSupabaseServerClient());
+
   const { data } = await supabase
     .from("apparatus")
-    .select("id, department_id, name, type, include_in_department_readiness, lifecycle_status, status, last_inspection_at, mileage, engine_hours")
+    .select("id, department_id, name, type, include_in_department_readiness, lifecycle_status, status, last_inspection_at, mileage, engine_hours, bay_schedule_id")
     .eq("department_id", departmentId)
     .eq("lifecycle_status", "active")
     .order("name");
 
-  const apparatusRows = (data ?? []) as ApparatusRow[];
+  const apparatusRows = ((data ?? []) as ApparatusRow[]).filter(
+    (row) => row.department_id === departmentId && !isExcludedFromApparatusChecks(row),
+  );
+
+  // Load this department's active bay schedules once so every row (including
+  // evaluation-failure fallbacks) knows its recurring check weekday.
+  const weekdayByBayId = new Map<string, number>();
+  const bayIds = Array.from(
+    new Set(
+      apparatusRows
+        .map((row) => row.bay_schedule_id)
+        .filter((value): value is string => typeof value === "string" && value.length > 0)
+    )
+  );
+
+  if (bayIds.length > 0) {
+    const { data: bayRows, error: bayError } = await supabase
+      .from("department_bay_schedules")
+      .select("id, check_weekday")
+      .eq("department_id", departmentId)
+      .eq("is_active", true)
+      .in("id", bayIds);
+    if (bayError) {
+      console.error("[apparatus-readiness] bay schedules lookup failed", bayError);
+      throw new Error(bayError.message);
+    }
+
+    for (const bayRow of (bayRows ?? []) as Array<{ id: string; check_weekday: number | null }>) {
+      if (typeof bayRow.check_weekday === "number") {
+        weekdayByBayId.set(bayRow.id, bayRow.check_weekday);
+      }
+    }
+  }
 
   const evaluationNow = new Date();
 
   const readinessRows = await Promise.all(
     apparatusRows.map(async (row) => {
+      const rowScheduledWeekday = row.bay_schedule_id ? weekdayByBayId.get(row.bay_schedule_id) ?? null : null;
       try {
-        const evaluated = await calculateApparatusReadinessForApparatusId(row.id);
-        return ensureApparatusReadinessRowContract(row, evaluated, evaluationNow);
-      } catch {
-        return ensureApparatusReadinessRowContract(row, undefined, evaluationNow, "evaluation_exception");
+        const evaluated = await calculateApparatusReadinessForApparatusId(row.id, supabase);
+        return ensureApparatusReadinessRowContract(row, evaluated, evaluationNow, "missing_evaluation_result", rowScheduledWeekday);
+      } catch (error) {
+        console.error("[apparatus-readiness] evaluation failed", error);
+        return ensureApparatusReadinessRowContract(row, undefined, evaluationNow, "evaluation_exception", rowScheduledWeekday);
       }
     })
   );

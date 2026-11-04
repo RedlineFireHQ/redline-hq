@@ -17,6 +17,7 @@ import {
 import { getCertificationStatus } from "@/lib/readiness/member-readiness";
 import { buildDateRangeFromPreset, buildUtcBoundsForDateRange, formatReportPeriodLabel, parseDateOnly } from "@/lib/reports/date-range";
 import { runInventoryReport } from "@/lib/reports/inventory-report";
+import { EMS_INSPECTION_COLUMNS, loadEmsInspectionRecords } from "@/lib/reports/ems-inspection-records";
 import { getReportSourceConfig } from "@/lib/reports/registry";
 import type {
 	AppliedReportFilter,
@@ -2701,6 +2702,19 @@ async function runInspectionsReport(
 	const includeRopeInspections = includeAllInspectionTypes || reportType === "rope-inspections";
 	const includeGroundLadderServiceTesting = includeAllInspectionTypes || reportType === "ground-ladder-service-testing";
 	const includeGroundLadderInspection = includeAllInspectionTypes || reportType === "ground-ladder-inspection";
+	const includePediatric = includeAllInspectionTypes || reportType === "pediatric-bags";
+	const includeDrugBoxes = includeAllInspectionTypes || reportType === "drug-boxes";
+	let emsRows: Awaited<ReturnType<typeof loadEmsInspectionRecords>> = [];
+	try {
+		const records = await Promise.all([
+			includePediatric ? loadEmsInspectionRecords(context.supabase, context.departmentId, "pediatric-bags") : Promise.resolve([]),
+			includeDrugBoxes ? loadEmsInspectionRecords(context.supabase, context.departmentId, "drug-boxes") : Promise.resolve([]),
+		]);
+		emsRows = records.flat();
+	} catch (error) {
+		console.error("[reports] EMS inspection records load failed", error);
+		return buildError("QUERY_ERROR", error instanceof Error ? error.message : "Unable to load EMS inspection report records.");
+	}
 
 	type CentralInspectionRow = {
 		inspectionDateRaw: string | null;
@@ -2711,7 +2725,10 @@ async function runInspectionsReport(
 			| "gas-monitor-calibration"
 			| "rope-inspections"
 			| "ground-ladder-service-testing"
-			| "ground-ladder-inspection";
+			| "ground-ladder-inspection"
+			| "pediatric-bags"
+			| "drug-boxes";
+		details?: ReportRow;
 		inspectionTypeLabel: string;
 		itemId: string;
 		itemName: string;
@@ -3120,10 +3137,23 @@ async function runInspectionsReport(
 		}
 	}
 
+	rows.push(...emsRows);
 	const filteredRows = rows
 		.filter((row) => {
 			if (reportType !== "all-inspections" && row.inspectionTypeKey !== reportType) {
 				return false;
+			}
+			if (reportType === "pediatric-bags") {
+				const bag = normalizeText(request.filters.bag_label);
+				if (bag && bag !== "all" && row.itemIdentifier !== bag) return false;
+			}
+			if (reportType === "drug-boxes") {
+				const squad = normalizeText(request.filters.squad_number);
+				if (squad && squad !== "all" && row.itemIdentifier !== squad) return false;
+			}
+			if (row.details && !includeAllInspectionTypes) {
+				const result = normalizeText(request.filters.result_status);
+				if (result && result !== "all" && normalizeInspectionResultValue(row.result) !== normalizeInspectionResultValue(result)) return false;
 			}
 
 			if (row.inspectionTypeKey === "fire-hose-testing" && fireHoseFilter && fireHoseFilter !== "all" && row.itemId !== fireHoseFilter) {
@@ -3175,6 +3205,7 @@ async function runInspectionsReport(
 				row.inspectedBy,
 				row.itemStatus,
 				row.notes,
+				...(row.details ? Object.values(row.details).map(String) : []),
 			]
 				.map((value) => normalizeText(value).toLowerCase())
 				.filter(Boolean)
@@ -3198,6 +3229,7 @@ async function runInspectionsReport(
 	const itemCount = new Set(filteredRows.map((row) => `${row.inspectionTypeKey}:${row.itemId}`)).size;
 
 	const summary = [
+		...(includePediatric || includeDrugBoxes ? [{ label: "Completed Inspections", value: String(filteredRows.length) }] : []),
 		{ label: "Inspection/Test Records", value: String(filteredRows.length) },
 		{ label: "Items Represented", value: String(itemCount) },
 		{ label: "Open Deficiencies", value: String(openDeficiencyCount) },
@@ -3223,6 +3255,7 @@ async function runInspectionsReport(
 					: "No Due Date";
 
 		return {
+			...row.details,
 			inspection_date: formatDateOnlyLabel(row.inspectionDateRaw),
 			inspection_type: row.inspectionTypeLabel,
 			item_name: row.itemName,
@@ -3255,7 +3288,11 @@ async function runInspectionsReport(
 		},
 		filtersApplied: buildAppliedFilters(source, request.filters, request.searchTerm),
 		summary,
-		columns: source.columns,
+		columns: includePediatric || includeDrugBoxes
+			? [...source.columns, ...EMS_INSPECTION_COLUMNS.filter((column) =>
+				reportType === "pediatric-bags" ? !["squad_number", "unit_number", "box_lock_number", "cs_lock_number", "ez_io_number"].includes(column.key)
+					: reportType === "drug-boxes" ? column.key !== "bag_label" : true)]
+			: source.columns,
 		rows: pagedRows,
 		totalRows: filteredRows.length,
 		page,
@@ -5040,7 +5077,7 @@ async function runPersonnelReport(
 		if (statusFilter === "inactive" && member.active !== false) return false;
 		if (roleFilter && roleFilter !== "all") {
 			const matchesRoleId = member.department_role_id === roleFilter;
-			const roleName = normalizeText(member.role) || roleNameById.get(member.department_role_id ?? "") || "";
+			const roleName = roleNameById.get(member.department_role_id ?? "") || "";
 			const roleMatch = matchesRoleId || roleName === roleFilter || String(member.department_role_id ?? "") === roleFilter;
 			if (!roleMatch) return false;
 		}
@@ -5054,7 +5091,7 @@ async function runPersonnelReport(
 		if (!searchTerm) return true;
 
 		const nameValue = `${normalizeText(member.first_name)} ${normalizeText(member.last_name)}`.trim();
-		const roleValue = normalizeText(member.role) || roleNameById.get(member.department_role_id ?? "") || "";
+		const roleValue = roleNameById.get(member.department_role_id ?? "") || "";
 		const searchable = [
 			nameValue,
 			normalizeText(member.first_name),
@@ -5062,6 +5099,7 @@ async function runPersonnelReport(
 			normalizeText(member.email),
 			normalizeText(member.rank),
 			roleValue,
+			normalizeText(member.role),
 			normalizeText(member.station),
 			normalizeText(member.shift),
 			normalizeText(member.status),
@@ -5076,14 +5114,15 @@ async function runPersonnelReport(
 	const page = Math.max(1, Number(request.page) || 1);
 	const offset = (page - 1) * pageSize;
 	const pagedRows = rows.slice(offset, offset + pageSize).map((member): ReportRow => {
-		let departmentRoleName = normalizeText(member.role) || "Unknown Role";
+		let departmentRoleName = "Unassigned";
 		if (member.department_role_id) {
 			const mappedRoleName = roleNameById.get(member.department_role_id);
-			departmentRoleName = mappedRoleName || normalizeText(member.role) || "Unknown Role";
+			departmentRoleName = mappedRoleName || "Unassigned";
 		}
 		return {
 			member_name: `${normalizeText(member.first_name)} ${normalizeText(member.last_name)}`.trim() || member.id,
 			role_name: departmentRoleName,
+			application_role: normalizeText(member.role) || "Unassigned",
 			rank: normalizeText(member.rank) || "-",
 			status: normalizeText(member.status) || (member.active === true ? "Active" : "Inactive"),
 			email: normalizeText(member.email) || "-",

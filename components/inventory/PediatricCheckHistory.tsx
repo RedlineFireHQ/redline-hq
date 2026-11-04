@@ -3,29 +3,13 @@
 import Link from "next/link";
 import DeletePediatricInspectionButton from "@/components/inventory/DeletePediatricInspectionButton";
 import type { PediatricInspectionSummaryRow } from "@/lib/pediatric-bags/data";
+import InspectionDateTime from "@/components/ui/InspectionDateTime";
 
 type Props = {
   inspections: PediatricInspectionSummaryRow[];
   /** True only for department administrators; controls Delete visibility. */
   canDelete?: boolean;
 };
-
-function formatDateTime(value: string | null) {
-  if (!value) {
-    return "Unknown";
-  }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return "Unknown";
-  }
-  return parsed.toLocaleString("en-US", {
-    month: "short",
-    day: "2-digit",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
 
 export default function PediatricCheckHistory({ inspections, canDelete = false }: Props) {
   return (
@@ -53,7 +37,7 @@ export default function PediatricCheckHistory({ inspections, canDelete = false }
                 <div>
                   <p className="text-sm font-semibold text-white">Pediatric Bag {inspection.bagLabel}</p>
                   <p className="mt-0.5 text-xs text-neutral-400">
-                    Inspector: {inspection.inspectorName} · {formatDateTime(inspection.createdAt)}
+                    Inspector: {inspection.inspectorName} · <InspectionDateTime value={inspection.createdAt} />
                   </p>
                 </div>
                 <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs font-semibold text-neutral-200">

@@ -1,5 +1,26 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Pediatric Bag and Drug Box inspection reports
+
+Reports > Inspections includes Pediatric Bag Inspections and Drug Box
+Inspections, both separately and in All Inspections. Each completed inspection
+has its own row, including its completion timestamp, bag/squad identifiers,
+inspector, assisting personnel, saved checklist quantities and results, and
+available notes and lock numbers. The reports read existing immutable snapshots,
+not live checklist progress or templates.
+
+Date, search, result and bag/squad filters run within the authenticated member's
+department and existing report permissions. Queries paginate to avoid truncating
+snapshot counts. Missing snapshots are explicitly reported as unavailable, not
+ready. Pediatric recorded status is retained (including out-of-service and
+needs-attention decisions); unchecked Drug Box snapshot items are reported as
+expired according to the existing save model, which cannot distinguish expired
+from otherwise unacceptable items. Recorded checklist deficiencies are not
+claimed to be currently open department deficiency tickets.
+
+No schema or inspection-save changes are required. Test with
+`node --import tsx --test lib/reports/server-runner.pediatric-bags.test.ts lib/reports/server-runner.drug-boxes.test.ts lib/reports/registry.test.ts`.
+
 ## Apparatus photos
 
 `lib/apparatus-images.ts` selects bundled photos by department UUID and unit
@@ -14,6 +35,110 @@ assets, not Supabase Storage uploads. Bundled photos remain public URLs;
 department-aware selection prevents incorrect photos, not direct URL access.
 Validate mappings, asset files, isolation, and caller wiring with
 `node --import tsx --test lib/apparatus-images.test.ts`.
+
+## Recovered Red Oak release candidate (local only)
+
+Personnel department positions, nullable legacy ranks and application permissions
+remain separate. `Fire Chief` uses legacy `Chief`; `Exterior Firefighter` can use
+an unassigned legacy rank. Administrator grants remain a separate existing
+authorization operation. No positions, certifications, members or permissions
+are seeded by this candidate.
+
+The forward-only drafts `20261104090000_allow_unassigned_legacy_member_rank.sql`
+and `20261104091000_scope_red_oak_apparatus_check_exclusions.sql` are unapplied.
+They inspect existing function definitions, abort on expected-source drift and
+preserve RPC signatures, owners, grants, security mode and authorization bodies.
+Do not replay the historical apparatus migrations: their structures already
+exist in Production even where migration-ledger entries are absent.
+
+Red Oak Unit 141 retains its apparatus record and information but is excluded
+from check routes, readiness and the Daily administrative template's applicable
+items. Daily Apparatus Checks remains selectable despite its readiness flag.
+Its Saturday-only radio/fuel checks use `America/Chicago` and are required on
+Saturday in both interfaces and the proposed completion RPC. Weekday bay
+schedules use Central calendar days and do not move when checks finish early.
+Other departments retain ordinary checklist behavior.
+
+All Pass requires confirmation. Undo preserves manual changes and previous
+desktop notes; partial failures are shown and successful writes remain reflected
+in the interface. Bay validation runs before configuration writes, and omitted
+bay fields preserve prior assignments. A valid assigned bay can supply the
+weekday schedule without inventing an interval requirement.
+
+Inspection history dates render deterministically for server hydration, then
+localize to the browser's timezone.
+
+Validation must use synthetic environment variables and in-memory fixtures,
+not the original Production-linked environment file. SQL/RLS execution and
+restore testing require separate isolated-database write approval. Do not
+commit, deploy or apply these drafts without release approval.
+
+The supplemental, unapplied `20261104092000_guard_red_oak_unit_141_check_writes.sql`
+draft follows the apparatus RPC draft. It guards inserts/updates on sessions,
+participants, inspections, progress, results, legacy `daily_checks` and
+deficiencies using the exact Red Oak apparatus identity and actual referenced
+parents. It also tightens the existing participant and deficiency session
+helpers without changing their signatures, authorization, owners or grants.
+No read policies or rows change. Existing deficiency repairs retain their
+existing authorization when apparatus, department, inspection, session and
+reporter associations stay unchanged.
+
+Run the source-level checks with
+`node --import tsx --test lib/apparatus/check-exclusion-migration.test.ts`.
+`supabase/tests/red_oak_unit_141.sql` requires separate execution approval:
+approval, run it with `psql -v REDOAK_ISOLATED_TEST=1` against an empty, owned
+schema-only database named `redline_redoak_141_dev_*`, restored from the
+inspected Production definitions before the two apparatus drafts. External
+workers/outbound integrations must be disabled. The suite seeds only synthetic
+identities, applies both drafts inside its transaction, and rolls everything
+back. It tests the installed Saturday predicate at both dates; actual RPC
+completion runs on the database's current Central calendar day, not a faked
+shared clock. Never point this suite at Production.
+
+Phase 5 executed the suite in a network-isolated PostgreSQL 17.6 container,
+using synthetic rows and relevant schema/policies/ACLs aligned to read-only
+Production definitions. Across the final Unit 141, optional-rank and calendar
+RPC runs, 92 assertions passed and one isolation assertion failed as described
+below. Both legacy-rank overload pairs passed NULL/blank, invalid-rank,
+authorization and association-preservation tests. Friday/Saturday full RPC
+tests substituted only the clock expression inside rolled-back local function
+copies; they did not change the machine clock. Outbound email infrastructure
+was excluded. The initial predicate-extraction test regex was corrected after
+its runtime failure. All fixtures rolled back and the temporary container was
+removed. These results do not authorize Production migration application.
+
+Read-only review also found that the existing inspection INSERT policy checks
+the submitted department, while its apparatus FK checks only the apparatus ID.
+The new guard rejects Unit 141 even with a forged department, but intentionally
+does not change unrelated apparatus authorization. The isolated suite includes
+a normal-apparatus forged-department regression that actually failed in the
+isolated execution: a foreign-department user inserted a Unit 114 inspection
+with their own department ID. Broader isolation hardening requires separate
+scope approval.
+
+The follow-up, unapplied
+`20261104093000_enforce_apparatus_inspection_write_ownership.sql` closes that
+specific inspection-write failure. Restrictive INSERT/UPDATE policies AND
+actual apparatus ownership and active authenticated membership with existing
+authorization. Unlinked roster members retain email matching against the
+authenticated user's stored Auth email, not a caller-provided email claim.
+No permissive UPDATE policy is added: direct inspection edits remain denied
+under the existing policy set. A write trigger locks the apparatus parent and
+rejects mismatched inspection department IDs even within definer RPCs.
+Existing policies, table grants, RPC signatures/security settings and history
+reads remain unchanged. It neither repairs nor deletes historical rows.
+
+The updated isolated suite applies this draft after the existing Unit 141
+drafts. Final PostgreSQL execution passed 61 inspection/Unit 141 assertions,
+42 optional-rank assertions and nine Friday/Saturday completion assertions
+(112 total, zero failures). The calendar RPC tests substituted only the clock
+expression in transaction-local copies and rolled back; no shared clock was
+changed. An intermediate synthetic test UUID typo was fixed before the final
+successful run. Local ownership/checklist/readiness source tests passed 26
+cases; TypeScript and focused ESLint passed. Validate the new source checks
+with `node --import tsx --test lib/apparatus/inspection-write-ownership.test.ts`.
+These are local release-candidate results, not authorization to apply any
+Production migration. The Production recovery-point blocker remains separate.
 
 ## Daily Log
 

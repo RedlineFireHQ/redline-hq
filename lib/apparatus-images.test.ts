@@ -142,6 +142,8 @@ test("every application caller passes a record and authenticated current-member 
     ["app/apparatus/[id]/page.tsx", "truck"],
     ["app/apparatus/[id]/information/page.tsx", "truck"],
     ["components/command-center-v3/ApparatusPanel.tsx", "apparatus"],
+    ["app/apparatus/[id]/daily-check/checklist/page.tsx", "apparatus"],
+    ["app/mobile/apparatus-checks/[id]/page.tsx", "apparatus"],
   ]);
   const actualCallers: string[] = [];
   for (const folder of ["app", "components"]) {
@@ -161,7 +163,7 @@ test("every application caller passes a record and authenticated current-member 
       assert.equal(calls.length, 1, relative);
       assert.equal(calls[0].arguments.length, 2, relative);
       assert.equal(calls[0].arguments[0].getText(tree), expectedCallers.get(relative), relative);
-      assert.equal(calls[0].arguments[1].getText(tree), "currentMember?.departmentId", relative);
+      assert.match(calls[0].arguments[1].getText(tree), /^currentMember\??\.departmentId$/, relative);
       actualCallers.push(relative);
     }
   }

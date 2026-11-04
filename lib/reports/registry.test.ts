@@ -72,6 +72,11 @@ test("Inspections report is available with centralized inventory inspection/test
 
   const reportTypeOptions = source.filters.find((filter) => filter.key === "report_type")?.options ?? [];
   assert.ok(reportTypeOptions.some((option) => option.value === "all-inspections"), "Inspections report should include all-inspections mode");
+  assert.ok(reportTypeOptions.some((option) => option.value === "pediatric-bags"));
+  assert.ok(reportTypeOptions.some((option) => option.value === "drug-boxes"));
+  assert.ok(filterKeys.has("bag_label"));
+  assert.ok(filterKeys.has("squad_number"));
+  assert.ok(filterKeys.has("result_status"));
   assert.ok(reportTypeOptions.some((option) => option.value === "fire-hose-testing"), "Inspections report should include fire hose testing mode");
   assert.ok(reportTypeOptions.some((option) => option.value === "scba-cylinder-hydrostatic-testing"), "Inspections report should include SCBA cylinder hydro mode");
   assert.ok(reportTypeOptions.some((option) => option.value === "scba-pack-flow-testing"), "Inspections report should include SCBA pack flow mode");

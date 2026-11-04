@@ -5,6 +5,18 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { ApparatusChecklistResultStatus } from "@/lib/apparatus/checklist";
+import { orderApparatusCheckSections } from "@/lib/apparatus/section-order";
+import {
+  bulkPassTargets,
+  isScheduledChecklistItemRequired,
+  deficiencyPrefill,
+  needsAllPassConfirmation,
+  statusLabelsFor,
+  unmarkedActionLabel,
+  visibleSectionNames,
+  DAILY_CHECKS_SATURDAY_SECTION,
+} from "@/lib/apparatus/daily-checks";
+import { useCheckSaturday } from "@/components/apparatus/use-check-saturday";
 
 type ChecklistItem = {
   id: string;
@@ -12,6 +24,7 @@ type ChecklistItem = {
   itemLabel: string;
   isRequired: boolean;
   displayOrder: number;
+  requiredQuantity?: string | null;
 };
 
 type ProgressRow = {
@@ -48,6 +61,11 @@ type MobileApparatusCheckProps = {
   helperParticipants: Participant[];
   availableHelpers: Participant[];
   memberLookupError: string | null;
+  bayScheduleLabel?: string | null;
+  specialMode?: boolean;
+  checklistInstructions?: string | null;
+  bannerImageUrl?: string | null;
+  initialSaturday?: boolean;
 };
 
 const resultOptions = [
@@ -55,12 +73,6 @@ const resultOptions = [
   { value: "needs_attention", label: "Ready for Service with Deficiencies", tone: "border-amber-400/50 bg-amber-500/15 text-amber-100" },
   { value: "out_of_service", label: "Out of Service", tone: "border-red-400/50 bg-red-500/15 text-red-100" },
 ] as const;
-
-const statusOptions: Array<{ value: ApparatusChecklistResultStatus; label: string; tone: string }> = [
-  { value: "checked", label: "PASS", tone: "border-emerald-400/60 bg-emerald-500/20 text-emerald-100" },
-  { value: "deficiency", label: "DEFICIENCY", tone: "border-amber-400/60 bg-amber-500/20 text-amber-100" },
-  { value: "not_applicable", label: "N/A", tone: "border-sky-400/60 bg-sky-500/20 text-sky-100" },
-];
 
 export default function MobileApparatusCheck({
   apparatusId,
@@ -80,6 +92,11 @@ export default function MobileApparatusCheck({
   helperParticipants,
   availableHelpers,
   memberLookupError,
+  bayScheduleLabel = null,
+  specialMode = false,
+  checklistInstructions = null,
+  bannerImageUrl = null,
+  initialSaturday = false,
 }: MobileApparatusCheckProps) {
   const router = useRouter();
   const [progress, setProgress] = useState(new Map(initialProgress.map((row) => [row.checklistItemId, row.status])));
@@ -103,6 +120,7 @@ export default function MobileApparatusCheck({
   const [deficiencyPhoto, setDeficiencyPhoto] = useState<File | null>(null);
   const [isSavingDeficiency, setIsSavingDeficiency] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [isAllPassConfirmOpen, setIsAllPassConfirmOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const syncedParticipantPropsRef = useRef({
     sessionId,
@@ -111,13 +129,25 @@ export default function MobileApparatusCheck({
     availableIds: participantIds(availableHelpers),
   });
 
-  const groupedItems = checklistItems.reduce<Map<string, ChecklistItem[]>>((groups, item) => {
+  const groupedItemsRaw = checklistItems.reduce<Map<string, ChecklistItem[]>>((groups, item) => {
     const section = groups.get(item.sectionName || "General") ?? [];
     section.push(item);
     groups.set(item.sectionName || "General", section);
     return groups;
   }, new Map());
-  const requiredItems = checklistItems.filter((item) => item.isRequired);
+  // Render sections in the crew's workflow order, not database/insertion order,
+  // then hide the Saturday-only section on non-Saturday local days so optional
+  // radio/fuel items are never shown or stamped automatically on weekdays.
+  const saturday = useCheckSaturday(initialSaturday);
+  const orderedSectionNames = orderApparatusCheckSections(Array.from(groupedItemsRaw.keys()));
+  const visibleSections = visibleSectionNames(orderedSectionNames, !specialMode || saturday);
+  const groupedItems = new Map(
+    visibleSections.map((section) => [section, groupedItemsRaw.get(section) ?? []]),
+  );
+  const labels = statusLabelsFor(specialMode);
+  const saturdayItems = checklistItems.filter((item) => item.sectionName === DAILY_CHECKS_SATURDAY_SECTION);
+  const saturdayMarked = !specialMode || !saturday || saturdayItems.every((item) => progress.has(item.id));
+  const requiredItems = checklistItems.filter((item) => isScheduledChecklistItemRequired(item, specialMode, saturday));
   const completedRequired = requiredItems.filter((item) => progress.has(item.id)).length;
   const requiredComplete = !checklistRequired || (requiredItems.length > 0 && completedRequired === requiredItems.length);
   const availableMemberOptions = uniqueParticipants([
@@ -184,14 +214,46 @@ export default function MobileApparatusCheck({
     }
     setSavingItemId(null);
     if (status === "deficiency") {
+      if (specialMode) {
+        setDeficiencyDescription(deficiencyPrefill(item.itemLabel, true));
+      }
       setDeficiencyItem(item);
       setIsDeficiencyOpen(true);
     }
   }
 
+  // Clear an item back to Not Checked: remove its persisted progress row.
+  async function clearChecklistStatus(item: ChecklistItem) {
+    setError(null);
+    setSavingItemId(item.id);
+    const { error: deleteError } = await supabase
+      .from("apparatus_inspection_checklist_progress")
+      .delete()
+      .eq("department_id", departmentId)
+      .eq("apparatus_id", apparatusId)
+      .eq("member_id", memberId)
+      .eq("checklist_item_id", item.id);
+    if (deleteError) {
+      setError(deleteError.message || "Unable to clear this checklist item.");
+      setSavingItemId(null);
+      return;
+    }
+    setProgress((current) => {
+      const next = new Map(current);
+      next.delete(item.id);
+      return next;
+    });
+    if (bulkPassSnapshot) setBulkPassManualEdits((current) => new Set(current).add(item.id));
+    setSavingItemId(null);
+  }
+
   async function markAllPass() {
     setError(null);
-    const applicableItems = checklistItems;
+    // Exclude Saturday-only items on weekdays so optional radio/fuel checks are
+    // never stamped as passed when they are hidden.
+    const applicableItems = bulkPassSnapshot
+      ? checklistItems.filter((item) => bulkPassSnapshot.has(item.id))
+      : bulkPassTargets(checklistItems, !specialMode || saturday);
     setSavingItemId("all");
 
     if (bulkPassSnapshot) {
@@ -212,7 +274,6 @@ export default function MobileApparatusCheck({
                   member_id: memberId,
                   checklist_item_id: item.id,
                   status: previousStatus,
-                  note: null,
                 },
                 { onConflict: "department_id,apparatus_id,member_id,checklist_item_id" },
               );
@@ -234,10 +295,11 @@ export default function MobileApparatusCheck({
       const failedRestore = restoreResults.find((result) => result.error);
       if (failedRestore?.error) {
         setError(failedRestore.error.message || "Unable to undo Mark All Pass.");
-      } else {
-        setProgress((current) => {
+      }
+      setProgress((current) => {
           const next = new Map(current);
-          for (const item of applicableItems) {
+          for (const [index, item] of applicableItems.entries()) {
+            if (restoreResults[index].error) continue;
             if (!bulkPassManualEdits.has(item.id)) {
               const previousStatus = bulkPassSnapshot.get(item.id);
               if (previousStatus) next.set(item.id, previousStatus);
@@ -245,10 +307,11 @@ export default function MobileApparatusCheck({
             }
           }
           return next;
-        });
-        setBulkPassSnapshot(null);
-        setBulkPassManualEdits(new Set());
-      }
+      });
+      const failedIds = new Set(applicableItems.filter((_, index) => restoreResults[index].error).map((item) => item.id));
+      const remainingSnapshot = new Map([...bulkPassSnapshot].filter(([id]) => failedIds.has(id)));
+      setBulkPassSnapshot(remainingSnapshot.size > 0 ? remainingSnapshot : null);
+      setBulkPassManualEdits(new Set());
       setSavingItemId(null);
       return;
     }
@@ -268,7 +331,6 @@ export default function MobileApparatusCheck({
               member_id: memberId,
               checklist_item_id: item.id,
               status: "checked",
-              note: null,
             },
             { onConflict: "department_id,apparatus_id,member_id,checklist_item_id" },
           ),
@@ -277,15 +339,19 @@ export default function MobileApparatusCheck({
     const failed = results.find((result) => result.error);
     if (failed?.error) {
       setError(failed.error.message || "Unable to mark all checklist items as pass.");
-    } else {
-      setProgress((current) => {
-        const next = new Map(current);
-        for (const item of applicableItems) next.set(item.id, "checked");
-        return next;
-      });
-      setBulkPassSnapshot(snapshot);
-      setBulkPassManualEdits(new Set());
     }
+    for (const [index, item] of applicableItems.entries()) {
+      if (results[index].error) snapshot.delete(item.id);
+    }
+    setProgress((current) => {
+        const next = new Map(current);
+        for (const [index, item] of applicableItems.entries()) {
+          if (!results[index].error) next.set(item.id, "checked");
+        }
+        return next;
+    });
+    setBulkPassSnapshot(snapshot.size > 0 ? snapshot : null);
+    setBulkPassManualEdits(new Set());
     setSavingItemId(null);
   }
 
@@ -387,8 +453,20 @@ export default function MobileApparatusCheck({
     setIsSavingDeficiency(false);
   }
 
+  function handleMarkAllPassRequest() {
+    if (needsAllPassConfirmation(bulkPassSnapshot !== null)) {
+      setIsAllPassConfirmOpen(true);
+      return;
+    }
+    void markAllPass();
+  }
+
   async function submitCheck() {
     if (!sessionId || !selectedResult || !requiredComplete) return;
+    if (specialMode && saturday && !saturdayMarked) {
+      setError("Mark the Saturday radio and fuel checks before submitting.");
+      return;
+    }
     setIsSubmitting(true);
     const { error: submitError } = await supabase.rpc("complete_apparatus_check", {
       p_session_id: sessionId,
@@ -431,10 +509,28 @@ export default function MobileApparatusCheck({
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-white/50">Apparatus</p>
             <h1 className="mt-1 text-3xl font-black tracking-tight sm:text-4xl">{apparatusName}</h1>
+            {bayScheduleLabel ? (
+              <p className="mt-2 inline-flex rounded-full border border-white/15 bg-white/[0.06] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-white/70">
+                {bayScheduleLabel}
+              </p>
+            ) : null}
           </div>
         </header>
 
         {error ? <div className="mb-4 rounded-xl border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-100">{error}</div> : null}
+
+        {bannerImageUrl ? (
+          <section className="mb-5 overflow-hidden rounded-2xl border border-white/10 bg-[#1b1b1b]">
+            <img src={bannerImageUrl} alt={`${apparatusName} banner`} className="h-auto w-full object-contain" />
+          </section>
+        ) : null}
+
+        {checklistInstructions ? (
+          <section className="mb-5 rounded-2xl border border-[#ef2b2d]/30 bg-[#ef2b2d]/[0.08] p-4 sm:p-5">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#ef2b2d]">Daily check instructions</p>
+            <p className="mt-2 text-sm leading-6 text-white/85">{checklistInstructions}</p>
+          </section>
+        ) : null}
 
         <section className="rounded-2xl border border-white/10 bg-[#1b1b1b] p-4 sm:p-6">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#ef2b2d]">Overall result</p>
@@ -468,33 +564,82 @@ export default function MobileApparatusCheck({
         {checklistRequired && isChecklistOpen ? (
           <div className="mt-5 grid gap-5 lg:grid-cols-2">
             <div className="lg:col-span-2 flex justify-end">
-              <button type="button" disabled={savingItemId !== null || checklistItems.length === 0} onClick={() => void markAllPass()} className="min-h-12 rounded-xl border border-emerald-400/40 bg-emerald-500/10 px-4 text-xs font-black uppercase tracking-wide text-emerald-100 disabled:opacity-50">
-                {bulkPassSnapshot ? "Undo Mark All Pass" : "Mark All Pass"}
+              <button type="button" disabled={savingItemId !== null || checklistItems.length === 0} onClick={handleMarkAllPassRequest} className="min-h-12 rounded-xl border border-emerald-400/40 bg-emerald-500/10 px-4 text-xs font-black uppercase tracking-wide text-emerald-100 disabled:opacity-50">
+                {bulkPassSnapshot ? (specialMode ? "Undo All Pass" : "Undo Mark All Pass") : (specialMode ? "All Pass" : "Mark All Pass")}
               </button>
             </div>
           {Array.from(groupedItems.entries()).map(([section, items]) => (
             <section key={section} className="rounded-2xl border border-white/10 bg-[#1b1b1b] p-4 sm:p-5">
               <h2 className="text-xl font-black">{section}</h2>
-              <div className="mt-4 space-y-3">
+              <div className="mt-4 grid grid-cols-2 gap-2 sm:gap-3">
                 {items.sort((left, right) => left.displayOrder - right.displayOrder).map((item) => {
-                  const currentStatus = progress.get(item.id);
+                  const currentStatus = progress.get(item.id) ?? null;
+
+                  // Whole-card toggle matching the pediatric bag checklist:
+                  // tap cycles Not Checked -> Present -> Missing -> N/A -> Not
+                  // Checked. The card is the control; no inner status buttons.
+                  function nextStatus(current: ApparatusChecklistResultStatus | null): ApparatusChecklistResultStatus | null {
+                    if (current === null) return "checked";
+                    if (current === "checked") return "deficiency";
+                    if (current === "deficiency") return "not_applicable";
+                    return null;
+                  }
+
+                  const upcoming = nextStatus(currentStatus);
+                  const isPresent = currentStatus === "checked";
+                  const isMissing = currentStatus === "deficiency";
+                  const isNa = currentStatus === "not_applicable";
+                  const stateLabel = isPresent ? labels.checked : isMissing ? labels.deficiency : isNa ? labels.notApplicable : null;
+
                   return (
-                    <article key={item.id} className="rounded-xl border border-white/10 bg-[#101010] p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-base font-bold leading-6">{item.itemLabel}</p>
-                          {item.isRequired ? <p className="mt-1 text-[11px] font-bold uppercase tracking-[0.15em] text-white/45">Required</p> : null}
-                        </div>
-                        <span className="text-xs font-bold uppercase text-white/45">{currentStatus === "checked" ? "Pass" : currentStatus === "deficiency" ? "Deficiency" : currentStatus === "not_applicable" ? "N/A" : "Open"}</span>
+                    <button
+                      key={item.id}
+                      type="button"
+                      disabled={savingItemId !== null}
+                      aria-pressed={isPresent || isMissing || isNa}
+                      aria-label={`${item.itemLabel}: ${isPresent ? `marked ${labels.checked}` : isMissing ? `marked ${labels.deficiency}` : isNa ? "marked Not Applicable" : unmarkedActionLabel(specialMode)}`}
+                      onClick={() => {
+                        if (upcoming === null) {
+                          void clearChecklistStatus(item);
+                        } else {
+                          void saveChecklistStatus(item, upcoming);
+                        }
+                      }}
+                      className={`rounded-lg border p-2.5 text-left transition active:scale-[0.99] ${
+                        isPresent
+                          ? "border-emerald-500/60 bg-emerald-950/40 ring-1 ring-emerald-500/40"
+                          : isMissing
+                            ? "border-red-500/60 bg-red-950/40 ring-1 ring-red-500/40"
+                            : isNa
+                              ? "border-sky-500/60 bg-sky-950/40 ring-1 ring-sky-500/40"
+                              : "border-white/10 bg-[#101010] hover:border-white/25"
+                      } disabled:cursor-not-allowed disabled:opacity-60`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-bold leading-snug">
+                          {item.itemLabel}
+                          {item.requiredQuantity ? (
+                            <span className="ml-2 inline-block rounded-full border border-sky-400/40 bg-sky-500/20 px-2 py-0.5 align-middle text-[11px] font-black text-sky-100">
+                              Qty: {item.requiredQuantity}
+                            </span>
+                          ) : null}
+                        </p>
+                        {stateLabel ? (
+                          <span
+                            className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] ${
+                              isPresent
+                                ? "border-emerald-500/50 bg-emerald-950/40 text-emerald-200"
+                                : isMissing
+                                  ? "border-red-500/50 bg-red-950/40 text-red-200"
+                                  : "border-sky-500/50 bg-sky-950/40 text-sky-200"
+                            }`}
+                          >
+                            {stateLabel}
+                          </span>
+                        ) : null}
                       </div>
-                      <div className="mt-3 grid grid-cols-3 gap-2">
-                        {statusOptions.map((option) => (
-                          <button key={option.value} type="button" disabled={savingItemId === item.id} onClick={() => void saveChecklistStatus(item, option.value)} className={`min-h-14 rounded-lg border px-2 text-[11px] font-black leading-tight tracking-wide transition active:scale-[0.98] ${currentStatus === option.value ? option.tone : "border-white/15 bg-white/[0.04] text-white/75"}`}>
-                            {option.label}
-                          </button>
-                        ))}
-                      </div>
-                    </article>
+                      {isScheduledChecklistItemRequired(item, specialMode, saturday) ? <p className="mt-1 text-[11px] font-bold uppercase tracking-[0.15em] text-white/45">Required</p> : null}
+                    </button>
                   );
                 })}
               </div>
@@ -554,6 +699,23 @@ export default function MobileApparatusCheck({
             <div className="mt-4 grid gap-3 sm:grid-cols-2"><label className="text-sm font-bold text-white/75">Category<select value={deficiencyCategoryId} onChange={(event) => setDeficiencyCategoryId(event.target.value)} className="mt-2 min-h-12 w-full rounded-xl border border-white/15 bg-[#101010] px-3 text-white">{categories.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label><label className="text-sm font-bold text-white/75">Priority<select value={deficiencyPriorityId} onChange={(event) => setDeficiencyPriorityId(event.target.value)} className="mt-2 min-h-12 w-full rounded-xl border border-white/15 bg-[#101010] px-3 text-white">{priorities.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}</select></label></div>
             <label className="mt-4 block text-sm font-bold text-white/75">Photo<input type="file" accept="image/*" capture="environment" onChange={(event) => setDeficiencyPhoto(event.target.files?.[0] ?? null)} className="mt-2 block min-h-12 w-full rounded-xl border border-white/15 bg-[#101010] p-3 text-sm text-white/70" /></label>
             <button type="button" disabled={isSavingDeficiency} onClick={() => void saveDeficiency()} className="mt-5 min-h-14 w-full rounded-xl bg-amber-500 px-4 text-sm font-black uppercase tracking-wide text-black disabled:opacity-50">{isSavingDeficiency ? "Saving deficiency..." : "Save deficiency"}</button>
+          </div>
+        </div>
+      ) : null}
+
+      {isAllPassConfirmOpen ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/75 p-4">
+          <div className="w-full max-w-xl rounded-2xl border border-white/15 bg-[#202020] p-6 shadow-2xl">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-300">Confirm All Pass</p>
+            <h2 className="mt-2 text-2xl font-black">Mark every apparatus as passed?</h2>
+            <p className="mt-4 text-sm leading-6 text-white/75">
+              Only confirm after you have checked every listed apparatus. Any apparatus that did not pass must be flagged
+              individually so a deficiency can be documented for the affected unit.
+            </p>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2">
+              <button type="button" onClick={() => setIsAllPassConfirmOpen(false)} className="min-h-14 rounded-xl border border-white/15 px-4 text-sm font-black uppercase text-white/75">Cancel</button>
+              <button type="button" onClick={() => { setIsAllPassConfirmOpen(false); void markAllPass(); }} className="min-h-14 rounded-xl bg-emerald-500 px-4 text-sm font-black uppercase text-black">Yes, all passed</button>
+            </div>
           </div>
         </div>
       ) : null}

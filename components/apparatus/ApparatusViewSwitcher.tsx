@@ -14,6 +14,7 @@ type ApparatusUnit = {
   openDeficiencies: number;
   readiness: string;
   imageUrl: string | null;
+  canStartCheck: boolean;
 };
 
 interface ApparatusViewSwitcherProps {
@@ -126,12 +127,12 @@ export default function ApparatusViewSwitcher({
               </Link>
 
               <div className="px-5 pb-4">
-                <Link
+                {unit.canStartCheck ? <Link
                   href={`/apparatus/${unit.id}/daily-check`}
                   className="inline-flex h-[42px] w-full items-center justify-center rounded-xl border border-red-500/40 bg-gradient-to-b from-[#ff3b3b] to-[#b90d0d] px-4 text-sm font-semibold text-white shadow-[0_0_18px_rgba(239,43,45,.30)] transition-all duration-300 hover:shadow-[0_0_26px_rgba(239,43,45,.45)]"
                 >
                   Apparatus Check
-                </Link>
+                </Link> : null}
               </div>
             </div>
           ))}
@@ -174,12 +175,12 @@ export default function ApparatusViewSwitcher({
                       >
                         Open Apparatus
                       </Link>
-                      <Link
+                      {unit.canStartCheck ? <Link
                         href={`/apparatus/${unit.id}/daily-check`}
                         className="rounded-lg border border-red-500/30 bg-red-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-red-700"
                       >
                         Apparatus Check
-                      </Link>
+                      </Link> : null}
                     </div>
                   </td>
                 </tr>

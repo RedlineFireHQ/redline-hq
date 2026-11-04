@@ -9,6 +9,7 @@ type QuickFactsFieldKey =
   | "make"
   | "model"
   | "vin"
+  | "job_number"
   | "pump_capacity"
   | "water_tank_capacity"
   | "mileage"
@@ -21,6 +22,7 @@ type QuickFactsValues = {
   make: string | null;
   model: string | null;
   vin: string | null;
+  job_number: string | null;
   pump_capacity: number | string | null;
   water_tank_capacity: number | string | null;
   mileage: number | string | null;
@@ -32,6 +34,8 @@ type QuickFactsCardProps = {
   statusLabel: string;
   departmentLabel: string;
   lastInspectionLabel: string;
+  bayLabel?: string | null;
+  scheduledCheckDayLabel?: string | null;
   initialValues: QuickFactsValues;
 };
 
@@ -41,6 +45,7 @@ const FIELD_CONFIG: Array<{ key: QuickFactsFieldKey; label: string }> = [
   { key: "make", label: "Make" },
   { key: "model", label: "Model" },
   { key: "vin", label: "VIN" },
+  { key: "job_number", label: "Job Number" },
   { key: "pump_capacity", label: "Pump Capacity (GPM)" },
   { key: "water_tank_capacity", label: "Water Tank Capacity (Gallons)" },
   { key: "mileage", label: "Mileage" },
@@ -124,6 +129,8 @@ export default function QuickFactsCard({
   statusLabel,
   departmentLabel,
   lastInspectionLabel,
+  bayLabel = null,
+  scheduledCheckDayLabel = null,
   initialValues,
 }: QuickFactsCardProps) {
   const router = useRouter();
@@ -152,8 +159,14 @@ export default function QuickFactsCard({
       { label: "Department", value: departmentLabel },
       { label: "Last Inspection", value: lastInspectionLabel },
       { label: "Check Frequency", value: displayValue(values.check_frequency) },
+      ...(bayLabel
+        ? [
+            { label: "Bay", value: bayLabel },
+            { label: "Scheduled Check Day", value: scheduledCheckDayLabel ?? "Not Set" },
+          ]
+        : []),
     ],
-    [statusLabel, departmentLabel, lastInspectionLabel, values.check_frequency],
+    [statusLabel, departmentLabel, lastInspectionLabel, values.check_frequency, bayLabel, scheduledCheckDayLabel],
   );
 
   function handleCancelEdit() {
@@ -172,6 +185,7 @@ export default function QuickFactsCard({
       make: normalizeStringValue(draft.make),
       model: normalizeStringValue(draft.model),
       vin: normalizeStringValue(draft.vin),
+      job_number: normalizeStringValue(draft.job_number),
       pump_capacity: normalizeNumberValue(draft.pump_capacity),
       water_tank_capacity: normalizeNumberValue(draft.water_tank_capacity),
       mileage: normalizeNumberValue(draft.mileage),

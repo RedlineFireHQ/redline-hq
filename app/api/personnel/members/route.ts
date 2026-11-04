@@ -1,7 +1,7 @@
 import { getCurrentMember } from "@/lib/current-member";
 import { canManagePersonnel } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
-import { isValidMemberRank, normalizePermissionKeys } from "@/lib/app-permissions";
+import { parseOptionalMemberRank, normalizePermissionKeys } from "@/lib/app-permissions";
 
 type CreateMemberPayload = {
   firstName?: unknown;
@@ -75,7 +75,7 @@ export async function POST(request: Request) {
     const lastName = normalizeOptionalString(payload.lastName);
     const email = normalizeOptionalString(payload.email);
     const phone = normalizeOptionalString(payload.phone);
-    const rank = normalizeOptionalString(payload.rank);
+    const rank = parseOptionalMemberRank(payload.rank);
     const active = payload.active === false ? false : true;
     const hireStartDate = normalizeOptionalDate(payload.hireStartDate);
     const inactiveDate = normalizeOptionalDate(payload.inactiveDate);
@@ -86,7 +86,7 @@ export async function POST(request: Request) {
       return jsonResponse({ ok: false, error: "First name and last name are required." }, 400);
     }
 
-    if (!isValidMemberRank(rank)) {
+    if (!rank.ok) {
       return jsonResponse({ ok: false, error: "Invalid rank." }, 400);
     }
 
@@ -123,7 +123,7 @@ export async function POST(request: Request) {
       p_last_name: lastName,
       p_email: email || null,
       p_phone: phone || null,
-      p_rank: rank,
+      p_rank: rank.rank,
       p_active: active,
       p_special_permissions_enabled: specialPermissionsEnabled,
       p_permission_keys: permissionKeys,

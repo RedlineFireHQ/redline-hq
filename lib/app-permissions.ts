@@ -144,6 +144,19 @@ export function isValidMemberRank(value: unknown): value is MemberRank {
   return typeof value === "string" && MEMBER_RANK_OPTIONS.includes(value as MemberRank);
 }
 
+export function parseOptionalMemberRank(value: unknown):
+  | { ok: true; rank: MemberRank | null }
+  | { ok: false } {
+  if (value === null || (typeof value === "string" && !value.trim())) {
+    return { ok: true, rank: null };
+  }
+  const rank = typeof value === "string" ? value.trim() : value;
+  if (isValidMemberRank(rank)) {
+    return { ok: true, rank };
+  }
+  return { ok: false };
+}
+
 export function normalizePermissionKeys(values: unknown): string[] {
   if (!Array.isArray(values)) {
     return [];

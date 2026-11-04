@@ -1,6 +1,6 @@
 import { getCurrentMember } from "@/lib/current-member";
 import { canManageApparatus } from "@/lib/member-permissions";
-import { applyApparatusConfiguration, normalizeCheckFrequencyIntervalDays } from "@/lib/apparatus-configuration-simple";
+import { applyApparatusConfiguration, validateApparatusSchedule } from "@/lib/apparatus-configuration-simple";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 function jsonResponse(payload: unknown, status = 200): Response {
@@ -63,13 +63,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         ? customCheckFrequencyValue
         : checkFrequencyValue;
 
-    const intervalDays = checkFrequencyValue
-      ? normalizeCheckFrequencyIntervalDays(checkFrequencyValue, customCheckFrequencyValue)
-      : null;
-
-    if (intervalDays === null) {
-      return jsonResponse({ ok: false, error: "Choose a valid check frequency before saving configuration." }, 400);
-    }
+    const schedule = await validateApparatusSchedule(supabase, currentMember.departmentId, configurationRecord);
+    if (!schedule.ok) return jsonResponse({ ok: false, error: schedule.error }, 400);
 
     const { error: apparatusUpdateError } = await supabase
       .from("apparatus")

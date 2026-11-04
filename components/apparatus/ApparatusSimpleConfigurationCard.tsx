@@ -9,6 +9,7 @@ import {
 
 type ApparatusSimpleConfigurationCardProps = {
   apparatusId: string;
+  departmentId: string | null;
   canEdit: boolean;
   departmentCheckDefaultIntervalDays?: number | null;
   initialConfiguration?: SimpleApparatusConfigurationDraft;
@@ -16,6 +17,7 @@ type ApparatusSimpleConfigurationCardProps = {
 
 export default function ApparatusSimpleConfigurationCard({
   apparatusId,
+  departmentId,
   canEdit,
   departmentCheckDefaultIntervalDays,
   initialConfiguration,
@@ -121,6 +123,7 @@ export default function ApparatusSimpleConfigurationCard({
       {isEditing ? (
         <div className="mt-4 space-y-4">
           <ApparatusSimpleConfigurationForm
+            departmentId={departmentId}
             value={draft}
             onChange={setDraft}
             canEdit={canEdit}

@@ -7,9 +7,11 @@ import { supabase } from "@/lib/supabase";
 type ServiceSpecifications = {
   oil_type: string | null;
   oil_capacity: string | null;
+  oil_plug_size: string | null;
   oil_filter_part_number: string | null;
   fuel_filter_part_number: string | null;
   air_filter_part_number: string | null;
+  cabin_air_filter_part_number: string | null;
   hydraulic_fluid: string | null;
   transmission_fluid: string | null;
   coolant_type: string | null;
@@ -36,9 +38,11 @@ type SpecField = {
 const specFields: SpecField[] = [
   { key: "oil_type", label: "Oil Type" },
   { key: "oil_capacity", label: "Oil Capacity" },
+  { key: "oil_plug_size", label: "Oil Plug Size" },
   { key: "oil_filter_part_number", label: "Oil Filter Part Number" },
   { key: "fuel_filter_part_number", label: "Fuel Filter Part Number" },
   { key: "air_filter_part_number", label: "Air Filter Part Number" },
+  { key: "cabin_air_filter_part_number", label: "Cabin Air Filter Number" },
   { key: "hydraulic_fluid", label: "Hydraulic Fluid" },
   { key: "transmission_fluid", label: "Transmission Fluid" },
   { key: "coolant_type", label: "Coolant Type" },
@@ -118,9 +122,11 @@ export default function ServiceSpecificationsCard({
     }, {
       oil_type: null,
       oil_capacity: null,
+      oil_plug_size: null,
       oil_filter_part_number: null,
       fuel_filter_part_number: null,
       air_filter_part_number: null,
+      cabin_air_filter_part_number: null,
       hydraulic_fluid: null,
       transmission_fluid: null,
       coolant_type: null,

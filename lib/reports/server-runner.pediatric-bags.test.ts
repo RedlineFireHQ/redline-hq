@@ -37,13 +37,14 @@ function applyFilters(rows: Row[], filters: Array<{ key: string; op: "eq" | "in"
   });
 }
 
-function createSupabaseMock(tableData: TableData) {
+function createSupabaseMock(tableData: TableData, errorTable?: string) {
   class QueryBuilder {
     private readonly rows: Row[];
     private readonly filters: Array<{ key: string; op: "eq" | "in"; value: unknown }> = [];
     private readonly orderBy: Array<{ key: string; ascending: boolean }> = [];
+    private bounds: [number, number] | null = null;
 
-    constructor(tableName: string) {
+    constructor(private readonly tableName: string) {
       this.rows = tableData[tableName] ?? [];
     }
 
@@ -62,8 +63,16 @@ function createSupabaseMock(tableData: TableData) {
       this.orderBy.push({ key, ascending: options?.ascending !== false });
       return this;
     }
-    then(resolve: (value: { data: Row[]; error: null }) => unknown, reject?: (reason: unknown) => unknown) {
+    range(from: number, to: number) {
+      this.bounds = [from, to];
+      return this;
+    }
+    async maybeSingle() {
+      return { data: null, error: null };
+    }
+    then(resolve: (value: { data: Row[]; error: { message: string } | null }) => unknown, reject?: (reason: unknown) => unknown) {
       try {
+        if (this.tableName === errorTable) return Promise.resolve(resolve({ data: [], error: { message: `Read denied for ${errorTable}` } }));
         let data = applyFilters(this.rows, this.filters);
         for (const order of this.orderBy) {
           data = [...data].sort((left, right) => {
@@ -72,6 +81,7 @@ function createSupabaseMock(tableData: TableData) {
             return order.ascending ? l.localeCompare(r) : r.localeCompare(l);
           });
         }
+        if (this.bounds) data = data.slice(this.bounds[0], this.bounds[1] + 1);
         return Promise.resolve(resolve({ data, error: null }));
       } catch (error) {
         if (reject) return Promise.resolve(reject(error));
@@ -101,9 +111,9 @@ function makeRequest(filters: Record<string, string>, dateRange?: { from: string
   };
 }
 
-function buildContext(tableData: TableData, departmentId: string) {
+function buildContext(tableData: TableData, departmentId: string, errorTable?: string) {
   return {
-    supabase: createSupabaseMock(tableData),
+    supabase: createSupabaseMock(tableData, errorTable),
     departmentId,
     departmentName: "Department A",
     memberRole: "administrator",
@@ -131,7 +141,7 @@ function seedData(): TableData {
     ],
     pediatric_bag_inspections: [
       { id: "insp-1", department_id: DEP_A, pediatric_bag_id: "bag-a", member_id: "m-insp-a", status: "ready", created_at: "2026-03-10T14:30:00.000Z" },
-      { id: "insp-2", department_id: DEP_A, pediatric_bag_id: "bag-b", member_id: "m-insp-a", status: "needs_attention", created_at: "2026-06-15T09:00:00.000Z" },
+      { id: "insp-2", department_id: DEP_A, pediatric_bag_id: "bag-b", member_id: "m-insp-a", status: "ready", created_at: "2026-06-15T09:00:00.000Z" },
       { id: "insp-3", department_id: DEP_B, pediatric_bag_id: "bag-b2", member_id: "m-insp-b", status: "ready", created_at: "2026-03-11T10:00:00.000Z" },
     ],
     pediatric_bag_checklist_results: [
@@ -148,8 +158,8 @@ function seedData(): TableData {
       { id: "sess-3", department_id: DEP_B, completed_inspection_id: "insp-3" },
     ],
     pediatric_bag_check_session_members: [
-      { id: "pm1", session_id: "sess-1", member_id: "m-assist-a" },
-      { id: "pm2", session_id: "sess-3", member_id: "m-insp-b" },
+      { id: "pm1", department_id: DEP_A, session_id: "sess-1", member_id: "m-assist-a" },
+      { id: "pm2", department_id: DEP_B, session_id: "sess-3", member_id: "m-insp-b" },
     ],
   };
 }
@@ -256,5 +266,111 @@ test("PEDRPT9. empty history returns an empty, valid report", async () => {
   if (response.ok) {
     assert.equal(response.rows.length, 0);
     assert.equal(response.totalRows, 0);
+  }
+});
+
+test("Pediatric saved snapshot quantities, results, notes and helper names are returned", async () => {
+  const data = seedData();
+  data.pediatric_bag_inspections[0].notes = "Replace expired supplies";
+  const row = okRows(await runReport(makeRequest({ bag_label: "A" }), buildContext(data, DEP_A)))[0];
+  assert.equal(row.inspection_id, "insp-1");
+  assert.equal(row.inspection_timestamp, "2026-03-10T14:30:00.000Z");
+  assert.equal(row.assisting_personnel, "Casey Lee");
+  assert.equal(row.notes, "Replace expired supplies");
+  assert.match(String(row.checklist_results), /Alcohol Preps \(10\): expired/);
+});
+
+test("Pediatric foreign snapshots, sessions, roster names and bag labels cannot leak", async () => {
+  const data = seedData();
+  data.members.push({ id: "unrelated", department_id: DEP_A, first_name: "Unrelated", last_name: "Local" });
+  data.pediatric_bag_checklist_results.push({
+    id: "foreign", department_id: DEP_B, inspection_id: "insp-1",
+    item_label_snapshot: "SECRET FOREIGN ITEM", result_status: "deficiency",
+  });
+  data.pediatric_bag_checklist_sessions.push({
+    id: "foreign-session", department_id: DEP_B, completed_inspection_id: "insp-1",
+  });
+  data.pediatric_bag_check_session_members.push(
+    { department_id: DEP_A, session_id: "foreign-session", member_id: "m-assist-a" },
+    { department_id: DEP_A, session_id: "sess-1", member_id: "m-insp-b" },
+    { department_id: DEP_B, session_id: "sess-1", member_id: "unrelated" },
+  );
+  data.pediatric_bag_inspections[1].pediatric_bag_id = "bag-b2";
+  data.pediatric_bags[2].bag_label = "SECRET FOREIGN BAG";
+  const result = okRows(await runReport(makeRequest({}), buildContext(data, DEP_A)));
+  assert.equal(result.length, 2);
+  assert.doesNotMatch(JSON.stringify(result), /SECRET|Riley Other|Unrelated Local/);
+  assert.equal(result.find((row) => row.inspection_id === "insp-1")?.item_count, 2);
+  assert.equal(result.find((row) => row.inspection_id === "insp-2")?.bag_label, "Unknown Bag");
+});
+
+test("Pediatric recorded attention and out-of-service decisions are not overwritten by passing items", async () => {
+  const data = seedData();
+  data.pediatric_bag_inspections[1].status = "needs_attention";
+  let result = okRows(await runReport(makeRequest({ bag_label: "B" }), buildContext(data, DEP_A)))[0];
+  assert.equal(result.overall_status, "Needs Attention");
+  assert.equal(result.recorded_status, "needs_attention");
+  data.pediatric_bag_inspections[1].status = "out_of_service";
+  result = okRows(await runReport(makeRequest({ bag_label: "B" }), buildContext(data, DEP_A)))[0];
+  assert.equal(result.overall_status, "Out of Service");
+});
+
+test("Pediatric snapshot deficiencies and unreviewed items retain their actual statuses", async () => {
+  const data = seedData();
+  data.pediatric_bag_checklist_results[0].result_status = "deficiency";
+  let row = okRows(await runReport(makeRequest({ bag_label: "A" }), buildContext(data, DEP_A)))[0];
+  assert.equal(row.overall_status, "Deficiencies Reported");
+  assert.equal(row.snapshot_deficiencies, 1);
+  assert.match(String(row.deficiency_items), /Pediatric BVM/);
+  assert.equal(row.open_deficiencies, "0");
+  data.pediatric_bag_checklist_results[0].result_status = "needs_review";
+  row = okRows(await runReport(makeRequest({ bag_label: "A" }), buildContext(data, DEP_A)))[0];
+  assert.equal(row.overall_status, "Items Need Review");
+});
+
+test("Pediatric missing snapshots are explicit, never a passing result", async () => {
+  const data = seedData();
+  data.pediatric_bag_checklist_results = [];
+  const result = okRows(await runReport(makeRequest({}), buildContext(data, DEP_A)));
+  assert.equal(result.length, 2);
+  assert.ok(result.every((row) => row.overall_status === "Snapshot Unavailable" && row.items_unchecked === null));
+});
+
+test("Pediatric result, search and pagination filters operate on completed inspections", async () => {
+  const request = makeRequest({ result_status: "Items Expired" });
+  request.searchTerm = "Alcohol Preps";
+  assert.equal(okRows(await runReport(request, buildContext(seedData(), DEP_A))).length, 1);
+  request.searchTerm = "Not present";
+  assert.equal(okRows(await runReport(request, buildContext(seedData(), DEP_A))).length, 0);
+  const paged = { ...makeRequest({}), page: 2, pageSize: 1 };
+  const response = await runReport(paged, buildContext(seedData(), DEP_A));
+  assert.ok(response.ok);
+  assert.equal(response.totalRows, 2);
+  assert.equal(response.rows.length, 1);
+  assert.equal(response.rows[0].inspection_id, "insp-1");
+});
+
+test("All Inspections includes Pediatric, Drug Box and existing fire hose records without mixing tenants", async () => {
+  const data = seedData();
+  data.drug_box_inspections = [
+    { id: "drug-a", department_id: DEP_A, squad_number: "114", created_at: "2026-03-10T10:00:00Z" },
+    { id: "drug-b", department_id: DEP_B, squad_number: "SECRET", created_at: "2026-03-10T10:00:00Z" },
+  ];
+  data.drug_box_checklist_results = [{ id: "dr", department_id: DEP_A, inspection_id: "drug-a", is_checked: true }];
+  data.fire_hose = [{ id: "hose-a", department_id: DEP_A, inventory_number: "H1", status: "active" }];
+  data.fire_hose_testing_results = [{ id: "ht", department_id: DEP_A, hose_id: "hose-a", test_date: "2026-03-10", result: "pass" }];
+  const result = okRows(await runReport(makeRequest({ report_type: "all-inspections" }), buildContext(data, DEP_A)));
+  assert.equal(result.length, 4);
+  assert.equal(result.filter((row) => row.inspection_type === "Pediatric Bag Inspection").length, 2);
+  assert.equal(result.filter((row) => row.inspection_type === "Drug Box Inspection").length, 1);
+  assert.ok(result.some((row) => row.item_identifier === "H1" && row.result === "pass"));
+  assert.doesNotMatch(JSON.stringify(result), /SECRET|Riley Other/);
+});
+
+test("Pediatric query failures surface as errors instead of successful empty reports", async () => {
+  for (const table of ["pediatric_bag_inspections", "pediatric_bag_checklist_results", "pediatric_bag_check_session_members", "members"]) {
+    const response = await runReport(makeRequest({}), buildContext(seedData(), DEP_A, table));
+    assert.equal(response.ok, false);
+    if (!response.ok) assert.equal(response.errorCode, "QUERY_ERROR");
   }
 });

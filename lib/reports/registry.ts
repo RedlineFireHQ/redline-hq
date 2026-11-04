@@ -95,9 +95,9 @@ export const REPORT_SOURCES: ReportSourceConfig[] = [
 			},
 			{
 				key: "role_id",
-				label: "Role",
+				label: "Department Position",
 				type: "select",
-				options: [{ value: "all", label: "All Roles" }],
+				options: [{ value: "all", label: "All Positions" }],
 			},
 			{
 				key: "station",
@@ -114,8 +114,9 @@ export const REPORT_SOURCES: ReportSourceConfig[] = [
 		],
 		columns: [
 			{ key: "member_name", label: "Member" },
-			{ key: "role_name", label: "Role" },
-			{ key: "rank", label: "Rank / Position" },
+			{ key: "role_name", label: "Department Position" },
+			{ key: "rank", label: "Legacy Rank" },
+			{ key: "application_role", label: "Application Permission" },
 			{ key: "status", label: "Status" },
 			{ key: "email", label: "Email" },
 			{ key: "phone", label: "Phone" },
@@ -615,6 +616,18 @@ export const REPORT_SOURCES: ReportSourceConfig[] = [
 					{ value: "rope-inspections", label: "Rope Inspections" },
 					{ value: "ground-ladder-service-testing", label: "Ground Ladder Service Testing" },
 					{ value: "ground-ladder-inspection", label: "Ground Ladder Inspection" },
+					{ value: "pediatric-bags", label: "Pediatric Bag Inspections" },
+					{ value: "drug-boxes", label: "Drug Box Inspections" },
+				],
+			},
+			{ key: "bag_label", label: "Bag Label", type: "text", placeholder: "Exact bag label (blank for all)" },
+			{ key: "squad_number", label: "Squad Number", type: "text", placeholder: "Exact squad number (blank for all)" },
+			{
+				key: "result_status", label: "Inspection Result", type: "select",
+				options: [
+					{ value: "all", label: "All Results" },
+					...["Ready for Service", "Items Expired", "Deficiencies Reported", "Items Need Review", "Needs Attention", "Out of Service", "Snapshot Unavailable"]
+						.map((label) => ({ value: label, label })),
 				],
 			},
 			{

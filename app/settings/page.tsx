@@ -5,6 +5,7 @@ import RoleRequirementsSection from "@/components/settings/RoleRequirementsSecti
 import ReadinessRequirementsSection from "@/components/settings/ReadinessRequirementsSection";
 import TrainingCategoriesSection from "@/components/settings/TrainingCategoriesSection";
 import ApparatusInspectionSettingsSection from "@/components/settings/ApparatusInspectionSettingsSection";
+import BayScheduleSettingsSection from "@/components/settings/BayScheduleSettingsSection";
 import GasMonitorCalibrationSettingsSection from "@/components/settings/GasMonitorCalibrationSettingsSection";
 import GroundLadderInspectionSettingsSection from "@/components/settings/GroundLadderInspectionSettingsSection";
 import DeficiencyAssignmentSettingsSection from "@/components/settings/DeficiencyAssignmentSettingsSection";
@@ -103,6 +104,7 @@ export default async function SettingsPage() {
     { data: deficiencyAssignmentData, error: deficiencyAssignmentError },
     { data: emsSupplyRecipientData, error: emsSupplyRecipientError },
     { data: departmentSettingsData, error: departmentSettingsError },
+    { data: bayScheduleData, error: bayScheduleError },
   ] = await Promise.all([
     supabase
       .from("certifications")
@@ -174,6 +176,11 @@ export default async function SettingsPage() {
       .select("restrict_deficiency_resolution")
       .eq("id", currentMember.departmentId)
       .maybeSingle(),
+    supabase
+      .from("department_bay_schedules")
+      .select("id, bay_label, check_weekday, is_active")
+      .eq("department_id", currentMember.departmentId)
+      .order("bay_label", { ascending: true }),
   ]);
 
   if (certificationError) {
@@ -227,6 +234,17 @@ export default async function SettingsPage() {
   if (departmentSettingsError) {
     throw new Error(departmentSettingsError.message || "Unable to load department settings.");
   }
+
+  if (bayScheduleError) {
+    throw new Error(bayScheduleError.message || "Unable to load apparatus bay schedules.");
+  }
+
+  const baySchedules = ((bayScheduleData ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    id: String(row.id),
+    bayLabel: typeof row.bay_label === "string" ? row.bay_label : "",
+    checkWeekday: typeof row.check_weekday === "number" ? row.check_weekday : 0,
+    isActive: row.is_active === true,
+  }));
 
   const emsSupplyRecipient = emsSupplyRecipientData
     ? {
@@ -415,6 +433,14 @@ export default async function SettingsPage() {
           departmentId={currentMember.departmentId}
           currentMemberId={currentMember.id}
           initialRequireChecklist={requireApparatusChecklist}
+        />
+      </div>
+
+      <div className="mt-6">
+        <BayScheduleSettingsSection
+          departmentId={currentMember.departmentId}
+          currentMemberId={currentMember.id}
+          initialBaySchedules={baySchedules}
         />
       </div>
 

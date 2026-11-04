@@ -3,8 +3,11 @@ import { redirect } from "next/navigation";
 import PageLayout from "@/components/layout/PageLayout";
 import ApparatusChecklistWorkspace from "@/components/apparatus/ApparatusChecklistWorkspace";
 import { getApparatusById } from "@/lib/database";
+import { getApparatusImagePath } from "@/lib/apparatus-images";
 import { getCurrentMember } from "@/lib/current-member";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { applicableChecklistItems, canStartApparatusCheck, isRedOakDailyChecks } from "@/lib/apparatus/check-eligibility";
+import { isSaturday } from "@/lib/apparatus/daily-checks";
 
 type ChecklistItemRow = {
   id: string;
@@ -12,6 +15,7 @@ type ChecklistItemRow = {
   item_label: string;
   is_required: boolean;
   display_order: number;
+  required_quantity: string | null;
 };
 
 type ChecklistProgressRow = {
@@ -44,12 +48,12 @@ export default async function ApparatusChecklistPage({
   }
 
   const apparatus = await getApparatusById(id, supabase);
-  if (!apparatus || apparatus.department_id !== currentMember.departmentId) {
+  if (!apparatus || !canStartApparatusCheck(apparatus, currentMember.departmentId)) {
     redirect("/apparatus");
   }
 
   const safeReturnTo =
-    typeof returnTo === "string" && returnTo.startsWith("/")
+    typeof returnTo === "string" && returnTo.startsWith("/") && !returnTo.startsWith("//")
       ? returnTo
       : `/apparatus/${id}/daily-check`;
 
@@ -61,7 +65,7 @@ export default async function ApparatusChecklistPage({
       .maybeSingle(),
     supabase
       .from("apparatus_inspection_checklist_items")
-      .select("id, section_name, item_label, is_required, display_order")
+      .select("id, section_name, item_label, is_required, display_order, required_quantity")
       .eq("department_id", currentMember.departmentId)
       .eq("apparatus_id", id)
       .eq("is_active", true)
@@ -86,6 +90,7 @@ export default async function ApparatusChecklistPage({
     itemLabel: typeof row.item_label === "string" ? row.item_label : "Inspection Item",
     isRequired: row.is_required === true,
     displayOrder: typeof row.display_order === "number" ? row.display_order : 0,
+    requiredQuantity: row.required_quantity,
   }));
 
   const progressRows = ((checklistProgressRows ?? []) as ChecklistProgressRow[]).map((row) => ({
@@ -93,6 +98,14 @@ export default async function ApparatusChecklistPage({
     status: row.status,
     note: typeof row.note === "string" ? row.note : null,
   }));
+
+  const isDailyChecksAssignment = isRedOakDailyChecks(apparatus, currentMember.departmentId);
+  const checklistInstructions =
+    typeof apparatus.checklist_instructions === "string" && apparatus.checklist_instructions.trim()
+      ? apparatus.checklist_instructions.trim()
+      : null;
+
+  const bannerImageUrl = isDailyChecksAssignment ? getApparatusImagePath(apparatus, currentMember.departmentId) : null;
 
   return (
     <PageLayout>
@@ -103,6 +116,16 @@ export default async function ApparatusChecklistPage({
         >
           Back to Apparatus Check
         </Link>
+
+        {bannerImageUrl ? (
+          <section className="overflow-hidden rounded-2xl border border-neutral-800 bg-[#1b1b1b]">
+            <img
+              src={bannerImageUrl}
+              alt={`${typeof apparatus.name === "string" && apparatus.name.trim() ? apparatus.name.trim() : "Daily Apparatus Checks"} banner`}
+              className="h-auto w-full object-contain"
+            />
+          </section>
+        ) : null}
 
         <ApparatusChecklistWorkspace
           departmentId={currentMember.departmentId}
@@ -115,8 +138,11 @@ export default async function ApparatusChecklistPage({
           currentMemberId={currentMember.id}
           checklistRequired={checklistRequired}
           returnTo={safeReturnTo}
-          items={items}
+          items={applicableChecklistItems(items, isDailyChecksAssignment)}
           progressRows={progressRows}
+          specialMode={isDailyChecksAssignment}
+          initialSaturday={isSaturday()}
+          checklistInstructions={checklistInstructions}
         />
       </div>
     </PageLayout>

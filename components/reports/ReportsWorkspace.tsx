@@ -208,6 +208,10 @@ function getVisibleInspectionsFilters(source: ReportSourceConfig | null, reportT
 		relevantKeys.add("inspection_result");
 		relevantKeys.add("due_status");
 	}
+	if (selectedType === "pediatric-bags" || selectedType === "drug-boxes") {
+		relevantKeys.add(selectedType === "pediatric-bags" ? "bag_label" : "squad_number");
+		relevantKeys.add("result_status");
+	}
 
 	return source.filters.filter((filter) => relevantKeys.has(filter.key));
 }
@@ -956,7 +960,9 @@ export default function ReportsWorkspace({
 			category: selectedSource.key,
 			searchTerm,
 			dateRange,
-			filters,
+			filters: selectedSource.key === "inspections"
+				? Object.fromEntries(selectedSourceFilters.map((definition) => [definition.key, filters[definition.key] ?? ""]))
+				: filters,
 			page: 1,
 			pageSize: 0,
 		};

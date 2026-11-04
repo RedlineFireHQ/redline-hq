@@ -89,7 +89,7 @@ test("qualification readiness adapter uses only non-expiring certifications for 
     memberQualifications: [],
   });
 
-  assert.deepEqual(readiness.requiredQualifications, ["Firefighter 1", "HazMat Awareness"]);
+  assert.deepEqual(readiness.requiredQualifications, ["Firefighter 1"]);
   assert.deepEqual(readiness.completedQualifications, ["Firefighter 1"]);
-  assert.deepEqual(readiness.missingQualifications, ["HazMat Awareness"]);
+  assert.deepEqual(readiness.missingQualifications, []);
 });

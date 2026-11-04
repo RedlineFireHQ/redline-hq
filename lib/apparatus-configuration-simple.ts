@@ -39,6 +39,9 @@ export type SimpleApparatusConfigurationDraft = {
   checkFrequency: CheckFrequencyOption | "";
   customCheckFrequency: string;
   checklistRequiredOverride: boolean | null;
+  // Department bay schedule id (department_bay_schedules.id) or null for
+  // interval-based scheduling.
+  bayScheduleId: string | null;
   maintenanceRequirements: SimpleMaintenanceRequirementDraft[];
 };
 
@@ -68,6 +71,7 @@ export function createBlankApparatusConfiguration(): SimpleApparatusConfiguratio
     checkFrequency: "",
     customCheckFrequency: "",
     checklistRequiredOverride: null,
+    bayScheduleId: null,
     maintenanceRequirements: [],
   };
 }
@@ -203,59 +207,96 @@ type ApplyConfigurationResult =
   | { ok: true }
   | { ok: false; error: string };
 
+export async function validateApparatusSchedule(
+  supabase: SupabaseClient,
+  departmentId: string,
+  configuration: { checkFrequency?: unknown; customCheckFrequency?: unknown; bayScheduleId?: unknown },
+): Promise<{ ok: true; intervalDays: number | null; bayScheduleId: string | null } | { ok: false; error: string }> {
+  const frequency = typeof configuration.checkFrequency === "string" ? configuration.checkFrequency.trim() : "";
+  const customFrequency = typeof configuration.customCheckFrequency === "string" ? configuration.customCheckFrequency.trim() : "";
+  const intervalDays = normalizeCheckFrequencyIntervalDays(frequency, customFrequency);
+  const bayScheduleId = typeof configuration.bayScheduleId === "string" ? configuration.bayScheduleId.trim() || null : null;
+  if (configuration.bayScheduleId != null && typeof configuration.bayScheduleId !== "string") {
+    return { ok: false, error: "Choose a valid bay assignment." };
+  }
+  if (intervalDays === null && (frequency !== "" || !bayScheduleId)) {
+    return {
+      ok: false,
+      error: "Choose a valid check frequency or a department bay schedule.",
+    };
+  }
+  if (bayScheduleId) {
+    const { data: bayRow, error: bayLookupError } = await supabase
+      .from("department_bay_schedules")
+      .select("id")
+      .eq("id", bayScheduleId)
+      .eq("department_id", departmentId)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (bayLookupError) {
+      return {
+        ok: false,
+        error: bayLookupError.message || "Unable to load bay assignment.",
+      };
+    }
+
+    if (!bayRow) {
+      return {
+        ok: false,
+        error: "The selected bay is not available for this department.",
+      };
+    }
+  }
+  return { ok: true, intervalDays, bayScheduleId };
+}
+
 export async function applyApparatusConfiguration(
   supabase: SupabaseClient,
   departmentId: string,
   apparatusId: string,
   configuration: SimpleApparatusConfigurationDraft,
 ): Promise<ApplyConfigurationResult> {
-  const intervalDays = normalizeCheckFrequencyIntervalDays(configuration.checkFrequency, configuration.customCheckFrequency);
-  if (intervalDays === null) {
-    return {
-      ok: false,
-      error: "Choose a valid check frequency before creating the apparatus.",
+  const schedule = await validateApparatusSchedule(supabase, departmentId, configuration);
+  if (!schedule.ok) return schedule;
+  const { intervalDays, bayScheduleId } = schedule;
+  if (intervalDays !== null) {
+    const checkRequirementPayload = {
+      department_id: departmentId,
+      apparatus_id: apparatusId,
+      score_profile: intervalDays === 1 ? "daily" : intervalDays >= 30 ? "monthly" : "daily",
+      interval_days: intervalDays,
+      is_active: true,
+      notes: null,
     };
+    const { data: existingCheckRequirement, error: lookupError } = await supabase
+      .from("apparatus_check_requirements")
+      .select("id")
+      .eq("apparatus_id", apparatusId)
+      .eq("department_id", departmentId)
+      .maybeSingle();
+    if (lookupError) return { ok: false, error: lookupError.message || "Unable to load apparatus check frequency." };
+    const query = existingCheckRequirement?.id
+      ? supabase.from("apparatus_check_requirements").update(checkRequirementPayload)
+          .eq("id", existingCheckRequirement.id).eq("apparatus_id", apparatusId).eq("department_id", departmentId)
+      : supabase.from("apparatus_check_requirements").insert(checkRequirementPayload);
+    const { error } = await query;
+    if (error) return { ok: false, error: error.message || "Unable to save apparatus check frequency." };
   }
 
-  const checkRequirementPayload = {
-    department_id: departmentId,
-    apparatus_id: apparatusId,
-    score_profile: intervalDays === 1 ? "daily" : intervalDays >= 30 ? "monthly" : "daily",
-    interval_days: intervalDays,
-    is_active: true,
-    notes: null,
-  };
+  if (configuration.bayScheduleId !== undefined) {
+    const { error: bayAssignmentError } = await supabase
+    .from("apparatus")
+    .update({ bay_schedule_id: bayScheduleId })
+    .eq("id", apparatusId)
+    .eq("department_id", departmentId);
 
-  const { data: existingCheckRequirement, error: checkRequirementLookupError } = await supabase
-    .from("apparatus_check_requirements")
-    .select("id")
-    .eq("apparatus_id", apparatusId)
-    .eq("department_id", departmentId)
-    .maybeSingle();
-
-  if (checkRequirementLookupError) {
+  if (bayAssignmentError) {
     return {
       ok: false,
-      error: checkRequirementLookupError.message || "Unable to load apparatus check frequency.",
+      error: bayAssignmentError.message || "Unable to save bay assignment.",
     };
   }
-
-  const checkRequirementQuery = existingCheckRequirement?.id
-    ? supabase
-        .from("apparatus_check_requirements")
-        .update(checkRequirementPayload)
-        .eq("id", existingCheckRequirement.id)
-        .eq("apparatus_id", apparatusId)
-        .eq("department_id", departmentId)
-    : supabase.from("apparatus_check_requirements").insert(checkRequirementPayload);
-
-  const { error: checkRequirementError } = await checkRequirementQuery;
-
-  if (checkRequirementError) {
-    return {
-      ok: false,
-      error: checkRequirementError.message || "Unable to save apparatus check frequency.",
-    };
   }
 
   for (const requirement of configuration.maintenanceRequirements) {

@@ -1,9 +1,13 @@
 import { redirect } from "next/navigation";
 import MobileApparatusCheck from "@/components/mobile/MobileApparatusCheck";
 import { getApparatusById } from "@/lib/database";
+import { getApparatusImagePath } from "@/lib/apparatus-images";
+import { bayScheduleLabel as formatBayScheduleLabel } from "@/lib/apparatus-bay-schedules";
 import { getCurrentMember } from "@/lib/current-member";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import type { ApparatusChecklistResultStatus } from "@/lib/apparatus/checklist";
+import { applicableChecklistItems, canStartApparatusCheck, isRedOakDailyChecks } from "@/lib/apparatus/check-eligibility";
+import { isSaturday } from "@/lib/apparatus/daily-checks";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -20,6 +24,7 @@ type ChecklistRow = {
   item_label: string | null;
   is_required: boolean;
   display_order: number | null;
+  required_quantity: string | null;
 };
 
 type MemberRow = {
@@ -38,8 +43,23 @@ export default async function MobileApparatusCheckPage({ params }: PageProps) {
   }
 
   const apparatus = await getApparatusById(id, supabase);
-  if (!apparatus || apparatus.department_id !== currentMember.departmentId) {
+  if (!apparatus || !canStartApparatusCheck(apparatus, currentMember.departmentId)) {
     redirect("/mobile/apparatus-checks");
+  }
+
+  let bayScheduleLabel: string | null = null;
+  const apparatusBayScheduleId = typeof apparatus.bay_schedule_id === "string" ? apparatus.bay_schedule_id : null;
+  if (apparatusBayScheduleId) {
+    const { data: bayRow } = await supabase
+      .from("department_bay_schedules")
+      .select("bay_label, check_weekday")
+      .eq("id", apparatusBayScheduleId)
+      .eq("department_id", currentMember.departmentId)
+      .maybeSingle();
+
+    if (typeof bayRow?.bay_label === "string" && typeof bayRow?.check_weekday === "number") {
+      bayScheduleLabel = formatBayScheduleLabel({ bayLabel: bayRow.bay_label, checkWeekday: bayRow.check_weekday });
+    }
   }
 
   const dayStart = new Date();
@@ -88,7 +108,7 @@ export default async function MobileApparatusCheckPage({ params }: PageProps) {
 
   const [{ data: setting }, { data: itemRows }, { data: progressRows }, { data: categoryRows }, { data: priorityRows }, { data: statusRows }] = await Promise.all([
     supabase.from("apparatus_inspection_settings").select("require_checklist").eq("department_id", currentMember.departmentId).maybeSingle(),
-    supabase.from("apparatus_inspection_checklist_items").select("id, section_name, item_label, is_required, display_order").eq("department_id", currentMember.departmentId).eq("apparatus_id", id).eq("is_active", true).order("display_order", { ascending: true }),
+    supabase.from("apparatus_inspection_checklist_items").select("id, section_name, item_label, is_required, display_order, required_quantity").eq("department_id", currentMember.departmentId).eq("apparatus_id", id).eq("is_active", true).order("display_order", { ascending: true }),
     supabase.from("apparatus_inspection_checklist_progress").select("checklist_item_id, status").eq("department_id", currentMember.departmentId).eq("apparatus_id", id).eq("member_id", currentMember.id),
     supabase.from("deficiency_categories").select("id, name").order("display_order", { ascending: true }),
     supabase.from("deficiency_priorities").select("id, name").order("display_order", { ascending: true }),
@@ -110,6 +130,7 @@ export default async function MobileApparatusCheckPage({ params }: PageProps) {
     itemLabel: row.item_label?.trim() || "Inspection item",
     isRequired: row.is_required === true,
     displayOrder: row.display_order ?? 0,
+    requiredQuantity: row.required_quantity,
   }));
   const initialProgress = ((progressRows ?? []) as Array<{ checklist_item_id: string; status: ApparatusChecklistResultStatus }>).map((row) => ({
     checklistItemId: row.checklist_item_id,
@@ -128,6 +149,13 @@ export default async function MobileApparatusCheckPage({ params }: PageProps) {
   const helperParticipants = departmentMembers.filter((row) => helperIds.has(row.member_id)).map(toParticipant);
   const availableHelpers = departmentMembers.filter((row) => row.member_id !== currentMember.id && !helperIds.has(row.member_id)).map(toParticipant);
 
+  const isDailyChecksAssignment = isRedOakDailyChecks(apparatus, currentMember.departmentId);
+  const checklistInstructions =
+    typeof apparatus.checklist_instructions === "string" && apparatus.checklist_instructions.trim()
+      ? apparatus.checklist_instructions.trim()
+      : null;
+  const bannerImageUrl = isDailyChecksAssignment ? getApparatusImagePath(apparatus, currentMember.departmentId) : null;
+
   return (
     <MobileApparatusCheck
       apparatusId={id}
@@ -142,7 +170,7 @@ export default async function MobileApparatusCheckPage({ params }: PageProps) {
           ? apparatus.checklist_required_override
           : setting?.require_checklist === true
       }
-      checklistItems={checklistItems}
+      checklistItems={applicableChecklistItems(checklistItems, isDailyChecksAssignment)}
       initialProgress={initialProgress}
       categories={options(categoryRows as OptionRow[] | null)}
       priorities={options(priorityRows as OptionRow[] | null)}
@@ -151,6 +179,11 @@ export default async function MobileApparatusCheckPage({ params }: PageProps) {
       helperParticipants={helperParticipants}
       availableHelpers={availableHelpers}
       memberLookupError={departmentMemberError?.message ?? null}
+      bayScheduleLabel={bayScheduleLabel}
+      specialMode={isDailyChecksAssignment}
+      initialSaturday={isSaturday()}
+      checklistInstructions={checklistInstructions}
+      bannerImageUrl={bannerImageUrl}
     />
   );
 }

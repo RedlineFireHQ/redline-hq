@@ -9,6 +9,7 @@ import { getCurrentMember } from "@/lib/current-member";
 import { canManageApparatus } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import Link from "next/link";
+import { canStartApparatusCheck } from "@/lib/apparatus/check-eligibility";
 
 type ApparatusStatus = "Ready" | "Checks Due" | "Out of Service" | "Configuration Required";
 
@@ -21,6 +22,7 @@ type ApparatusUnit = {
   openDeficiencies: number;
   readiness: string;
   imageUrl: string | null;
+  canStartCheck: boolean;
 };
 
 function normalizeStatusValue(value: unknown): "ready" | "needs_attention" | "out_of_service" | null {
@@ -71,7 +73,9 @@ export default async function ApparatusPage() {
         .maybeSingle()
     : { data: null };
 
-  const apparatusData = await getApparatus(supabase);
+  const apparatusData = (await getApparatus(supabase)).filter(
+    (unit) => unit.department_id === currentMember?.departmentId,
+  );
   const apparatusIds = apparatusData.map((unit) => String(unit.id));
   const openDeficiencyCountByApparatusId = await getOpenDeficiencyCountsByApparatusIds(apparatusIds);
   const readinessRows = await getApparatusReadinessList(currentMember?.departmentId ?? null, supabase);
@@ -112,13 +116,14 @@ export default async function ApparatusPage() {
         ? "NOT SCORED"
         : `${Math.round(readiness.scorePercent)}%`,
       imageUrl: getApparatusImagePath(unit, currentMember?.departmentId),
+      canStartCheck: canStartApparatusCheck(unit, currentMember?.departmentId),
     };
   });
 
   const totalApparatus = apparatusUnits.length;
   const readyCount = apparatusUnits.filter((unit) => unit.status === "Ready").length;
   const checksDueCount = apparatusUnits.filter(
-    (unit) => unit.status === "Checks Due"
+    (unit) => unit.canStartCheck && unit.status === "Checks Due"
   ).length;
   const outOfServiceCount = apparatusUnits.filter(
     (unit) => unit.status === "Out of Service"
@@ -156,6 +161,7 @@ export default async function ApparatusPage() {
           <div className="flex flex-col items-end gap-3">
             <div className="flex flex-wrap items-center justify-end gap-3">
               <AddApparatusButton
+                departmentId={currentMember?.departmentId ?? null}
                 canAdd={canAddApparatus}
                 departmentCheckDefaultIntervalDays={
                   typeof departmentCheckDefault.data?.interval_days === "number"
