@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { MEMBER_RANK_OPTIONS, type AppPermissionOption } from "@/lib/app-permissions";
+import type { AppPermissionOption } from "@/lib/app-permissions";
+import DepartmentRoleSelector, { type DepartmentRoleOption } from "@/components/personnel/DepartmentRoleSelector";
 import SpecialPermissionsManager from "@/components/personnel/SpecialPermissionsManager";
 
 type EditMemberButtonProps = {
@@ -11,7 +12,8 @@ type EditMemberButtonProps = {
   initialLastName: string;
   initialEmail: string;
   initialPhone: string;
-  initialRank: string;
+  initialDepartmentRoleId: string | null;
+  departmentRoles: DepartmentRoleOption[];
   initialActive: boolean;
   initialHireStartDate: string;
   initialInactiveDate: string;
@@ -25,7 +27,7 @@ type EditMemberFormState = {
   lastName: string;
   email: string;
   phone: string;
-  rank: string;
+  departmentRoleId: string;
   active: boolean;
   hireStartDate: string;
   inactiveDate: string;
@@ -39,7 +41,8 @@ export default function EditMemberButton({
   initialLastName,
   initialEmail,
   initialPhone,
-  initialRank,
+  initialDepartmentRoleId,
+  departmentRoles,
   initialActive,
   initialHireStartDate,
   initialInactiveDate,
@@ -56,7 +59,7 @@ export default function EditMemberButton({
     lastName: initialLastName,
     email: initialEmail,
     phone: initialPhone,
-    rank: initialRank,
+    departmentRoleId: initialDepartmentRoleId ?? "",
     active: initialActive,
     hireStartDate: initialHireStartDate,
     inactiveDate: initialInactiveDate,
@@ -114,7 +117,22 @@ export default function EditMemberButton({
     <>
       <button
         type="button"
-        onClick={() => setIsOpen(true)}
+        onClick={() => {
+          setFormState({
+            firstName: initialFirstName,
+            lastName: initialLastName,
+            email: initialEmail,
+            phone: initialPhone,
+            departmentRoleId: initialDepartmentRoleId ?? "",
+            active: initialActive,
+            hireStartDate: initialHireStartDate,
+            inactiveDate: initialInactiveDate,
+            specialPermissionsEnabled: initialSpecialPermissionsEnabled,
+            permissionKeys: initialPermissionKeys,
+          });
+          setErrorMessage(null);
+          setIsOpen(true);
+        }}
         className="rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-100 hover:border-red-400 hover:bg-red-500/20"
       >
         Edit Member
@@ -125,7 +143,7 @@ export default function EditMemberButton({
           <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-neutral-700 bg-neutral-900 p-6">
             <div className="mb-4">
               <h2 className="text-2xl font-bold text-white">Edit Member</h2>
-              <p className="mt-1 text-sm text-neutral-400">Update contact details, rank, active status, and special permissions.</p>
+              <p className="mt-1 text-sm text-neutral-400">Update contact details, Department Role, active status, and special permissions.</p>
             </div>
 
             <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
@@ -169,19 +187,13 @@ export default function EditMemberButton({
                   />
                 </label>
 
-                <label className="text-sm text-neutral-300">
-                  Legacy rank (optional)
-                  <select
-                    value={formState.rank}
-                    onChange={(event) => setFormState((current) => ({ ...current, rank: event.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-white"
-                  >
-                    <option value="">Unassigned</option>
-                    {MEMBER_RANK_OPTIONS.map((rank) => (
-                      <option key={rank} value={rank}>{rank}</option>
-                    ))}
-                  </select>
-                </label>
+                <DepartmentRoleSelector
+                  selectedRoleId={formState.departmentRoleId}
+                  assignedRoleId={initialDepartmentRoleId}
+                  departmentRoles={departmentRoles}
+                  onChange={(departmentRoleId) => setFormState((current) => ({ ...current, departmentRoleId }))}
+                  disabled={isSaving}
+                />
 
                 <label className="text-sm text-neutral-300">
                   Hire / Start Date

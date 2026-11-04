@@ -9,6 +9,8 @@ type CreateMemberPayload = {
   email?: unknown;
   phone?: unknown;
   rank?: unknown;
+  departmentRoleId?: unknown;
+  requestId?: unknown;
   active?: unknown;
   hireStartDate?: unknown;
   inactiveDate?: unknown;
@@ -55,7 +57,7 @@ export async function POST(request: Request) {
   try {
     const payload = (await request.json()) as CreateMemberPayload;
     const supabase = await createSupabaseServerClient();
-    const currentMember = await getCurrentMember(supabase);
+    const currentMember = await getCurrentMember(supabase, { requireActiveDepartmentMatch: true });
 
     if (!currentMember?.departmentId) {
       return jsonResponse({ ok: false, error: "Unauthorized" }, 401);
@@ -75,7 +77,18 @@ export async function POST(request: Request) {
     const lastName = normalizeOptionalString(payload.lastName);
     const email = normalizeOptionalString(payload.email);
     const phone = normalizeOptionalString(payload.phone);
+    const requestId = normalizeOptionalString(payload.requestId);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId)) {
+      return jsonResponse({ ok: false, error: "Unable to identify this submission. Reopen Add Member." }, 400);
+    }
     const rank = parseOptionalMemberRank(payload.rank);
+    if (payload.departmentRoleId !== null && typeof payload.departmentRoleId !== "string") {
+      return jsonResponse({ ok: false, error: "Department Role selection is required; use Unassigned explicitly when appropriate." }, 400);
+    }
+    const departmentRoleId = normalizeOptionalString(payload.departmentRoleId) || null;
+    if (departmentRoleId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(departmentRoleId)) {
+      return jsonResponse({ ok: false, error: "Invalid Department Role." }, 400);
+    }
     const active = payload.active === false ? false : true;
     const hireStartDate = normalizeOptionalDate(payload.hireStartDate);
     const inactiveDate = normalizeOptionalDate(payload.inactiveDate);
@@ -118,7 +131,7 @@ export async function POST(request: Request) {
       return jsonResponse({ ok: false, error: "Exit / Inactive Date cannot be before Hire / Start Date." }, 400);
     }
 
-    const { data, error } = await supabase.rpc("create_department_member", {
+    const { data, error } = await supabase.rpc("create_department_member_with_role", {
       p_first_name: firstName,
       p_last_name: lastName,
       p_email: email || null,
@@ -129,17 +142,26 @@ export async function POST(request: Request) {
       p_permission_keys: permissionKeys,
       p_hire_start_date: hireStartDate,
       p_inactive_date: inactiveDate,
+      p_department_role_id: departmentRoleId,
+      p_department_id: currentMember.departmentId,
+      p_request_id: requestId,
     });
 
     if (error) {
       const message = error.message || "Unable to create member.";
-      const status = message.toLowerCase().startsWith("forbidden") ? 403 : 400;
+      if (!error.code || !/^[0-9A-Z]{5}$/.test(error.code)) {
+        return jsonResponse({ ok: false, error: `${message} The save outcome could not be confirmed. Review Personnel before retrying.` }, 502);
+      }
+      const status = error.code === "23505" ? 409 : message.toLowerCase().startsWith("forbidden") ? 403 : 400;
       return jsonResponse({ ok: false, error: message }, status);
     }
 
-    return jsonResponse({ ok: true, memberId: String(data) });
+    if (typeof data !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data)) {
+      return jsonResponse({ ok: false, error: "The save result could not be confirmed. Review Personnel before retrying." }, 502);
+    }
+    return jsonResponse({ ok: true, memberId: data });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to create member.";
-    return jsonResponse({ ok: false, error: message }, 400);
+    return jsonResponse({ ok: false, error: `${message} The save outcome could not be confirmed. Review Personnel before retrying.` }, 500);
   }
 }

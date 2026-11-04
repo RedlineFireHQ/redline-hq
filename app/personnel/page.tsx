@@ -21,7 +21,6 @@ type PersonnelMemberRow = {
   id: string;
   first_name: string | null;
   last_name: string | null;
-  rank: string | null;
   active: boolean | null;
   status: string | null;
   department_role_id: string | null;
@@ -60,11 +59,11 @@ export default async function PersonnelPage() {
 
   const { data, error } = await supabase
     .from("members")
-    .select("id, first_name, last_name, rank, active, status, department_role_id")
+    .select("id, first_name, last_name, active, status, department_role_id")
     .eq("department_id", currentMember.departmentId)
     .order("last_name", { ascending: true })
     .order("first_name", { ascending: true });
-  const [{ data: departmentRolesData }, { data: certificationTypesData }, { data: qualificationTypesData }, { data: memberCertificationsData }, { data: memberQualificationsData }, { data: roleRequiredCertificationsData }, { data: roleRequiredQualificationsData }, { data: appPermissionsData, error: appPermissionsError }] = await Promise.all([
+  const [{ data: departmentRolesData, error: departmentRolesError }, { data: certificationTypesData }, { data: qualificationTypesData }, { data: memberCertificationsData }, { data: memberQualificationsData }, { data: roleRequiredCertificationsData }, { data: roleRequiredQualificationsData }, { data: appPermissionsData, error: appPermissionsError }] = await Promise.all([
     supabase
       .from("department_roles")
       .select("id, name, active")
@@ -103,6 +102,10 @@ export default async function PersonnelPage() {
 
   if (appPermissionsError) {
     throw new Error(appPermissionsError.message || "Unable to load app permissions.");
+  }
+
+  if (departmentRolesError) {
+    throw new Error(departmentRolesError.message || "Unable to load department roles.");
   }
 
   const permissionOptions: AppPermissionOption[] = (appPermissionsData ?? []).map((row) => ({
@@ -208,7 +211,6 @@ export default async function PersonnelPage() {
     id: String(row.id),
     first_name: typeof row.first_name === "string" ? row.first_name : null,
     last_name: typeof row.last_name === "string" ? row.last_name : null,
-    rank: typeof row.rank === "string" ? row.rank : null,
     active: typeof row.active === "boolean" ? row.active : null,
     status: typeof row.status === "string" ? row.status : null,
     department_role_id: typeof row.department_role_id === "string" ? row.department_role_id : null,

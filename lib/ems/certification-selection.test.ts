@@ -62,8 +62,15 @@ let Tracks: typeof import("@/components/personnel/PersonnelEmsTracksSection").de
 let originalLoad: (request: string, ...args: unknown[]) => unknown;
 const modules = Module as unknown as { _load: typeof originalLoad };
 const originalFetch = globalThis.fetch;
+const originalSessionStorage = Object.getOwnPropertyDescriptor(globalThis, "sessionStorage");
+const pendingStorage = new Map<string, string>();
 
 before(async () => {
+  Object.defineProperty(globalThis, "sessionStorage", { configurable: true, value: {
+    getItem: (key: string) => pendingStorage.get(key) ?? null,
+    setItem: (key: string, value: string) => { pendingStorage.set(key, value); },
+    removeItem: (key: string) => { pendingStorage.delete(key); },
+  } });
   originalLoad = modules._load;
   const stubs: Record<string, unknown> = {
     react: {
@@ -90,10 +97,13 @@ before(async () => {
   globalThis.fetch = memoryFetch;
 });
 after(() => {
+  if (originalSessionStorage) Object.defineProperty(globalThis, "sessionStorage", originalSessionStorage);
+  else Reflect.deleteProperty(globalThis, "sessionStorage");
   modules._load = originalLoad;
   globalThis.fetch = originalFetch;
 });
 beforeEach(() => {
+  pendingStorage.clear();
   for (const key of Object.keys(db)) delete db[key];
   state.length = 0;
   writes.length = 0;
@@ -383,7 +393,6 @@ test("the new-member wizard saves Iowa CCP metadata and the same CCP level in th
   // Configuration loads asynchronously after the modal opens.
   await new Promise((resolve) => setImmediate(resolve));
   await submit();
-  await click("Save Role & Continue");
   selectEms("iowa");
   changeLabel("Expiration Date", "2099-01-01");
   await submit();

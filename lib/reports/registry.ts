@@ -95,9 +95,9 @@ export const REPORT_SOURCES: ReportSourceConfig[] = [
 			},
 			{
 				key: "role_id",
-				label: "Department Position",
+				label: "Department Role",
 				type: "select",
-				options: [{ value: "all", label: "All Positions" }],
+				options: [{ value: "all", label: "All Department Roles" }],
 			},
 			{
 				key: "station",
@@ -114,8 +114,7 @@ export const REPORT_SOURCES: ReportSourceConfig[] = [
 		],
 		columns: [
 			{ key: "member_name", label: "Member" },
-			{ key: "role_name", label: "Department Position" },
-			{ key: "rank", label: "Legacy Rank" },
+			{ key: "role_name", label: "Department Role" },
 			{ key: "application_role", label: "Application Permission" },
 			{ key: "status", label: "Status" },
 			{ key: "email", label: "Email" },

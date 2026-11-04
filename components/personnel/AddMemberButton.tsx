@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MEMBER_RANK_OPTIONS, type AppPermissionOption } from "@/lib/app-permissions";
+import type { AppPermissionOption } from "@/lib/app-permissions";
+import DepartmentRoleSelector from "@/components/personnel/DepartmentRoleSelector";
 import SpecialPermissionsManager from "@/components/personnel/SpecialPermissionsManager";
 import {
   applyCredentialRequirementStatus,
@@ -23,7 +24,7 @@ import { assertEmsTrackLevelMatchesCredential, resolveCertificationCatalogEntry,
 import { buildCertificationTypeMetaById, resolveAuthoritativeEmsCertificationsForMember } from "@/lib/ems/authoritative-certifications";
 import { getEmsCertificationLevels } from "@/lib/ems/requirements";
 
-type WizardStep = "basic" | "role" | "credentials" | "ems" | "account" | "review";
+type WizardStep = "basic" | "credentials" | "ems" | "account" | "review";
 
 type AddMemberButtonProps = {
   permissionOptions: AppPermissionOption[];
@@ -36,13 +37,55 @@ type CreateMemberFormState = {
   lastName: string;
   email: string;
   phone: string;
-  rank: string;
   active: boolean;
   hireStartDate: string;
   inactiveDate: string;
   specialPermissionsEnabled: boolean;
   permissionKeys: string[];
 };
+
+type PendingMemberSubmission = {
+  requestId: string;
+  form: CreateMemberFormState;
+  departmentRoleId: string;
+};
+
+function readPendingSubmission(key: string): PendingMemberSubmission | null {
+  const saved = sessionStorage.getItem(key);
+  if (!saved) return null;
+  const value: unknown = JSON.parse(saved);
+  if (!value || typeof value !== "object" || !("requestId" in value) ||
+    typeof value.requestId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.requestId) ||
+    !("departmentRoleId" in value) || typeof value.departmentRoleId !== "string" ||
+    !("form" in value) || !value.form || typeof value.form !== "object") {
+    throw new Error("The pending Add Member submission cannot be restored. Do not start another submission until Personnel has been checked.");
+  }
+  const form = value.form;
+  if (!("firstName" in form) || typeof form.firstName !== "string" ||
+    !("lastName" in form) || typeof form.lastName !== "string" ||
+    !("email" in form) || typeof form.email !== "string" ||
+    !("phone" in form) || typeof form.phone !== "string" ||
+    !("hireStartDate" in form) || typeof form.hireStartDate !== "string" ||
+    !("inactiveDate" in form) || typeof form.inactiveDate !== "string") {
+    throw new Error("Invalid pending member information. Review Personnel before retrying.");
+  }
+  if (!("active" in form) || typeof form.active !== "boolean" ||
+    !("specialPermissionsEnabled" in form) || typeof form.specialPermissionsEnabled !== "boolean" ||
+    !("permissionKeys" in form) || !Array.isArray(form.permissionKeys) ||
+    !form.permissionKeys.every((key: unknown) => typeof key === "string")) {
+    throw new Error("Invalid pending member permissions. Review Personnel before retrying.");
+  }
+  return {
+    requestId: value.requestId, departmentRoleId: value.departmentRoleId,
+    form: {
+      firstName: form.firstName, lastName: form.lastName,
+      email: form.email, phone: form.phone,
+      hireStartDate: form.hireStartDate, inactiveDate: form.inactiveDate,
+      active: form.active, specialPermissionsEnabled: form.specialPermissionsEnabled,
+      permissionKeys: form.permissionKeys,
+    },
+  };
+}
 
 type DepartmentRoleRow = {
   id: string;
@@ -96,7 +139,6 @@ const initialState: CreateMemberFormState = {
   lastName: "",
   email: "",
   phone: "",
-  rank: "Firefighter",
   active: true,
   hireStartDate: "",
   inactiveDate: "",
@@ -164,23 +206,19 @@ function stepTitle(step: WizardStep) {
     return "1. Basic Member Information";
   }
 
-  if (step === "role") {
-    return "2. Department Role";
-  }
-
   if (step === "credentials") {
-    return "3. Credentials";
+    return "2. Credentials";
   }
 
   if (step === "ems") {
-    return "4. EMS Setup";
+    return "3. EMS Setup";
   }
 
   if (step === "account") {
-    return "5. Account Setup";
+    return "4. Account Setup";
   }
 
-  return "6. Review & Finish";
+  return "5. Review & Finish";
 }
 
 export default function AddMemberButton({
@@ -197,6 +235,7 @@ export default function AddMemberButton({
   const [configError, setConfigError] = useState<string | null>(null);
 
   const [createdMemberId, setCreatedMemberId] = useState<string | null>(null);
+  const [requestId, setRequestId] = useState<string | null>(null);
   const [accountLinked, setAccountLinked] = useState(false);
 
   const [formState, setFormState] = useState<CreateMemberFormState>(initialState);
@@ -304,6 +343,7 @@ export default function AddMemberButton({
   );
 
   const canCreateAccount = formState.email.trim().length > 0;
+  const pendingStorageKey = `redline:add-member:${departmentId}:${currentMemberId}`;
 
   function resetWizardState() {
     setIsSaving(false);
@@ -346,7 +386,7 @@ export default function AddMemberButton({
     }
   }
 
-  async function loadOnboardingConfig() {
+  async function loadOnboardingConfig(preserveSelectedRole = false) {
     if (!departmentId) {
       setConfigError("Department context is unavailable.");
       return;
@@ -474,7 +514,7 @@ export default function AddMemberButton({
 
     const firstActiveRole = sortRoles(roles).find((role) => role.active);
     if (firstActiveRole) {
-      setSelectedRoleId(firstActiveRole.id);
+      if (!preserveSelectedRole) setSelectedRoleId(firstActiveRole.id);
     }
 
     const firstActiveCredentialId = certifications.find((item) => item.active)?.id;
@@ -592,7 +632,18 @@ export default function AddMemberButton({
   function openModal() {
     resetWizardState();
     setIsOpen(true);
-    void loadOnboardingConfig();
+    try {
+      const pending = readPendingSubmission(pendingStorageKey);
+      setRequestId(pending?.requestId ?? crypto.randomUUID());
+      if (pending) {
+        setFormState(pending.form);
+        setSelectedRoleId(pending.departmentRoleId);
+      }
+      void loadOnboardingConfig(pending !== null);
+    } catch (error) {
+      setRequestId(null);
+      setConfigError(error instanceof Error ? error.message : "Unable to restore pending submission. Browser session storage is required.");
+    }
   }
 
   function togglePermission(permissionKey: string) {
@@ -610,15 +661,40 @@ export default function AddMemberButton({
   async function handleCreateMember(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage(null);
+    if (isLoadingConfig || configError) {
+      setErrorMessage(configError || "Wait for department roles to finish loading.");
+      return;
+    }
+    if (selectedRoleId && !departmentRoles.some((role) => role.id === selectedRoleId && role.active)) {
+      setErrorMessage("Select an active department role.");
+      return;
+    }
+    if (createdMemberId) {
+      setErrorMessage("This member has already been created. Continue onboarding or open the profile to change Department Role.");
+      return;
+    }
+    if (isSaving) return;
     setIsSaving(true);
 
     try {
+      if (!requestId) throw new Error("Unable to identify the pending submission. Reopen Add Member.");
+      const pending = readPendingSubmission(pendingStorageKey);
+      const submission: PendingMemberSubmission = { requestId, form: formState, departmentRoleId: selectedRoleId };
+      if (pending && (pending.requestId !== requestId || pending.departmentRoleId !== selectedRoleId ||
+        Object.keys(formState).some((key) => {
+          const field = key as keyof CreateMemberFormState;
+          return JSON.stringify(pending.form[field]) !== JSON.stringify(formState[field]);
+        }))) {
+        setErrorMessage("A pending submission already exists with different information. Close and reopen Add Member to restore it, then retry unchanged. No new request was sent.");
+        return;
+      }
+      sessionStorage.setItem(pendingStorageKey, JSON.stringify(submission));
       const response = await fetch("/api/personnel/members", {
         method: "POST",
         headers: {
           "content-type": "application/json",
         },
-        body: JSON.stringify(formState),
+        body: JSON.stringify({ ...formState, rank: null, departmentRoleId: selectedRoleId || null, requestId }),
       });
 
       const payload = (await response.json()) as CreateMemberResponse;
@@ -628,48 +704,10 @@ export default function AddMemberButton({
       }
 
       setCreatedMemberId(payload.memberId);
-      setActiveStep("role");
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Unable to add member.");
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  async function handleSaveRoleAndContinue() {
-    if (!createdMemberId) {
-      setErrorMessage("Create the member first.");
-      return;
-    }
-
-    setErrorMessage(null);
-
-    if (orderedRoles.length > 0 && !selectedRoleId) {
-      setErrorMessage("Select a department role before continuing.");
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      const { data, error } = await supabase.rpc("update_department_member_role", {
-        p_member_id: createdMemberId,
-        p_department_role_id: selectedRoleId || null,
-      });
-
-      if (error) {
-        setErrorMessage(error.message || "Unable to save department role.");
-        return;
-      }
-
-      const updatedMemberId = typeof data === "string" ? data : "";
-      if (!updatedMemberId || updatedMemberId !== createdMemberId) {
-        setErrorMessage("Department role update did not affect the new member.");
-        return;
-      }
-
       setActiveStep("credentials");
+      sessionStorage.removeItem(pendingStorageKey);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Unable to save department role.");
+      setErrorMessage(`The save outcome could not be confirmed: ${error instanceof Error ? error.message : "Unable to add member."} Review Personnel before retrying.`);
     } finally {
       setIsSaving(false);
     }
@@ -1002,23 +1040,12 @@ export default function AddMemberButton({
                     />
                   </label>
 
-                  <label className="text-sm text-neutral-300">
-                    Legacy rank (optional)
-                    <select
-                      value={formState.rank}
-                      onChange={(event) =>
-                        setFormState((current) => ({ ...current, rank: event.target.value }))
-                      }
-                      className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-white"
-                    >
-                      <option value="">Unassigned</option>
-                      {MEMBER_RANK_OPTIONS.map((rank) => (
-                        <option key={rank} value={rank}>
-                          {rank}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <DepartmentRoleSelector
+                    selectedRoleId={selectedRoleId}
+                    departmentRoles={departmentRoles}
+                    onChange={setSelectedRoleId}
+                    disabled={isSaving || isLoadingConfig || Boolean(configError)}
+                  />
 
                   <label className="text-sm text-neutral-300">
                     Hire / Start Date
@@ -1104,54 +1131,13 @@ export default function AddMemberButton({
                   </button>
                   <button
                     type="submit"
-                    disabled={isSaving}
+                    disabled={isSaving || isLoadingConfig || Boolean(configError)}
                     className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
                   >
-                    {isSaving ? "Saving..." : "Create Member & Continue"}
+                    {isSaving ? "Saving..." : "Add Member"}
                   </button>
                 </div>
               </form>
-            ) : null}
-
-            {activeStep === "role" ? (
-              <div className="space-y-4">
-                <p className="text-sm text-neutral-300">Assign this member&apos;s department role.</p>
-
-                <label className="block text-sm text-neutral-300">
-                  Department Role
-                  <select
-                    value={selectedRoleId}
-                    onChange={(event) => setSelectedRoleId(event.target.value)}
-                    className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-white"
-                  >
-                    <option value="">Unassigned</option>
-                    {orderedRoles.map((role) => (
-                      <option key={role.id} value={role.id}>
-                        {role.name}
-                        {role.active ? "" : " (Inactive)"}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <div className="flex justify-between gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setActiveStep("basic")}
-                    className="rounded-lg border border-neutral-700 px-4 py-2 text-sm text-neutral-200 hover:bg-neutral-800"
-                  >
-                    Back
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSaveRoleAndContinue}
-                    disabled={isSaving}
-                    className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60"
-                  >
-                    {isSaving ? "Saving..." : "Save Role & Continue"}
-                  </button>
-                </div>
-              </div>
             ) : null}
 
             {activeStep === "credentials" ? (
@@ -1407,10 +1393,10 @@ export default function AddMemberButton({
                 <div className="flex justify-between gap-3 pt-1">
                   <button
                     type="button"
-                    onClick={() => setActiveStep("role")}
+                    onClick={closeModal}
                     className="rounded-lg border border-neutral-700 px-4 py-2 text-sm text-neutral-200 hover:bg-neutral-800"
                   >
-                    Back
+                    Finish Later
                   </button>
                   <button
                     type="button"

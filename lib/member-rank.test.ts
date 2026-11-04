@@ -7,17 +7,17 @@ test("missing qualifications are not replaced with a fictional legacy rank", () 
   for (const value of [null, "", "  "]) assert.deepEqual(parseOptionalMemberRank(value), { ok: true, rank: null });
 });
 
-test("personnel report exposes separate position, legacy rank and application permission columns", () => {
+test("personnel report uses Department Role without a duplicate legacy rank column", () => {
   const source = getReportSourceConfig("personnel");
   assert.ok(source);
   for (const [key, label] of [
-    ["role_name", "Department Position"],
-    ["rank", "Legacy Rank"],
+    ["role_name", "Department Role"],
     ["application_role", "Application Permission"],
   ]) {
     assert.equal(source.columns.find((column) => column.key === key)?.label, label);
   }
-  assert.equal(source.filters.find((filter) => filter.key === "role_id")?.label, "Department Position");
+  assert.ok(!source.columns.some((column) => column.key === "rank"));
+  assert.equal(source.filters.find((filter) => filter.key === "role_id")?.label, "Department Role");
 });
 
 test("legacy rank validates separately from department positions and application permissions", () => {

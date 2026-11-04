@@ -5035,7 +5035,7 @@ async function runPersonnelReport(
 	const [membersQuery, rolesQuery] = await Promise.all([
 		context.supabase
 			.from("members")
-			.select("id, department_id, first_name, last_name, email, phone, rank, role, status, active, station, shift, department_role_id, created_at")
+			.select("id, department_id, first_name, last_name, email, phone, role, status, active, station, shift, department_role_id, created_at")
 			.eq("department_id", context.departmentId)
 			.order("last_name", { ascending: true })
 			.order("first_name", { ascending: true }),
@@ -5043,7 +5043,6 @@ async function runPersonnelReport(
 			.from("department_roles")
 			.select("id, name")
 			.eq("department_id", context.departmentId)
-			.eq("active", true)
 			.order("name", { ascending: true }),
 	]);
 
@@ -5064,7 +5063,6 @@ async function runPersonnelReport(
 		last_name: string | null;
 		email: string | null;
 		phone: string | null;
-		rank: string | null;
 		role: string | null;
 		status: string | null;
 		active: boolean | null;
@@ -5097,7 +5095,6 @@ async function runPersonnelReport(
 			normalizeText(member.first_name),
 			normalizeText(member.last_name),
 			normalizeText(member.email),
-			normalizeText(member.rank),
 			roleValue,
 			normalizeText(member.role),
 			normalizeText(member.station),
@@ -5123,7 +5120,6 @@ async function runPersonnelReport(
 			member_name: `${normalizeText(member.first_name)} ${normalizeText(member.last_name)}`.trim() || member.id,
 			role_name: departmentRoleName,
 			application_role: normalizeText(member.role) || "Unassigned",
-			rank: normalizeText(member.rank) || "-",
 			status: normalizeText(member.status) || (member.active === true ? "Active" : "Inactive"),
 			email: normalizeText(member.email) || "-",
 			phone: normalizeText(member.phone) || "-",

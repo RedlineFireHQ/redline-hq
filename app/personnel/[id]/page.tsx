@@ -1,5 +1,4 @@
 import PageLayout from "@/components/layout/PageLayout";
-import DepartmentRoleSelector from "@/components/personnel/DepartmentRoleSelector";
 import EditMemberButton from "@/components/personnel/EditMemberButton";
 import MemberReadinessCard from "@/components/personnel/MemberReadinessCard";
 import PersonnelEmsTracksSection from "@/components/personnel/PersonnelEmsTracksSection";
@@ -334,7 +333,7 @@ export default async function PersonnelProfilePage({
 
   const { data: member, error } = await supabase
     .from("members")
-    .select("id, first_name, last_name, rank, email, phone, active, hire_start_date, inactive_date, special_permissions_enabled, department_role_id, auth_user_id, created_at")
+    .select("id, first_name, last_name, email, phone, active, hire_start_date, inactive_date, special_permissions_enabled, department_role_id, auth_user_id, created_at")
     .eq("department_id", currentMember.departmentId)
     .eq("id", id)
     .maybeSingle();
@@ -350,7 +349,6 @@ export default async function PersonnelProfilePage({
   const firstName = typeof member.first_name === "string" ? member.first_name.trim() : "";
   const lastName = typeof member.last_name === "string" ? member.last_name.trim() : "";
   const fullName = `${firstName} ${lastName}`.trim() || "Unknown Member";
-  const rank = typeof member.rank === "string" && member.rank.trim() ? member.rank.trim() : "Unassigned";
   const email = typeof member.email === "string" && member.email.trim() ? member.email.trim() : "-";
   const phone = typeof member.phone === "string" && member.phone.trim() ? member.phone.trim() : "-";
   const hasAuthAccount = typeof member.auth_user_id === "string" && member.auth_user_id.length > 0;
@@ -1060,7 +1058,8 @@ export default async function PersonnelProfilePage({
                   initialLastName={lastName}
                   initialEmail={email === "-" ? "" : email}
                   initialPhone={phone === "-" ? "" : phone}
-                  initialRank={rank === "Unassigned" ? "" : rank}
+                  initialDepartmentRoleId={memberDepartmentRoleId}
+                  departmentRoles={departmentRoles}
                   initialActive={memberActive}
                   initialHireStartDate={hireStartDate ?? ""}
                   initialInactiveDate={inactiveDate ?? ""}
@@ -1076,13 +1075,6 @@ export default async function PersonnelProfilePage({
                 />
               </div>
 
-              <DepartmentRoleSelector
-                departmentId={currentMember.departmentId}
-                memberId={String(member.id)}
-                currentMemberId={currentMember.id}
-                selectedRoleId={typeof member.department_role_id === "string" ? member.department_role_id : null}
-                departmentRoles={departmentRoles}
-              />
             </>
           ) : null}
         </div>

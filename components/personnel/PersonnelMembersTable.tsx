@@ -7,7 +7,6 @@ type PersonnelMemberRow = {
   id: string;
   first_name: string | null;
   last_name: string | null;
-  rank: string | null;
   active: boolean | null;
   department_role_name: string | null;
   role_requirement_label: string;
@@ -48,14 +47,12 @@ export default function PersonnelMembersTable({
       const firstName = member.first_name?.trim().toLowerCase() ?? "";
       const lastName = member.last_name?.trim().toLowerCase() ?? "";
       const fullName = `${firstName} ${lastName}`.trim();
-      const rank = member.rank?.trim().toLowerCase() ?? "";
       const departmentRole = member.department_role_name?.trim().toLowerCase() ?? "";
 
       return (
         firstName.includes(query) ||
         lastName.includes(query) ||
         fullName.includes(query) ||
-        rank.includes(query) ||
         departmentRole.includes(query)
       );
     });
@@ -98,7 +95,6 @@ export default function PersonnelMembersTable({
           <thead className="sticky top-0 z-10 border-b border-neutral-800 bg-neutral-950">
             <tr>
               <th className="px-6 py-4 text-left">Name</th>
-              <th className="px-6 py-4 text-left">Rank</th>
               <th className="px-6 py-4 text-left">Department Role</th>
               <th className="px-6 py-4 text-left">Role Requirements</th>
               <th className="px-6 py-4 text-left">Status</th>
@@ -108,7 +104,7 @@ export default function PersonnelMembersTable({
           <tbody>
             {filteredMembers.length === 0 ? (
               <tr>
-                <td className="px-6 py-8 text-center text-neutral-400" colSpan={5}>
+                <td className="px-6 py-8 text-center text-neutral-400" colSpan={4}>
                   No firefighters found matching your search.
                 </td>
               </tr>
@@ -123,8 +119,6 @@ export default function PersonnelMembersTable({
                       {`${member.first_name?.trim() ?? ""} ${member.last_name?.trim() ?? ""}`.trim() || "Unknown Member"}
                     </Link>
                   </td>
-
-                  <td className="px-6 py-4">{member.rank?.trim() || "Unassigned"}</td>
 
                   <td className="px-6 py-4">{member.department_role_name?.trim() || "No role"}</td>
 

@@ -7,7 +7,80 @@ Settings, not legacy rank or application permissions. Members without a
 resolvable Department Role display "Unassigned". Role names are loaded within
 the authenticated department; inactive assigned roles retain their names.
 
-Test with `node --import tsx 'app/personnel/[id]/page.test.tsx'`.
+The personnel list, personnel roster report, and their search use Department
+Role instead of legacy rank; there is no Rank column. Add and Edit use the
+same configured Department Role selector.
+New members leave legacy rank blank; editing without a legacy rank value
+preserves the stored legacy field. Application permissions remain separate.
+Existing inactive assignments can be retained, but new selections must be active.
+
+Add Member calls `create_department_member_with_role` once through the creation
+API. The wrapper runs the existing creation and role assignment functions inside
+one transaction, verifies the saved assignment, and propagates failures so the
+member and any new permission rows roll back together. It requires the local
+`20261104210000_create_department_member_with_role.sql` migration before release.
+This migration adds functions, two nullable member metadata columns, and a
+partial unique index; it does not alter existing assignments or populate
+existing members' request metadata.
+The API supplies `p_department_id` from authenticated active-department context,
+never from request-body department data. A new department-scoped membership
+resolver validates the caller's active membership using `auth.uid()` (or the
+existing email fallback), and existing `can_manage_personnel` checks still apply.
+The migration creates explicit-department overloads of the installed create,
+update-details, and update-role RPCs by cloning their secured logic with only
+the resolver call changed. Drift checks fail closed. Original overloads remain
+unchanged for compatibility. Add and Edit use the explicit-context overloads;
+no transaction-wide session-context override or permission expansion is used.
+Personnel Add/Edit opt into strict active-cookie membership matching: an invalid
+or stale selected department is rejected rather than falling back to another
+membership. Other existing `getCurrentMember` callers retain their behavior.
+Apply this migration before releasing the new API and confirm PostgREST has
+refreshed its function cache. Do not deploy only the API.
+
+Each Add Member draft receives a hidden UUID when opened. Before sending the
+creation request, its UUID and exact basic-information/Department Role payload
+are saved in browser session storage scoped to department and current member.
+Closing/reopening the form or refreshing the same tab restores that pending
+submission. Only a server-confirmed success clears it. A new submission after
+confirmation receives a new UUID. Changing pending information blocks submission
+and instructs the administrator to reopen the original draft; it never silently
+rotates the UUID. Unavailable or malformed storage blocks creation explicitly.
+Session storage is tab-local and ends when the browser session/tab is closed;
+this does not provide cross-tab or browser-restart recovery. Unsubmitted drafts
+are not stored. No UUID is displayed, and no Auth credentials are stored.
+
+The wrapper locks by department/request UUID and stores
+`members.onboarding_request_id` plus `onboarding_request_fingerprint` in the
+same atomic transaction. The fingerprint is SHA-256 over normalized creation
+inputs, selected Department Role, permission keys, and authenticated requester.
+A repeated identical request returns the original member ID without any writes;
+changed information or a different requester is rejected without modifying
+the member. The unique index scopes UUIDs to each department; metadata for
+legacy personnel stays NULL. No names or emails are used for duplicate rejection
+or merging. Separate requests allow same-name people and shared personnel emails;
+Auth email rules remain unchanged. Hard-deleting the member also removes its
+request metadata; independent legacy creation RPCs do not use this protection.
+
+Edit continues using the existing separate member-details and role RPCs and
+reports explicitly if details saved but the role save failed.
+
+Test with `node --import tsx lib/personnel-role-workflow.test.tsx` and
+`node --import tsx 'app/personnel/[id]/page.test.tsx'`.
+For real transaction verification, cache `postgres:17` with `docker pull
+postgres:17`, then run `node --import tsx --test
+lib/personnel-member-atomic.database.test.ts`. This test creates a temporary
+Docker database without network access or mounted customer data, loads the real
+member creation/assignment migrations with synthetic identity fixtures, and
+checks forced-failure rollback, permissions cleanup, later role changes,
+readiness, and concurrent retries. It now loads real membership/permission
+functions, with synthetic JWT claim helpers rather than a simplified member
+resolver, and verifies both active departments with selected and Unassigned
+roles, multi-department Edit, inactive/unauthorized rejection, and delegated
+personnel-management permission. It removes its container afterward.
+
+The Personnel roster report loads all roles in the current department, including
+inactive assigned roles. This changes display/search only, not assignments or
+requirements; genuinely unassigned members still display Unassigned.
 
 ## Pediatric Bag and Drug Box inspection reports
 

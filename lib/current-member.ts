@@ -29,7 +29,8 @@ function normalizeRole(value: unknown): CurrentMemberRole {
 }
 
 export async function getCurrentMember(
-  existingClient?: Awaited<ReturnType<typeof createSupabaseServerClient>>
+  existingClient?: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  options: { requireActiveDepartmentMatch?: boolean } = {},
 ): Promise<CurrentMember | null> {
   const supabase = existingClient ?? (await createSupabaseServerClient());
   const cookieStore = await cookies();
@@ -72,6 +73,14 @@ export async function getCurrentMember(
   }
 
   if (error || rows.length === 0) {
+    return null;
+  }
+
+  if (
+    options.requireActiveDepartmentMatch &&
+    activeDepartmentId &&
+    !rows.some((row) => row.department_id === activeDepartmentId)
+  ) {
     return null;
   }
 
