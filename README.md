@@ -1,5 +1,14 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Personnel profile headings
+
+Personnel profile subtitles display the member's assigned Department Role from
+Settings, not legacy rank or application permissions. Members without a
+resolvable Department Role display "Unassigned". Role names are loaded within
+the authenticated department; inactive assigned roles retain their names.
+
+Test with `node --import tsx 'app/personnel/[id]/page.test.tsx'`.
+
 ## Pediatric Bag and Drug Box inspection reports
 
 Reports > Inspections includes Pediatric Bag Inspections and Drug Box

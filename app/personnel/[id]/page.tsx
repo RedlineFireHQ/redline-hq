@@ -1010,7 +1010,7 @@ export default async function PersonnelProfilePage({
         </h1>
 
         <p className="mt-2 text-2xl text-neutral-400">
-          {rank}
+          {memberDepartmentRoleId ? departmentRoleById.get(memberDepartmentRoleId) ?? "Unassigned" : "Unassigned"}
         </p>
       </div>
 
