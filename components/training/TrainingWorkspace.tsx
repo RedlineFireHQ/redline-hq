@@ -8,10 +8,15 @@ import { CalendarDays, Clock3, MapPin, Plus, UserRound } from "lucide-react";
 import { EMS_CORE_TOPICS, type EmsCoreTopicCode } from "@/lib/ems/requirements";
 import { triggerEmsAllocationRecalculation, triggerEmsAllocationRecalculationForMembers } from "@/lib/ems/recalculate-client";
 import { supabase } from "@/lib/supabase";
+import {
+  isTrainingRecoveryId, readTrainingRecovery, trainingRecoveryKey, trainingEventInsert, writeTrainingRecovery,
+  type TrainingSaveRecovery,
+} from "@/lib/training/save-recovery";
 import SubmitTrainingModal from "@/components/training/SubmitTrainingModal";
 import type { SelfReportedTraining } from "@/components/training/TrainingDepartmentOverview";
 
 type CurrentMemberRole = "firefighter" | "officer" | "administrator";
+type PendingTrainingAttempt = TrainingSaveRecovery & { scopeKey: string };
 
 type TrainingCategoryRow = {
   id: string;
@@ -503,6 +508,11 @@ export default function TrainingWorkspace({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isHomeworkModalOpen, setIsHomeworkModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const trainingSaveInFlight = useRef(false);
+  const activeRecoveryKey = useRef<string | null>(null);
+  const [pendingTrainingEvent, setPendingTrainingEvent] = useState<PendingTrainingAttempt | null>(null);
+  const [recoveryScope, setRecoveryScope] = useState<{ key: string; departmentId: string; memberId: string } | null>(null);
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const [isSavingHomework, setIsSavingHomework] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [homeworkSaveError, setHomeworkSaveError] = useState<string | null>(null);
@@ -574,6 +584,89 @@ export default function TrainingWorkspace({
   const [formState, setFormState] = useState<TrainingEventFormState>(
     emptyFormState(activeCategories[0]?.id ?? ""),
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    let loadedUserId: string | null = null;
+    let originalUserId: string | null = null;
+    let authRevision = 0;
+    activeRecoveryKey.current = null;
+    function restore(userId: string | null) {
+      if (cancelled || (userId && userId === loadedUserId)) return;
+      loadedUserId = userId;
+      activeRecoveryKey.current = null;
+      setRecoveryScope(null);
+      setPendingTrainingEvent(null);
+      setSelectedMemberIds(new Set());
+      setIsModalOpen(false);
+      setSaveError(null);
+      setSuccessMessage(null);
+      try {
+        if (!userId) throw new Error("Sign in before creating or recovering a training event.");
+        if (originalUserId && userId !== originalUserId) {
+          throw new Error("The signed-in user changed. Reload this page to load that user's department membership.");
+        }
+        originalUserId = userId;
+        const key = trainingRecoveryKey(userId, departmentId, currentMemberId);
+        const recovery = readTrainingRecovery(window.sessionStorage, key);
+        activeRecoveryKey.current = key;
+        setRecoveryScope({ key, departmentId, memberId: currentMemberId });
+        setRecoveryError(null);
+        if (recovery) {
+          setPendingTrainingEvent({ ...recovery, scopeKey: key });
+          setSelectedMemberIds(new Set(recovery.memberIds));
+          if (recovery.draft) {
+            const draft = recovery.draft.event;
+            const starts = new Date(draft.starts_at);
+            const pad = (value: number) => String(value).padStart(2, "0");
+            setFormState({
+              title: draft.title,
+              categoryId: draft.category_id,
+              emsCoreTopic: draft.ems_core_topic ?? "other",
+              emsCourseDefinitionId: draft.ems_course_definition_id ?? "",
+              emsNeedsReview: draft.ems_needs_review,
+              emsProviderName: draft.ems_provider_name ?? "",
+              trainingMethod: draft.training_type?.split(TRAINING_METHOD_DELIMITER) ?? [],
+              date: `${starts.getFullYear()}-${pad(starts.getMonth() + 1)}-${pad(starts.getDate())}`,
+              startTime: `${pad(starts.getHours())}${pad(starts.getMinutes())}`,
+              hoursCredit: String(draft.hours_credit),
+              instructorName: draft.instructor_name ?? "",
+              location: draft.location ?? "",
+              details: draft.description ?? "",
+            });
+          }
+          setSaveError("Pending training save recovered. Retry Attendance will check the original event before saving attendance.");
+          setIsModalOpen(true);
+        }
+      } catch (error) {
+        setRecoveryError(error instanceof Error ? error.message : "Unable to load training save recovery.");
+      }
+    }
+    if (!canManageTraining) return;
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+      authRevision++;
+      restore(session?.user.id ?? null);
+    });
+    const initialRevision = authRevision;
+    void supabase.auth.getUser().then(({ data, error }) => {
+      if (authRevision !== initialRevision) return;
+      if (error) throw new Error(error.message);
+      restore(data.user?.id ?? null);
+    }).catch((error: unknown) => {
+      if (!cancelled && authRevision === initialRevision) {
+        activeRecoveryKey.current = null;
+        setRecoveryScope(null);
+        setRecoveryError(error instanceof Error ? error.message : "Unable to verify training recovery identity.");
+      }
+    });
+    return () => {
+      cancelled = true;
+      activeRecoveryKey.current = null;
+      subscription.subscription.unsubscribe();
+    };
+  }, [departmentId, currentMemberId, canManageTraining]);
+
+  const recoveryReady = recoveryScope?.departmentId === departmentId && recoveryScope.memberId === currentMemberId;
 
   const membersTrainedCount = useMemo(() => {
     const memberIds = new Set(
@@ -811,7 +904,12 @@ export default function TrainingWorkspace({
   }, [completedTogetherCandidates, completedTogetherMemberSearch]);
 
   const openModal = useCallback(() => {
-    if (!canManageTraining) {
+    if (!canManageTraining || !recoveryReady) {
+      return;
+    }
+
+    if (pendingTrainingEvent) {
+      setIsModalOpen(true);
       return;
     }
 
@@ -821,7 +919,7 @@ export default function TrainingWorkspace({
     setMemberSearch("");
     setSelectedMemberIds(new Set());
     setIsModalOpen(true);
-  }, [activeCategories, canManageTraining]);
+  }, [activeCategories, canManageTraining, pendingTrainingEvent, recoveryReady]);
 
   useEffect(() => {
     function handleOpenAddTrainingEvent() {
@@ -836,7 +934,7 @@ export default function TrainingWorkspace({
   }, [openModal]);
 
   useEffect(() => {
-    if (searchParams.get("addTrainingEvent") !== "1") {
+    if (!recoveryReady || searchParams.get("addTrainingEvent") !== "1") {
       return;
     }
 
@@ -844,10 +942,10 @@ export default function TrainingWorkspace({
       openModal();
       router.replace("/training");
     });
-  }, [openModal, router, searchParams]);
+  }, [openModal, router, searchParams, recoveryReady]);
 
   useEffect(() => {
-    if (searchParams.get("submitTraining") !== "1") {
+    if ((canManageTraining && !recoveryReady) || searchParams.get("submitTraining") !== "1") {
       return;
     }
 
@@ -859,7 +957,7 @@ export default function TrainingWorkspace({
       }
       router.replace("/training");
     });
-  }, [canManageTraining, openModal, router, searchParams]);
+  }, [canManageTraining, openModal, router, searchParams, recoveryReady]);
 
   function closeModal() {
     if (isSaving) {
@@ -867,7 +965,9 @@ export default function TrainingWorkspace({
     }
 
     setIsModalOpen(false);
-    setSaveError(null);
+    if (!pendingTrainingEvent) {
+      setSaveError(null);
+    }
   }
 
   function toggleMemberSelection(memberId: string) {
@@ -2116,8 +2216,173 @@ export default function TrainingWorkspace({
     }
   }
 
+  async function verifyTrainingRecoveryScope() {
+    const { data, error } = await supabase.auth.getUser();
+    if (error || !data.user) throw new Error(error?.message || "Sign in before saving training.");
+    const key = trainingRecoveryKey(data.user.id, departmentId, currentMemberId);
+    if (!recoveryReady || key !== recoveryScope?.key || key !== activeRecoveryKey.current) {
+      throw new Error("The signed-in user or department changed. Reload this page before saving training.");
+    }
+    return key;
+  }
+
+  async function saveAndVerifyTrainingAttendance(attempt: PendingTrainingAttempt) {
+    const key = await verifyTrainingRecoveryScope();
+    if (attempt.scopeKey !== key) throw new Error("This pending event belongs to another user or department.");
+    const recovery = readTrainingRecovery(window.sessionStorage, key);
+    if (!recovery || recovery.eventId !== attempt.eventId ||
+      recovery.memberIds.length !== attempt.memberIds.length ||
+      recovery.memberIds.some((id, index) => id !== attempt.memberIds[index]) ||
+      JSON.stringify(recovery.draft) !== JSON.stringify(attempt.draft)) {
+      throw new Error("Pending training recovery changed. Reload the page before retrying.");
+    }
+
+    async function lookupOriginalEvent() {
+      const { data, error } = await supabase
+        .from("training_events")
+        .select("id, department_id, created_by")
+        .eq("id", attempt.eventId)
+        .maybeSingle();
+      if (error) throw new Error(`Unable to verify the original event: ${error.message}`);
+      if (data && (data.id !== attempt.eventId ||
+        data.department_id !== departmentId || data.created_by !== currentMemberId)) {
+        throw new Error("The original event does not match this department and creator. No event or attendance changes were made.");
+      }
+      return data;
+    }
+    let savedEvent = await lookupOriginalEvent();
+
+    if (attempt.memberIds.length > 0) {
+      const { data: validMembers, error: membersError } = await supabase
+        .from("members")
+        .select("id")
+        .eq("department_id", departmentId)
+        .eq("active", true)
+        .in("id", attempt.memberIds);
+      if (membersError) throw new Error(`Unable to validate selected attendees: ${membersError.message}`);
+      const validIds = new Set((validMembers ?? []).map(member => member.id));
+      const invalidIds = attempt.memberIds.filter(id => !validIds.has(id));
+      if (invalidIds.length > 0) {
+        throw new Error(`Selected attendees are no longer active members of this department: ${invalidIds.join(", ")}.`);
+      }
+    }
+
+    if (!savedEvent) {
+      const payload = trainingEventInsert(recovery);
+      const { data: category, error: categoryError } = await supabase
+        .from("training_categories")
+        .select("id, active")
+        .eq("department_id", departmentId)
+        .eq("id", payload.category_id)
+        .maybeSingle();
+      if (categoryError) throw new Error(`Unable to validate the recovered category: ${categoryError.message}`);
+      if (!category || category.active !== true) throw new Error("The recovered event category is no longer active. Recovery was retained.");
+      await verifyTrainingRecoveryScope();
+      const latest = readTrainingRecovery(window.sessionStorage, key);
+      if (JSON.stringify(latest) !== JSON.stringify(recovery)) {
+        throw new Error("Pending training recovery changed before event creation. Reload before retrying.");
+      }
+
+      // INSERT only: an invisible or concurrently committed row with this UUID
+      // must cause a primary-key conflict, never an update or a replacement ID.
+      const { error: insertError } = await supabase.from("training_events").insert(payload);
+      if (insertError && insertError.code !== "23505") {
+        throw new Error(`Original event creation is still unconfirmed: ${insertError.message}`);
+      }
+      savedEvent = await lookupOriginalEvent();
+      if (!savedEvent) {
+        throw new Error("The original event still cannot be verified. Recovery was retained; no replacement UUID will be used.");
+      }
+    }
+
+    if (attempt.memberIds.length > 0) {
+      const attendancePayload = attempt.memberIds.map((memberId) => ({
+        department_id: departmentId,
+        training_event_id: attempt.eventId,
+        member_id: memberId,
+        attendance_status: "attending",
+        completion_status: "not_completed",
+        recorded_by: currentMemberId,
+      }));
+      await verifyTrainingRecoveryScope();
+      const { error: attendanceInsertError } = await supabase
+        .from("training_event_attendance")
+        .upsert(attendancePayload, {
+          onConflict: "department_id,training_event_id,member_id",
+          ignoreDuplicates: true,
+        });
+      if (attendanceInsertError) throw new Error(attendanceInsertError.message);
+
+      const { data: savedAttendance, error: attendanceReadError } = await supabase
+        .from("training_event_attendance")
+        .select("member_id, attendance_status")
+        .eq("department_id", departmentId)
+        .eq("training_event_id", attempt.eventId)
+        .in("member_id", attempt.memberIds);
+      if (attendanceReadError) throw new Error(`Unable to verify saved attendance: ${attendanceReadError.message}`);
+      if (!savedAttendance) throw new Error("Unable to verify saved attendance: no attendance response was returned.");
+      const recordedMemberIds = new Set(savedAttendance
+        .filter(row => row.attendance_status === "attending")
+        .map(row => row.member_id));
+      const missingIds = attempt.memberIds.filter(id => !recordedMemberIds.has(id));
+      if (missingIds.length > 0) {
+        const names = missingIds.map(id => departmentMembers.find(member => member.id === id)?.full_name || id);
+        throw new Error(`Attendance was not verified as attending for: ${names.join(", ")}.`);
+      }
+    }
+
+    // Keep recovery until both attendance verification and identity verification succeed.
+    await verifyTrainingRecoveryScope();
+    const latestRecovery = readTrainingRecovery(window.sessionStorage, key);
+    if (!latestRecovery || latestRecovery.eventId !== attempt.eventId ||
+      latestRecovery.memberIds.length !== attempt.memberIds.length ||
+      latestRecovery.memberIds.some((id, index) => id !== attempt.memberIds[index]) ||
+      JSON.stringify(latestRecovery.draft) !== JSON.stringify(attempt.draft)) {
+      throw new Error("Pending training recovery changed before cleanup. Reload this page to reconcile it.");
+    }
+    window.sessionStorage.removeItem(key);
+    setPendingTrainingEvent(null);
+    setIsModalOpen(false);
+    setMemberSearch("");
+    setSelectedMemberIds(new Set());
+    setSuccessMessage(attempt.memberIds.length > 0 ? "Training event and attendance saved." : "Training event saved. No attendees selected.");
+    await triggerEmsAllocationRecalculationForMembers(attempt.memberIds);
+    router.refresh();
+  }
+
   async function handleCreateTraining(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (trainingSaveInFlight.current) {
+      return;
+    }
+
+    const intendedMemberIds = pendingTrainingEvent?.memberIds ?? Array.from(selectedMemberIds);
+    const validDepartmentMemberIds = new Set(departmentMembers.map((member) => member.id));
+    const unavailableMemberIds = intendedMemberIds.filter((memberId) => !validDepartmentMemberIds.has(memberId));
+    if (!intendedMemberIds.every(isTrainingRecoveryId)) {
+      setSaveError("Selected attendee IDs are invalid. No training or attendance changes were made.");
+      return;
+    }
+    if (unavailableMemberIds.length > 0) {
+      setSaveError(`${pendingTrainingEvent ? "The original training save is still unresolved. " : ""}Selected attendees are missing from the loaded department roster: ${unavailableMemberIds.join(", ")}. No attendees were discarded. Refresh the roster before retrying.`);
+      return;
+    }
+
+    if (pendingTrainingEvent) {
+      trainingSaveInFlight.current = true;
+      setIsSaving(true);
+      setSaveError(null);
+      try {
+        await saveAndVerifyTrainingAttendance(pendingTrainingEvent);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unable to recover training attendance.";
+        setSaveError(`Training attendance is not confirmed. ${message} Retry Attendance uses only the original event ID.`);
+      } finally {
+        trainingSaveInFlight.current = false;
+        setIsSaving(false);
+      }
+      return;
+    }
 
     const title = formState.title.trim();
     const trainingMethod = formState.trainingMethod.join(TRAINING_METHOD_DELIMITER);
@@ -2178,9 +2443,17 @@ export default function TrainingWorkspace({
       isEmsTraining && (formState.emsNeedsReview || formState.emsCoreTopic === "other");
 
     setIsSaving(true);
+    trainingSaveInFlight.current = true;
     setSaveError(null);
+    setSuccessMessage(null);
 
+    let pendingAttempt: PendingTrainingAttempt | null = null;
+    let eventSaved = false;
     try {
+      const scopeKey = await verifyTrainingRecoveryScope();
+      if (readTrainingRecovery(window.sessionStorage, scopeKey)) {
+        throw new Error("A pending training save already exists. Reload this page to recover it before creating another event.");
+      }
       const { data: categoryRow, error: categoryError } = await supabase
         .from("training_categories")
         .select("id, active")
@@ -2190,79 +2463,65 @@ export default function TrainingWorkspace({
 
       if (categoryError) {
         setSaveError(categoryError.message || "Unable to validate selected training category.");
-        setIsSaving(false);
         return;
       }
 
       if (!categoryRow || categoryRow.active !== true) {
         setSaveError("Selected category is unavailable. Choose an active training category.");
-        setIsSaving(false);
         return;
       }
 
+      await verifyTrainingRecoveryScope();
+      const eventId = crypto.randomUUID();
+      const attempt: PendingTrainingAttempt = {
+        eventId, memberIds: intendedMemberIds, scopeKey,
+        draft: {
+          scopeKey,
+          eventId,
+          event: {
+            department_id: departmentId,
+            created_by: currentMemberId,
+            title,
+            category_id: formState.categoryId,
+            starts_at: startsAt,
+            hours_credit: hoursCredit,
+            training_type: trainingMethod || null,
+            is_ems_training: isEmsTraining,
+            ems_core_topic: emsCoreTopic,
+            ems_course_definition_id: emsCourseDefinitionId,
+            ems_needs_review: emsNeedsReview,
+            ems_provider_name: emsProviderName || instructorName || null,
+            description: details || null,
+            location: location || null,
+            instructor_name: instructorName || null,
+          },
+        },
+      };
+      writeTrainingRecovery(window.sessionStorage, scopeKey, {
+        eventId: attempt.eventId, memberIds: attempt.memberIds, draft: attempt.draft,
+      });
+      const validatedAttempt = readTrainingRecovery(window.sessionStorage, scopeKey);
+      if (!validatedAttempt || validatedAttempt.eventId !== attempt.eventId ||
+        JSON.stringify(validatedAttempt.memberIds) !== JSON.stringify(attempt.memberIds) ||
+        JSON.stringify(validatedAttempt.draft) !== JSON.stringify(attempt.draft)) {
+        throw new Error("Unable to verify persisted training recovery. No event was created.");
+      }
+      pendingAttempt = attempt;
+      setPendingTrainingEvent(pendingAttempt);
+
       const { data, error } = await supabase
         .from("training_events")
-        .insert({
-          department_id: departmentId,
-          title,
-          category_id: formState.categoryId,
-          topic: isEmsTraining ? emsCoreTopic : null,
-          training_type: trainingMethod || null,
-          is_ems_training: isEmsTraining,
-          ems_core_topic: emsCoreTopic,
-          ems_course_definition_id: emsCourseDefinitionId,
-          ems_needs_review: emsNeedsReview,
-          ems_provider_name: emsProviderName || instructorName || null,
-          description: details || null,
-          location: location || null,
-          instructor_name: instructorName || null,
-          starts_at: startsAt,
-          ends_at: null,
-          duration_minutes: null,
-          hours_credit: hoursCredit,
-          status: "scheduled",
-          supporting_document_id: null,
-          created_by: currentMemberId,
-          updated_by: currentMemberId,
-        })
+        .insert(trainingEventInsert(validatedAttempt))
         .select(
           "id, title, category_id, topic, training_type, is_ems_training, ems_core_topic, ems_course_definition_id, ems_needs_review, ems_provider_name, description, location, instructor_name, starts_at, ends_at, duration_minutes, hours_credit, status, supporting_document_id, created_at, updated_at",
         )
         .single();
 
       if (error || !data) {
-        setSaveError(error?.message || "Unable to create training event.");
-        setIsSaving(false);
-        return;
+        throw new Error(error?.message || "No event creation response was received.");
       }
-
-      const selectedIds = Array.from(selectedMemberIds);
-      if (selectedIds.length > 0) {
-        const validDepartmentMemberIds = new Set(departmentMembers.map((member) => member.id));
-        const uniqueValidIds = Array.from(new Set(selectedIds)).filter((memberId) => validDepartmentMemberIds.has(memberId));
-
-        if (uniqueValidIds.length > 0) {
-          const attendancePayload = uniqueValidIds.map((memberId) => ({
-            department_id: departmentId,
-            training_event_id: String(data.id),
-            member_id: memberId,
-            attendance_status: "attending",
-            completion_status: "not_completed",
-            recorded_by: currentMemberId,
-          }));
-
-          const { error: attendanceInsertError } = await supabase
-            .from("training_event_attendance")
-            .upsert(attendancePayload, {
-              onConflict: "department_id,training_event_id,member_id",
-              ignoreDuplicates: true,
-            });
-
-          if (attendanceInsertError) {
-            setSaveError(`Training event saved, but attendance could not be recorded: ${attendanceInsertError.message}`);
-          }
-        }
-      }
+      if (data.id !== pendingAttempt.eventId) throw new Error("The event creation response did not match the original event ID.");
+      eventSaved = true;
 
       const inserted: TrainingEventRow = {
         id: String(data.id),
@@ -2295,17 +2554,16 @@ export default function TrainingWorkspace({
         updated_at: typeof data.updated_at === "string" ? data.updated_at : new Date().toISOString(),
       };
 
-      setEventRows((current) => [inserted, ...current]);
-      setIsModalOpen(false);
-      setMemberSearch("");
-      setSelectedMemberIds(new Set());
-      setSuccessMessage("Training event saved.");
-      await triggerEmsAllocationRecalculationForMembers(Array.from(selectedMemberIds));
-      router.refresh();
+      setEventRows((current) => current.some((row) => row.id === inserted.id) ? current : [inserted, ...current]);
+      await saveAndVerifyTrainingAttendance(pendingAttempt);
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "Unable to create training event.");
+      const message = error instanceof Error ? error.message : "An unexpected training save error occurred.";
+      setSaveError(pendingAttempt
+        ? `${eventSaved ? "Training event saved, but attendance is not confirmed." : "Training event creation is unconfirmed."} ${message} Retry Attendance checks only the original event ID; it will not create another.`
+        : message);
     } finally {
       setIsSaving(false);
+      trainingSaveInFlight.current = false;
     }
   }
 
@@ -2697,7 +2955,7 @@ export default function TrainingWorkspace({
           <button
             type="button"
             onClick={openModal}
-            disabled={!canManageTraining || activeCategories.length === 0}
+            disabled={!canManageTraining || !recoveryReady || (!pendingTrainingEvent && activeCategories.length === 0)}
             className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-500/50 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-100 transition hover:border-red-400 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.04] disabled:text-neutral-400"
           >
             <Plus className="h-4 w-4" />
@@ -2709,6 +2967,11 @@ export default function TrainingWorkspace({
       {successMessage ? (
         <div className="rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-200">
           {successMessage}
+        </div>
+      ) : null}
+      {recoveryError ? (
+        <div role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          Training recovery is unavailable: {recoveryError} No new event will be created. Reload after resolving this issue.
         </div>
       ) : null}
 
@@ -3519,7 +3782,7 @@ export default function TrainingWorkspace({
         </div>
       ) : null}
 
-      {isModalOpen && typeof document !== "undefined"
+      {isModalOpen && recoveryReady && canManageTraining && typeof document !== "undefined"
         ? createPortal(
             <div
               className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/75 px-4 py-6 backdrop-blur-sm"
@@ -3545,12 +3808,20 @@ export default function TrainingWorkspace({
                 <form onSubmit={handleCreateTraining} className="flex min-h-0 flex-1 flex-col">
                   <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-6 py-6">
                     {saveError ? (
-                      <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                      <div role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
                         {saveError}
                       </div>
                     ) : null}
+                    {pendingTrainingEvent ? (
+                      <p className="text-sm text-amber-200">
+                        Original event ID: {pendingTrainingEvent.eventId}. Retry Attendance first verifies this event, then
+                        saves and checks the original attendee selection. If absent, it retries event creation from the saved
+                        draft using the same UUID, never a replacement ID. The draft and recovery IDs are retained for this
+                        signed-in user and department in this browser tab across refreshes.
+                      </p>
+                    ) : null}
 
-                    <div className="grid gap-5 md:grid-cols-2">
+                    <fieldset disabled={isSaving || pendingTrainingEvent !== null} className="grid min-w-0 gap-5 md:grid-cols-2">
                     <label className="block md:col-span-2">
                       <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Training Title *</span>
                       <input
@@ -3796,7 +4067,7 @@ export default function TrainingWorkspace({
                     )}
                   </div>
                   </div>
-                </div>
+                </fieldset>
 
                 </div>
 
@@ -3806,14 +4077,14 @@ export default function TrainingWorkspace({
                         onClick={closeModal}
                         className="rounded-xl border border-white/10 bg-[#151515] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1d1d1d]"
                       >
-                        Cancel
+                        {pendingTrainingEvent ? "Close (attendance pending)" : "Cancel"}
                       </button>
                       <button
                         type="submit"
-                        disabled={isSaving || activeCategories.length === 0}
+                        disabled={isSaving || !recoveryReady || (!pendingTrainingEvent && activeCategories.length === 0)}
                         className="rounded-xl border border-red-500/50 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-100 transition hover:border-red-400 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.04] disabled:text-neutral-400"
                       >
-                        {isSaving ? "Saving..." : "Save Training Event"}
+                        {isSaving ? "Saving..." : pendingTrainingEvent ? "Retry Attendance" : "Save Training Event"}
                       </button>
                     </div>
                 </form>

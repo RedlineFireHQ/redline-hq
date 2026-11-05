@@ -1,5 +1,42 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Desktop training attendance saves
+
+Creating a department training event and recording attendance are separate
+requests. The form only confirms attendance after reading back every selected
+member as attending in the same department and event. Missing roster selections
+are reported rather than silently removed.
+
+Before event creation, the browser assigns the event's UUID and stores that
+ID, the selected member IDs, and the original event draft in session storage, keyed by authenticated user,
+department, and member. Storage failure blocks event creation. Recovery survives
+refresh and navigation in the same tab, not closing the tab or clearing browser
+storage. The draft contains only the event creation fields (including title,
+date/time, hours, and any entered instructor, location, or description), not
+roster names, credentials, or unrelated data. It is validated against the stored
+UUID and authenticated scope before use.
+
+Retry Attendance verifies the original UUID, department, creator, and active
+attendees before inserting and verifying attendance. Duplicate attendance inserts
+are ignored without overwriting existing attendance or completion data. The
+recovery entry is removed only after successful verification. Fields and
+selections remain locked while saving or pending recovery.
+
+A lost event-creation response never causes recovery to use a replacement UUID.
+Retry first looks up the exact original UUID and checks department and creator.
+If the lookup succeeds with no visible row and the saved draft, active category,
+and attendees validate, retry may INSERT the original draft with the same UUID.
+The existing primary key prevents a duplicate if an earlier request commits
+concurrently or the row is hidden by RLS. A primary-key conflict triggers another
+lookup, never an update. Lookup errors, scope mismatches, failed inserts, or
+unverifiable results preserve recovery and prevent attendance success.
+Older ID-only attempts can still recover existing events but require administrator
+reconciliation if absent. No identity is inferred from title or date. No
+database migration is needed. This is
+same-tab recovery, not cross-device or server-side request idempotency.
+
+Focused coverage: `node --import tsx --test components/training/TrainingWorkspace.test.tsx`.
+
 ## Personnel profile headings
 
 Personnel profile subtitles display the member's assigned Department Role from
