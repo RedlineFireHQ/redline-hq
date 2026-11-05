@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Camera, Search } from "lucide-react";
 import type { QrResolvedObject } from "@/lib/qr-identifiers";
+import { usesAndroidCanvasScanner } from "@/lib/mobile/android-qr-scanner";
+import { useAndroidQrScanner } from "./useAndroidQrScanner";
 
 type Props = {
   onResolved: (result: QrResolvedObject) => void;
@@ -13,8 +15,32 @@ export default function MobileQrScanner({ onResolved, onFallback }: Props) {
   const scannerRef = useRef<{ stop: () => Promise<void>; clear: () => void } | null>(null);
   const [status, setStatus] = useState("Requesting camera access...");
   const [error, setError] = useState<string | null>(null);
+  const androidScanner = useAndroidQrScanner({
+    readerId: "mobile-qr-reader",
+    onReady: () => { setError(null); setStatus("Align the QR code inside the frame."); },
+    onError: (cause, phase) => {
+      setError(phase === "camera"
+        ? `Camera unavailable. ${cause instanceof Error ? cause.message : "Allow camera access, then tap Restart camera."}`
+        : phase === "cleanup" ? "Camera could not close cleanly. Close this screen before trying again." : "QR code could not be resolved.");
+      setStatus(phase === "lookup" ? "Ready to scan again." : "Camera unavailable");
+    },
+    resolve: async (decodedText, signal) => {
+      setStatus("Code found. Loading field action...");
+      const response = await fetch(`/api/mobile/qr/resolve?value=${encodeURIComponent(decodedText)}`, { cache: "no-store", signal });
+      const payload = await response.json() as { ok?: boolean; result?: QrResolvedObject; error?: string };
+      if (signal.aborted) return null;
+      if (!response.ok || !payload.ok || !payload.result) {
+        setError(payload.error || "QR code not recognized.");
+        setStatus("Ready to scan again.");
+        return null;
+      }
+      const result = payload.result;
+      return () => onResolved(result);
+    },
+  });
 
   useEffect(() => {
+    if (usesAndroidCanvasScanner()) return;
     let active = true;
     let scanner: import("html5-qrcode").Html5Qrcode | null = null;
     const startScanner = async () => {
@@ -60,5 +86,5 @@ export default function MobileQrScanner({ onResolved, onFallback }: Props) {
     };
   }, [onResolved]);
 
-  return <main className="min-h-screen overflow-x-hidden bg-[#080808] px-4 py-5 text-white sm:px-6"><div className="mx-auto max-w-2xl space-y-4 pb-5"><button type="button" onClick={onFallback} className="inline-flex min-h-11 items-center gap-2 text-sm font-bold text-white/60"><ArrowLeft className="h-4 w-4" />Back to Field Actions</button><header><p className="text-[10px] font-black uppercase tracking-[0.2em] text-red-300">Field Tool</p><h1 className="mt-2 text-3xl font-black">Scan</h1><p className="mt-2 text-sm leading-6 text-white/55">Scan a supply or apparatus QR to open its field workflow.</p></header>{error ? <div className="rounded-2xl border border-amber-400/25 bg-amber-500/10 p-4 text-sm font-bold text-amber-100">{error}</div> : null}<section className="rounded-[24px] border border-white/12 bg-[#121212] p-4"><div className="relative overflow-hidden rounded-[20px] border border-red-400/30 bg-black"><div id="mobile-qr-reader" className="min-h-[290px] w-full" /><div className="pointer-events-none absolute inset-[12%] rounded-2xl border-2 border-red-400/70 shadow-[0_0_0_999px_rgba(0,0,0,0.38)]" /></div><div className="mt-4 flex items-center gap-3 text-sm text-white/60"><Camera className="h-5 w-5 shrink-0 text-red-300" /><span>{status}</span></div></section><button type="button" onClick={onFallback} className="flex min-h-13 w-full items-center justify-center gap-2 rounded-2xl border border-white/12 bg-[#151515] px-4 text-sm font-black uppercase tracking-[0.1em] text-white"><Search className="h-4 w-4" />Back to Field Actions</button></div></main>;
+  return <main className="min-h-screen overflow-x-hidden bg-[#080808] px-4 py-5 text-white sm:px-6"><div className="mx-auto max-w-2xl space-y-4 pb-5"><button type="button" onClick={onFallback} className="inline-flex min-h-11 items-center gap-2 text-sm font-bold text-white/60"><ArrowLeft className="h-4 w-4" />Back to Field Actions</button><header><p className="text-[10px] font-black uppercase tracking-[0.2em] text-red-300">Field Tool</p><h1 className="mt-2 text-3xl font-black">Scan</h1><p className="mt-2 text-sm leading-6 text-white/55">Scan a supply or apparatus QR to open its field workflow.</p></header>{error ? <div className="rounded-2xl border border-amber-400/25 bg-amber-500/10 p-4 text-sm font-bold text-amber-100">{error}{androidScanner.android ? <button type="button" onClick={androidScanner.retry} className="mt-3 block min-h-11 rounded-xl border border-amber-400/40 px-4">Restart camera</button> : null}</div> : null}<section className="rounded-[24px] border border-white/12 bg-[#121212] p-4"><div className="relative overflow-hidden rounded-[20px] border border-red-400/30 bg-black"><div id="mobile-qr-reader" className="min-h-[290px] w-full" /><div className="pointer-events-none absolute inset-[12%] rounded-2xl border-2 border-red-400/70 shadow-[0_0_0_999px_rgba(0,0,0,0.38)]" /></div><div className="mt-4 flex items-center gap-3 text-sm text-white/60"><Camera className="h-5 w-5 shrink-0 text-red-300" /><span>{status}</span></div></section><button type="button" onClick={onFallback} className="flex min-h-13 w-full items-center justify-center gap-2 rounded-2xl border border-white/12 bg-[#151515] px-4 text-sm font-black uppercase tracking-[0.1em] text-white"><Search className="h-4 w-4" />Back to Field Actions</button></div></main>;
 }
