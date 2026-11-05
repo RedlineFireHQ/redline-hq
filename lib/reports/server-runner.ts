@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createCertificationResolver, certificationDisplayName, type CertificationDetailsRelation } from "@/lib/credentials/canonical-certifications";
 import { department } from "@/lib/department";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import {
@@ -157,6 +158,7 @@ type TrainingRecord = {
 };
 
 type MemberCertificationRow = {
+  member_certification_details?: CertificationDetailsRelation;
 	id: string;
 	member_id: string;
 	certification_id: string;
@@ -170,6 +172,8 @@ type MemberCertificationRow = {
 };
 
 type CertificationCatalogRow = {
+  canonical_certification_id?: string | null;
+  department_id?: string;
 	id: string;
 	name: string;
 	active: boolean | null;
@@ -1066,7 +1070,7 @@ async function runCertificationReport(
 
 	const certificationQuery = await context.supabase
 		.from("member_certifications")
-		.select("id, member_id, certification_id, certificate_number, issued_at, expires_at, supporting_document_id, notes, created_at, updated_at")
+		.select("id, member_id, certification_id, certificate_number, issued_at, expires_at, supporting_document_id, notes, created_at, updated_at, member_certification_details(edition_details, source_reference)")
 		.eq("department_id", context.departmentId)
 		.order("issued_at", { ascending: false });
 
@@ -1097,9 +1101,8 @@ async function runCertificationReport(
 		certificationIds.length > 0
 			? context.supabase
 					.from("certifications")
-					.select("id, name, active, description")
+					.select("id, name, active, description, canonical_certification_id, department_id")
 					.eq("department_id", context.departmentId)
-					.in("id", certificationIds)
 			: Promise.resolve({ data: [] as unknown[], error: null }),
 		documentIds.length > 0
 			? context.supabase
@@ -1126,6 +1129,7 @@ async function runCertificationReport(
 			{ name: normalizeText(row.name) || "Unknown Certification", description: normalizeText(row.description) },
 		]),
 	);
+	const resolveCertification = createCertificationResolver((certificationsQuery.data ?? []) as CertificationCatalogRow[]);
 	const documentById = new Map(
 		((documentsQuery.data ?? []) as DocumentLookupRow[]).map((row) => [
 			row.id,
@@ -1142,7 +1146,7 @@ async function runCertificationReport(
 			const daysUntilExpiration = getDaysUntilExpiration(row.expires_at);
 			const memberName = memberNameById.get(row.member_id) ?? row.member_id;
 			const certificationInfo = certificationById.get(row.certification_id);
-			const certificationName = certificationInfo?.name ?? "Unknown Certification";
+			const certificationName = certificationDisplayName(certificationInfo?.name ?? "Unknown Certification", row.member_certification_details);
 			const supportingDocument = row.supporting_document_id ? documentById.get(row.supporting_document_id) : null;
 
 			return {
@@ -1162,7 +1166,8 @@ async function runCertificationReport(
 				return false;
 			}
 
-			if (certificationFilter && certificationFilter !== "all" && item.row.certification_id !== certificationFilter) {
+			if (certificationFilter && certificationFilter !== "all" &&
+				resolveCertification(item.row.certification_id) !== resolveCertification(certificationFilter)) {
 				return false;
 			}
 
@@ -1799,7 +1804,7 @@ async function runEmsReport(
 				.eq("department_id", context.departmentId),
 			context.supabase
 				.from("certifications")
-				.select("id, ems_authority, ems_certification_level")
+				.select("id, ems_authority, ems_certification_level, canonical_certification_id, department_id")
 				.eq("department_id", context.departmentId),
 		]);
 
@@ -2258,7 +2263,7 @@ async function runEmsReport(
 			.lt("transaction.occurred_at", toExclusiveIso),
 		context.supabase
 			.from("member_certifications")
-			.select("id, member_id, certification_id, certificate_number, issued_at, expires_at, notes")
+			.select("id, member_id, certification_id, certificate_number, issued_at, expires_at, notes, member_certification_details(edition_details, source_reference)")
 			.eq("department_id", context.departmentId)
 			.order("issued_at", { ascending: false }),
 		context.supabase
@@ -2312,7 +2317,7 @@ async function runEmsReport(
 	const certificationCatalogQuery = certificationIds.length > 0
 		? await context.supabase
 				.from("certifications")
-				.select("id, name, description")
+				.select("id, name, description, canonical_certification_id, department_id")
 				.eq("department_id", context.departmentId)
 				.in("id", certificationIds)
 		: { data: [] as Array<{ id: string; name: string | null; description: string | null }>, error: null };
@@ -2474,14 +2479,15 @@ async function runEmsReport(
 		}
 	}
 
-	for (const row of (certificationQuery.data ?? []) as Array<{ id: string; member_id: string; certification_id: string; certificate_number: string | null; issued_at: string | null; expires_at: string | null; notes: string | null }>) {
+	for (const row of (certificationQuery.data ?? []) as Array<{ id: string; member_id: string; certification_id: string; certificate_number: string | null; issued_at: string | null; expires_at: string | null; notes: string | null; member_certification_details?: CertificationDetailsRelation }>) {
 		if (!includeCertifications) {
 			continue;
 		}
-		const certificationName = certificationNameById.get(row.certification_id) || "Unknown Certification";
-		if (!isEmsLikeValue(certificationName)) {
+		const catalogName = certificationNameById.get(row.certification_id) || "Unknown Certification";
+		if (!isEmsLikeValue(catalogName)) {
 			continue;
 		}
+		const certificationName = certificationDisplayName(catalogName, row.member_certification_details);
 		const certStatus = getCertificationStatus(row.expires_at, warningDays);
 		if (certificationStatusFilter && certificationStatusFilter !== "all" && certStatus !== certificationStatusFilter.replace("expiring", "expiring_soon")) {
 			continue;
@@ -2489,12 +2495,12 @@ async function runEmsReport(
 		if (memberFilter && memberFilter !== "all" && row.member_id !== memberFilter) {
 			continue;
 		}
-		if (!searchTerm || [memberNameById.get(row.member_id) ?? row.member_id, certificationName, row.certificate_number, row.notes].some((value) => normalizeText(value).toLowerCase().includes(searchTerm))) {
+		if (!searchTerm || [memberNameById.get(row.member_id) ?? row.member_id, catalogName, row.certificate_number, row.notes].some((value) => normalizeText(value).toLowerCase().includes(searchTerm))) {
 			rows.push({
 				record_type: "Certification",
 				member_name: memberNameById.get(row.member_id) ?? row.member_id,
 				item_name: certificationName,
-				category_name: certificationName,
+				category_name: catalogName,
 				status: mapCertificationStatusLabel(certStatus),
 				date: formatDateOnlyLabel(row.issued_at ?? row.expires_at ?? null),
 				location: "-",

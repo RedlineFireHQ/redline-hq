@@ -16,6 +16,8 @@ import { hasDepartmentPermission } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 type CertificationTypeRow = {
+  canonical_certification_id?: string | null;
+  department_id?: string;
   id: string;
   name: string;
   description: string | null;
@@ -108,7 +110,7 @@ export default async function SettingsPage() {
   ] = await Promise.all([
     supabase
       .from("certifications")
-      .select("id, name, description, active, ems_authority, ems_certification_level, created_at, updated_at")
+      .select("id, name, description, active, ems_authority, ems_certification_level, created_at, updated_at, canonical_certification_id, department_id")
       .eq("department_id", currentMember.departmentId)
       .order("name", { ascending: true }),
     supabase
@@ -276,19 +278,20 @@ export default async function SettingsPage() {
   }));
 
   const certificationTypes: CertificationTypeRow[] = (certificationData ?? []).map((row) => ({
+    canonical_certification_id: typeof row.canonical_certification_id === "string" ? row.canonical_certification_id : null,
+    department_id: currentMember.departmentId ?? undefined,
     id: String(row.id),
     name: typeof row.name === "string" ? row.name : "",
     description: typeof row.description === "string" ? row.description : null,
     active: typeof row.active === "boolean" ? row.active : true,
     ems_authority: row.ems_authority === "iowa" || row.ems_authority === "nremt" ? row.ems_authority : null,
-    ems_certification_level:
-      row.ems_certification_level === "emr" ||
+    ems_certification_level: row.ems_certification_level === "emr" ||
       row.ems_certification_level === "emt" ||
       row.ems_certification_level === "aemt" ||
       row.ems_certification_level === "paramedic" ||
       row.ems_certification_level === "ccp"
-        ? row.ems_certification_level
-        : null,
+      ? row.ems_certification_level
+      : null,
     created_at: typeof row.created_at === "string" ? row.created_at : new Date().toISOString(),
     updated_at: typeof row.updated_at === "string" ? row.updated_at : new Date().toISOString(),
   }));

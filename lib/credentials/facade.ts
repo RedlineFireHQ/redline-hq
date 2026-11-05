@@ -1,3 +1,5 @@
+import { createCertificationResolver } from "@/lib/credentials/canonical-certifications";
+
 export type CredentialSourceType = "certification" | "qualification";
 
 export type CredentialRequirementStatus = "required" | "additional";
@@ -12,6 +14,8 @@ export type CertificationCatalogRow = {
 	active: boolean | null;
 	ems_authority: CredentialEmsAuthority | null;
 	ems_certification_level: CredentialEmsLevel | null;
+	canonical_certification_id?: string | null;
+	department_id?: string;
 };
 
 export type QualificationCatalogRow = {
@@ -75,6 +79,7 @@ export type MemberCredentialItem = {
 	id: string;
 	memberId: string;
 	catalogId: string;
+	canonicalCatalogId?: string;
 	name: string;
 	sourceType: CredentialSourceType;
 	expires: boolean;
@@ -176,6 +181,7 @@ export function buildMemberCredentials(params: {
 	supportingDocuments?: SupportingDocumentRow[];
 }) {
 	const certificationById = new Map(params.certificationTypes.map((row) => [row.id, row]));
+	const resolve = createCertificationResolver(params.certificationTypes);
 	const qualificationById = new Map(params.qualificationTypes.map((row) => [row.id, row]));
 	const supportingDocumentById = buildSupportingDocumentMap(params.supportingDocuments ?? []);
 
@@ -185,6 +191,7 @@ export function buildMemberCredentials(params: {
 			id: row.id,
 			memberId: row.member_id,
 			catalogId: row.certification_id,
+			canonicalCatalogId: resolve(row.certification_id),
 			name: certification?.name ?? "Unknown Certification",
 			sourceType: "certification",
 			expires: row.expires_at !== null,
@@ -235,6 +242,7 @@ export function buildRequiredCredentials(params: {
 	departmentRoleId?: string | null;
 }) {
 	const certificationById = new Map(params.certificationTypes.map((row) => [row.id, row]));
+	const resolve = createCertificationResolver(params.certificationTypes);
 	const qualificationById = new Map(params.qualificationTypes.map((row) => [row.id, row]));
 
 	const requiredCertifications = params.roleRequiredCertifications
@@ -244,7 +252,7 @@ export function buildRequiredCredentials(params: {
 			const item: RequiredCredentialItem = {
 				id: row.id,
 				departmentRoleId: row.department_role_id,
-				catalogId: row.certification_id,
+				catalogId: resolve(row.certification_id),
 				name: certification?.name ?? "Unknown Certification",
 				sourceType: "certification",
 				expires: true,
@@ -260,7 +268,9 @@ export function buildRequiredCredentials(params: {
 			});
 
 			return item;
-		});
+		})
+		.filter((row, index, rows) => rows.findIndex(other =>
+			other.departmentRoleId === row.departmentRoleId && other.catalogId === row.catalogId) === index);
 
 	const requiredQualifications = params.roleRequiredQualifications
 		.filter((row) => (params.departmentRoleId ? row.department_role_id === params.departmentRoleId : true))
@@ -292,7 +302,7 @@ export function applyCredentialRequirementStatus(params: {
 
 	return params.memberCredentials.map((row) => ({
 		...row,
-		requirementStatus: requiredKeys.has(`${row.sourceType}:${row.catalogId}`) || requiredNames.has(row.name.trim().toLowerCase())
+		requirementStatus: requiredKeys.has(`${row.sourceType}:${row.canonicalCatalogId ?? row.catalogId}`) || requiredNames.has(row.name.trim().toLowerCase())
 			? "required"
 			: "additional",
 	}));

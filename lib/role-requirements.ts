@@ -1,3 +1,5 @@
+import { createCertificationResolver } from "@/lib/credentials/canonical-certifications";
+
 export type DepartmentRoleRow = {
   id: string;
   name: string;
@@ -8,9 +10,12 @@ export type CatalogRow = {
   id: string;
   name: string;
   active: boolean | null;
+  canonical_certification_id?: string | null;
+  department_id?: string;
 };
 
 export type MemberCertificationRow = {
+  member_certification_details?: import("@/lib/credentials/canonical-certifications").CertificationDetailsRelation;
   id?: string;
   member_id?: string;
   certification_id: string;
@@ -188,6 +193,7 @@ function buildRoleRequirementState(params: {
   memberCertifications: MemberCertificationRow[];
   memberQualifications: MemberQualificationRow[];
 }) {
+  const resolve = createCertificationResolver(params.certificationTypes);
   const certificationLookup = new Map(params.certificationTypes.map((row) => [row.id, row.name]));
   const qualificationLookup = new Map(params.qualificationTypes.map((row) => [row.id, row.name]));
   const canonicalMemberCertifications = buildCanonicalMemberCertificationRows({
@@ -200,7 +206,7 @@ function buildRoleRequirementState(params: {
   const currentCertificationIds = new Set(
     canonicalMemberCertifications
       .filter((record) => isCertificationCurrent(record.expires_at))
-      .map((record) => record.certification_id),
+      .map((record) => resolve(record.certification_id)),
   );
   const currentCertificationNames = new Set(
     canonicalMemberCertifications
@@ -235,9 +241,11 @@ function buildRoleRequirementState(params: {
             id: row.certification_id,
             name,
             normalizedName,
-            isCurrent: currentCertificationIds.has(row.certification_id),
+            isCurrent: currentCertificationIds.has(resolve(row.certification_id)),
           };
         })
+        .filter((row, index, rows) =>
+          rows.findIndex((other) => resolve(other.id) === resolve(row.id)) === index)
     : [];
 
   const certificationRequirementNames = new Set(
@@ -444,4 +452,3 @@ export function buildQualificationReadinessAdapter(params: {
       .map(([, displayName]) => displayName),
   };
 }
-

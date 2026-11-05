@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import EmsCertificationFields from "@/components/ems/EmsCertificationFields";
 import { resolveCertificationCatalogEntry, selectionFromCertification, type EmsCertificationSelection } from "@/lib/ems/certification-selection";
 import type { CertificationCatalogRow } from "@/lib/credentials/facade";
+import { certificationDetailText, isSelectableCertification, type CertificationDetailsRelation } from "@/lib/credentials/canonical-certifications";
 
 type CertificationTypeRow = CertificationCatalogRow & {
   id: string;
@@ -15,6 +16,7 @@ type CertificationTypeRow = CertificationCatalogRow & {
 };
 
 type MemberCertificationRow = {
+  member_certification_details?: CertificationDetailsRelation;
   id: string;
   member_id: string;
   certification_id: string;
@@ -38,6 +40,7 @@ type DepartmentDocumentRow = {
 };
 
 type CertificationFormState = EmsCertificationSelection & {
+  editionDetails: string;
   certificationSource: "catalog" | "custom";
   certificationId: string;
   certificationSearch: string;
@@ -196,6 +199,7 @@ function getCertificationSortRank(expiresAt: string | null) {
 
 function emptyFormState(): CertificationFormState {
   return {
+    editionDetails: "",
     certificationSource: "catalog",
     certificationId: "",
     certificationSearch: "",
@@ -238,7 +242,7 @@ export default function PersonnelCertificationsSection({
   }, [departmentDocuments]);
 
   const activeCertificationTypes = useMemo(() => {
-    return certificationTypes.filter((certificationType) => certificationType.active !== false);
+    return certificationTypes.filter(isSelectableCertification);
   }, [certificationTypes]);
 
   const addableCertificationTypes = useMemo(() => {
@@ -341,6 +345,7 @@ export default function PersonnelCertificationsSection({
       certificationSearch: "",
       customCertificationName: "",
       ...selectionFromCertification(certificationTypeLookup.get(record.certification_id)),
+      editionDetails: certificationDetailText(record.member_certification_details),
       certificateNumber: record.certificate_number ?? "",
       issuedAt: record.issued_at || getLocalDateString(),
       expiresAt: record.expires_at ?? "",
@@ -445,6 +450,7 @@ export default function PersonnelCertificationsSection({
         selectedId: formState.certificationSource === "catalog" ? formState.certificationId || null : null,
         name: formState.certificationSource === "custom" ? customCertificationName : "",
         selection: formState,
+        existingCertificationId: editedCertification?.certification_id,
       });
       setCertificationTypes((current) => current.some((row) => row.id === certification.id)
         ? current : [...current, { ...certification, description: null }]);
@@ -461,85 +467,27 @@ export default function PersonnelCertificationsSection({
         department_id: departmentId,
       };
 
-      if (editingRecordId) {
-        const { error } = await supabase
-          .from("member_certifications")
-          .update({
-            certification_id: payload.certification_id,
-            certificate_number: payload.certificate_number,
-            issued_at: payload.issued_at,
-            expires_at: payload.expires_at,
-            supporting_document_id: payload.supporting_document_id,
-            notes: payload.notes,
-            updated_by: payload.updated_by,
-          })
-          .eq("id", editingRecordId)
-          .eq("department_id", departmentId);
-
-        if (error) {
-          setSaveError(error.message || "Unable to update certification.");
-          setIsSaving(false);
-          return;
-        }
-
-        setRecords((current) =>
-          current.map((record) =>
-            record.id === editingRecordId
-              ? {
-                  ...record,
-                  certification_id: payload.certification_id,
-                  certificate_number: payload.certificate_number,
-                  issued_at: payload.issued_at,
-                  expires_at: payload.expires_at,
-                  supporting_document_id: payload.supporting_document_id,
-                  notes: payload.notes,
-                  updated_by: payload.updated_by,
-                  updated_at: new Date().toISOString(),
-                }
-              : record,
-          ),
-        );
-      } else {
-        const { data, error } = await supabase
-          .from("member_certifications")
-          .insert({
-            department_id: departmentId,
-            member_id: memberId,
-            certification_id: payload.certification_id,
-            certificate_number: payload.certificate_number,
-            issued_at: payload.issued_at,
-            expires_at: payload.expires_at,
-            supporting_document_id: payload.supporting_document_id,
-            notes: payload.notes,
-            created_by: payload.created_by,
-            updated_by: payload.updated_by,
-          })
-          .select("id, member_id, certification_id, certificate_number, issued_at, expires_at, supporting_document_id, notes, created_by, updated_by, created_at, updated_at")
-          .single();
-
-        if (error || !data) {
-          setSaveError(error?.message || "Unable to create certification.");
-          setIsSaving(false);
-          return;
-        }
-
-        const insertedRecord: MemberCertificationRow = {
-          id: String(data.id),
-          member_id: typeof data.member_id === "string" ? data.member_id : memberId,
-          certification_id: String(data.certification_id),
-          certificate_number: typeof data.certificate_number === "string" ? data.certificate_number : null,
-          issued_at: typeof data.issued_at === "string" ? data.issued_at : payload.issued_at,
-          expires_at: typeof data.expires_at === "string" ? data.expires_at : null,
-          supporting_document_id: typeof data.supporting_document_id === "string" ? data.supporting_document_id : null,
-          notes: typeof data.notes === "string" ? data.notes : null,
-          created_by: typeof data.created_by === "string" ? data.created_by : editorMemberId,
-          updated_by: typeof data.updated_by === "string" ? data.updated_by : editorMemberId,
-          created_at: typeof data.created_at === "string" ? data.created_at : new Date().toISOString(),
-          updated_at: typeof data.updated_at === "string" ? data.updated_at : new Date().toISOString(),
-        };
-
-        setRecords((current) => [insertedRecord, ...current]);
+      const { data, error } = await supabase.rpc("save_member_certification_with_details", {
+        p_department_id: departmentId,
+        p_member_id: memberId,
+        p_record_id: editingRecordId,
+        p_certification_id: payload.certification_id,
+        p_certificate_number: payload.certificate_number,
+        p_issued_at: payload.issued_at,
+        p_expires_at: payload.expires_at,
+        p_supporting_document_id: payload.supporting_document_id,
+        p_notes: payload.notes,
+        p_editor_member_id: editorMemberId,
+        p_edition_details: formState.editionDetails,
+      });
+      if (error || !data) throw new Error(error?.message || "Unable to save certification.");
+      const saved: MemberCertificationRow = data;
+      if (saved.member_id !== memberId || saved.certification_id !== payload.certification_id || !saved.id) {
+        throw new Error("The saved certification could not be verified. Refresh before retrying.");
       }
+      setRecords((current) => editingRecordId
+        ? current.map(record => record.id === editingRecordId ? saved : record)
+        : [saved, ...current]);
 
       setIsModalOpen(false);
       setEditingRecordId(null);
@@ -634,6 +582,11 @@ export default function PersonnelCertificationsSection({
                       </div>
                     </div>
 
+                    {certificationDetailText(record.member_certification_details) ? (
+                      <p className="mt-3 text-sm text-neutral-300">
+                        Edition / Standard Details: {certificationDetailText(record.member_certification_details)}
+                      </p>
+                    ) : null}
                     {record.notes?.trim() ? (
                       <div className="mt-4 rounded-lg border border-white/10 bg-white/[0.03] p-4 text-sm text-neutral-300">
                         {record.notes}
@@ -663,7 +616,7 @@ export default function PersonnelCertificationsSection({
 
       {isModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 py-6 backdrop-blur-sm">
-          <div role="dialog" aria-modal="true" className="w-full max-w-3xl rounded-3xl border border-white/10 bg-[#0f0f0f] shadow-[0_30px_90px_rgba(0,0,0,0.55)]">
+          <div role="dialog" aria-modal="true" className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-white/10 bg-[#0f0f0f] shadow-[0_30px_90px_rgba(0,0,0,0.55)]">
             <div className="border-b border-white/10 px-6 py-5">
               <h3 className="text-2xl font-black tracking-tight text-white">
                 {editingRecordId ? "Edit Certification" : "Add Certification"}
@@ -795,6 +748,13 @@ export default function PersonnelCertificationsSection({
                   )}
                 </label>
 
+                <label className="block md:col-span-2">
+                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Edition / Standard Details</span>
+                  <input type="text" value={formState.editionDetails}
+                    onChange={(event) => setFormState(current => ({ ...current, editionDetails: event.target.value }))}
+                    className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
+                    placeholder="Optional; preserve the wording on the certificate" />
+                </label>
                 <EmsCertificationFields value={formState} onChange={(selection) => setFormState((current) => ({
                   ...current, ...selection,
                 }))} />

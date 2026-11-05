@@ -105,6 +105,8 @@ type TrainingCategoryRow = {
 };
 
 type CertificationTypeRow = {
+  canonical_certification_id?: string | null;
+  department_id?: string;
   id: string;
   name: string;
   ems_authority: "iowa" | "nremt" | null;
@@ -710,7 +712,7 @@ export async function getDepartmentReadinessData(
       .order("sort_order", { ascending: true }),
     supabase
       .from("certifications")
-      .select("id, name, ems_authority, ems_certification_level")
+      .select("id, name, ems_authority, ems_certification_level, canonical_certification_id, department_id")
       .eq("department_id", departmentId),
     supabase
       .from("qualifications")
@@ -773,6 +775,7 @@ export async function getDepartmentReadinessData(
     }));
 
   const certificationCatalog: CatalogRow[] = certificationTypes.map((row) => ({
+    canonical_certification_id: typeof row.canonical_certification_id === "string" ? row.canonical_certification_id : null, department_id: typeof row.department_id === "string" ? row.department_id : undefined,
     id: row.id,
     name: row.name,
     active: true,

@@ -1,5 +1,17 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Required environment variables
+
+- `NEXT_PUBLIC_SUPABASE_URL`: the Supabase project URL, used by browser and server clients.
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: the public anon/publishable key for that project.
+- `SUPABASE_SERVICE_ROLE_KEY`: required by existing server-side administrative
+  paths only. Never expose it to clients, give it a `NEXT_PUBLIC_` prefix, or
+  commit it to source control.
+
+This release introduces no new environment variables. Production builds must use
+the intended deployment project's public configuration; isolated tests and local
+validation must use authorized non-Production configuration.
+
 ## Desktop training attendance saves
 
 Creating a department training event and recording attendance are separate
@@ -132,6 +144,74 @@ personnel-management permission. It removes its container afterward.
 The Personnel roster report loads all roles in the current department, including
 inactive assigned roles. This changes display/search only, not assignments or
 requirements; genuinely unassigned members still display Unassigned.
+
+## Department-scoped certification equivalence
+
+`certifications.canonical_certification_id` explicitly maps a historical catalog
+entry to an unmapped standard type in the same department. Unmapped types resolve
+to themselves, so departments can continue adding types such as Ice Rescue.
+Mappings cannot cross departments, form chains/cycles, or change EMS equivalence.
+No name parsing or certification-level hierarchy is used.
+The mapping trigger writes a private guard row per department before validation.
+Concurrent changes in that department serialize; a repeatable-read or serializable
+transaction with a stale guard snapshot aborts rather than committing a cycle.
+Unrelated departments do not share a mapping lock.
+
+Personnel requirements, credential classification, authoritative desktop/mobile
+and department readiness, and certification report filters use the shared resolver
+in `lib/credentials/canonical-certifications.ts`. Each record's expiration is
+evaluated before matching; a current equivalent satisfies the requirement and
+an expired equivalent alone does not. Required types count once, while individual
+certifications remain separate in Personnel, reports and exports.
+
+New certification and role-requirement choices exclude mapped historical entries.
+Historical report filters retain unmapped types whether active or inactive;
+mapped variants remain reportable through their standard type and in unfiltered
+results. New assignments still exclude inactive types and mapped variants.
+Historical entries remain visible and editable on existing member records, and
+editing does not automatically replace their catalog assignments. Optional
+edition/standard wording is stored separately in `member_certification_details`,
+linked to the individual certification. Personnel and certification reports,
+including the EMS individual-certification report and its printed output, show
+that wording without replacing historical catalog names. EMS classification,
+status, sorting and existing search fields remain unchanged.
+`save_member_certification_with_details` saves the credential and optional detail
+in one transaction using existing certification-management authorization and RLS.
+Detail-only and unchanged saves do not update credential or audit fields.
+
+The local migration order is:
+
+1. `20261104220000_department_certification_equivalence.sql`: additive schema,
+   mapping constraints, metadata RLS and save RPC.
+2. `20261104221000_red_oak_standard_certifications.sql`: exact approved 39-entry
+   mapping, nine new standards (retaining the existing Firefighter 1 UUID), and
+   twelve literal import-evidence recoveries in the additive detail table.
+
+Both migrations committed to Production on November 5, 2026, in one atomic
+transaction. Separate read-only verification confirmed preservation, migration
+history, and the required schema; PostgREST discovery confirmed the credential
+details relationship and save RPC. Do not rerun these migrations for the matching
+application deployment, which requires separate approval.
+The Red Oak migration fails closed on catalog/preservation drift and compares
+every existing certification field, role requirement and other department catalog
+before completing. It never updates or reassigns a member certification.
+
+Focused tests include:
+
+```sh
+node --import tsx --test lib/credentials/canonical-certifications.test.ts \
+  lib/ems/certification-selection.test.ts
+node --import tsx --test lib/credentials/certification-equivalence.database.test.ts
+```
+
+Database tests require an already cached `postgres:17` image and use disposable
+network-isolated PostgreSQL containers. To run the mandatory exact-record
+preservation/recovery test, provide `CERTIFICATION_PRESERVATION_SNAPSHOT` (the
+approved current snapshot), `CERTIFICATION_ORIGINAL_SNAPSHOT` (the original
+catalog/record snapshot), and `CERTIFICATION_IMPORT_PACKET` (the saved literal
+import evidence). Without the first variable only the synthetic database test
+runs; that is not a substitute for release preservation verification.
+Private snapshot data is not checked into the repository.
 
 ## Pediatric Bag and Drug Box inspection reports
 

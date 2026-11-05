@@ -30,7 +30,7 @@ export default async function MobileMyReadinessPage() {
       error: result.error,
     })),
     supabase.from("member_certifications").select("id, certification_id, certificate_number, issued_at, expires_at, supporting_document_id, created_at, updated_at").eq("department_id", departmentId).eq("member_id", currentMember.id),
-    supabase.from("certifications").select("id, name, ems_authority, ems_certification_level").eq("department_id", departmentId),
+    supabase.from("certifications").select("id, name, ems_authority, ems_certification_level, canonical_certification_id, department_id").eq("department_id", departmentId),
     supabase.from("training_requirements").select("id, name, requirement_kind, period_type, minimum_hours, category_id, due_frequency_rule, required_topic, active, sort_order, config_json").eq("department_id", departmentId).eq("active", true).order("sort_order"),
     supabase.from("members").select("department_role_id, hire_start_date, created_at").eq("department_id", departmentId).eq("id", currentMember.id).single(),
     supabase.from("department_roles").select("id, name, active").eq("department_id", departmentId),
@@ -58,7 +58,9 @@ export default async function MobileMyReadinessPage() {
   }
   const categories = ((categoryRows ?? []) as Row[]).map((row) => ({ id: String(row.id), name: String(row.name ?? ""), active: row.active !== false } satisfies CatalogRow));
   const certTypes = (certTypeResult.data ?? []) as Row[];
-  const canonicalCertifications = buildCanonicalMemberCertificationRows({ certificationTypes: certTypes.map((row) => ({ id: String(row.id), name: String(row.name ?? ""), active: true })), qualificationTypes: ((qualificationResult.data ?? []) as Row[]).map((row) => ({ id: String(row.id), name: String(row.name ?? ""), active: true })), memberCertifications: (certResult.data ?? []) as never[], memberQualifications: (memberQualificationResult.data ?? []) as Array<{ qualification_id: string }> }).map((row) => ({ certification_id: row.certification_id, certificate_number: row.certificate_number ?? null, issued_at: row.issued_at ?? "", expires_at: row.expires_at, id: row.id }));
+  const canonicalCertifications = buildCanonicalMemberCertificationRows({ certificationTypes: certTypes.map((row) => ({
+    canonical_certification_id: typeof row.canonical_certification_id === "string" ? row.canonical_certification_id : null, department_id: typeof row.department_id === "string" ? row.department_id : undefined, id: String(row.id), name: String(row.name ?? ""), active: true
+  })), qualificationTypes: ((qualificationResult.data ?? []) as Row[]).map((row) => ({ id: String(row.id), name: String(row.name ?? ""), active: true })), memberCertifications: (certResult.data ?? []) as never[], memberQualifications: (memberQualificationResult.data ?? []) as Array<{ qualification_id: string }> }).map((row) => ({ certification_id: row.certification_id, certificate_number: row.certificate_number ?? null, issued_at: row.issued_at ?? "", expires_at: row.expires_at, id: row.id }));
   const certificationNameById = new Map(certTypes.map((row) => [String(row.id), String(row.name ?? "Certification")]));
   const readiness = computeAuthoritativeMemberReadiness({
     currentMemberId: currentMember.id,
@@ -70,7 +72,9 @@ export default async function MobileMyReadinessPage() {
     certificationTypeById: buildCertificationTypeMetaById(certTypes.map((row) => ({ id: String(row.id), ems_authority: row.ems_authority as never, ems_certification_level: row.ems_certification_level as never }))),
     emsTrackProfiles: (emsProfileResult.data ?? []) as unknown as EmsTrackProfileAuthorityRow[],
     roleRequiredCertifications: (roleCertResult.data ?? []) as RoleRequiredCertificationRow[],
-    certificationCatalog: certTypes.map((row) => ({ id: String(row.id), name: String(row.name ?? ""), active: true } satisfies CatalogRow)),
+    certificationCatalog: certTypes.map((row) => ({
+      canonical_certification_id: typeof row.canonical_certification_id === "string" ? row.canonical_certification_id : null, department_id: typeof row.department_id === "string" ? row.department_id : undefined, id: String(row.id), name: String(row.name ?? ""), active: true
+    } satisfies CatalogRow)),
     qualificationCatalog: ((qualificationResult.data ?? []) as Row[]).map((row) => ({ id: String(row.id), name: String(row.name ?? ""), active: true })),
     roleRequiredQualifications: (roleQualificationResult.data ?? []) as RoleRequiredQualificationRow[],
     memberQualifications: (memberQualificationResult.data ?? []) as Array<{ qualification_id: string }>,

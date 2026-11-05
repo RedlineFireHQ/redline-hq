@@ -53,7 +53,7 @@ export default async function CertificationManagementPage() {
   const [certificationResult, roleResult, requirementResult] = await Promise.all([
     supabase
       .from("certifications")
-      .select("id, name, active, ems_authority, ems_certification_level, created_at, updated_at")
+      .select("id, name, active, ems_authority, ems_certification_level, created_at, updated_at, canonical_certification_id, department_id")
       .eq("department_id", currentMember.departmentId)
       .order("name", { ascending: true }),
     supabase

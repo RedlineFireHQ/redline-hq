@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { createCertificationResolver, isSelectableCertification } from "@/lib/credentials/canonical-certifications";
 
 type DepartmentRoleRow = {
   id: string;
@@ -13,6 +14,8 @@ type DepartmentRoleRow = {
 };
 
 type CatalogItemRow = {
+  canonical_certification_id?: string | null;
+  department_id?: string;
   id: string;
   name: string;
   active: boolean;
@@ -63,7 +66,7 @@ export default function RoleRequirementsSection({
   const router = useRouter();
   const orderedRoles = useMemo(() => sortRoles(departmentRoles), [departmentRoles]);
   const activeCertifications = useMemo(
-    () => sortCatalogItems(certifications.filter((item) => item.active !== false)),
+    () => sortCatalogItems(certifications.filter(isSelectableCertification)),
     [certifications],
   );
 
@@ -117,7 +120,8 @@ export default function RoleRequirementsSection({
     }
 
     const duplicateExists = certRequirements.some(
-      (row) => row.department_role_id === selectedRoleIdValue && row.certification_id === selectedCertificationId,
+      (row) => row.department_role_id === selectedRoleIdValue &&
+        createCertificationResolver(certifications)(row.certification_id) === selectedCertificationId,
     );
 
     if (duplicateExists) {

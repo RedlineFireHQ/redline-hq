@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CertificationCatalogRow } from "@/lib/credentials/facade";
+import { isSelectableCertification } from "@/lib/credentials/canonical-certifications";
 import { EMS_CERTIFICATION_LEVELS, assertEmsLevelForTrack, isEmsCertificationLevel, type EmsCertificationLevel, type EmsTrack } from "@/lib/ems/requirements";
 
 export type EmsCertificationSelection = {
@@ -58,6 +59,7 @@ export async function resolveCertificationCatalogEntry(input: {
   selectedId: string | null;
   name: string;
   selection: EmsCertificationSelection;
+  existingCertificationId?: string;
 }): Promise<CertificationCatalogRow> {
   const metadata = certificationMetadata(input.selection);
   const matchesMetadata = (row: CertificationCatalogRow) =>
@@ -65,6 +67,9 @@ export async function resolveCertificationCatalogEntry(input: {
   if (input.selectedId) {
     const selected = input.catalog.find((row) => row.id === input.selectedId);
     if (!selected) throw new Error("Selected certification is no longer available.");
+    if (!isSelectableCertification(selected) && selected.id !== input.existingCertificationId) {
+      throw new Error("Select a standard certification type. Historical variants are only available on their existing records.");
+    }
     if (matchesMetadata(selected)) return selected;
   }
 
@@ -75,7 +80,7 @@ export async function resolveCertificationCatalogEntry(input: {
     if (!matchesMetadata(existing)) {
       throw new Error("That certification name has different EMS authority/level metadata. Choose another name or correct the catalog entry in Settings.");
     }
-    if (existing.active === false) throw new Error("This certification is inactive. Activate it in Settings before assigning it.");
+    if (!isSelectableCertification(existing)) throw new Error("This certification is historical or inactive. Select a standard type.");
     return existing;
   }
   if (!input.name.trim() && metadata.ems_authority) {

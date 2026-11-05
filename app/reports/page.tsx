@@ -94,7 +94,7 @@ export default async function ReportsPage() {
         .order("name", { ascending: true }),
       supabase
         .from("certifications")
-        .select("id, name")
+        .select("id, name, active, canonical_certification_id, department_id")
         .eq("department_id", currentMember.departmentId)
         .order("name", { ascending: true }),
       supabase
@@ -207,6 +207,7 @@ export default async function ReportsPage() {
       .filter((row) => row.id.length > 0 && row.name.length > 0);
 
     certifications = (certificationsResult.data ?? [])
+      .filter((row) => !row.canonical_certification_id)
       .map((row) => ({
         id: String(row.id),
         name: typeof row.name === "string" ? row.name : "",

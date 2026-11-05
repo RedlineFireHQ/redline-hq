@@ -33,6 +33,33 @@ const memoryFetch: typeof fetch = async (input, init) => {
   const table = url.pathname.split("/").pop() ?? "";
   const method = init?.method ?? "GET";
   const payload: Row = init?.body ? JSON.parse(String(init.body)) : {};
+  if (table === "save_member_certification_with_details") {
+    const credential: Row = {
+      member_id: payload.p_member_id,
+      certification_id: payload.p_certification_id,
+      department_id: payload.p_department_id,
+      certificate_number: payload.p_certificate_number,
+      issued_at: payload.p_issued_at,
+      expires_at: payload.p_expires_at,
+      supporting_document_id: payload.p_supporting_document_id,
+      notes: payload.p_notes,
+      updated_by: payload.p_editor_member_id,
+      updated_at: "2026-11-02",
+      member_certification_details: payload.p_edition_details
+        ? [{ edition_details: payload.p_edition_details, source_reference: null }] : [],
+    };
+    const existing = (db.member_certifications ?? []).find(row => row.id === payload.p_record_id);
+    if (payload.p_record_id && !existing) return Response.json({ message: "Record not found" }, { status: 404 });
+    writes.push({ table: "member_certifications", method: existing ? "PATCH" : "POST",
+      payload: credential, filters: existing ? [["id", `eq.${existing.id}`], ["department_id", `eq.${payload.p_department_id}`]] : [] });
+    if (existing) {
+      Object.assign(existing, credential);
+      return Response.json(existing);
+    }
+    const row = { id: `synthetic-${++sequence}`, created_at: "2026-11-02", created_by: payload.p_editor_member_id, ...credential };
+    db.member_certifications = [...(db.member_certifications ?? []), row];
+    return Response.json(row);
+  }
   const filters = [...url.searchParams.entries()].filter(([, value]) => value.startsWith("eq."));
   const matches = (row: Row) => filters.every(([key, value]) => String(row[key]) === value.slice(3));
   if (method === "POST" || method === "PATCH") {
@@ -159,6 +186,8 @@ async function submit() {
 }
 function catalog(): CertificationCatalogRow[] {
   return (db.certifications ?? []).map((row) => ({
+    department_id: dept,
+    canonical_certification_id: typeof row.canonical_certification_id === "string" ? row.canonical_certification_id : null,
     id: String(row.id), name: String(row.name), active: row.active !== false,
     ...certificationMetadata({
       emsAuthority: row.ems_authority === "iowa" || row.ems_authority === "nremt" ? row.ems_authority : "",
@@ -304,6 +333,71 @@ test("editing one member from Paramedic to Iowa CCP changes its credential FK, n
   assert.deepEqual(writes[1].filters, [["id", "eq.assigned-credential"], ["department_id", `eq.${dept}`]]);
   const { authoritative } = verifyReadiness(46, 0);
   assert.equal(authoritative.iowa?.level, "ccp");
+});
+
+test("historical variants remain visible and editable without replacing their original catalog assignment", async () => {
+  db.certifications = [
+    { id: "standard", department_id: dept, name: "Firefighter 1", active: true },
+    { id: "historical", department_id: dept, name: "Fire Fighter I (IFSAC 1997 Edition)", active: true, canonical_certification_id: "standard" },
+  ];
+  db.member_certifications = [{ id: "historical-record", member_id: member, department_id: dept,
+    certification_id: "historical", issued_at: "1997-01-01", expires_at: null, notes: null,
+    certificate_number: null, supporting_document_id: null }];
+  personnel();
+  assert.ok(tree().some(element => text(element).includes("Fire Fighter I (IFSAC 1997 Edition)")));
+  await click("Edit");
+  assert.ok(tree().some(element => element.type === "option" && element.props.value === "historical"));
+  await submit();
+  assert.equal(db.member_certifications[0].certification_id, "historical");
+  assert.equal(db.member_certifications[0].expires_at, null);
+  assert.equal(db.certifications.length, 2);
+});
+
+test("Add Certification hides mapped variants, supports new Ice Rescue, and saves separate edition details", async () => {
+  db.certifications = [
+    { id: "standard", department_id: dept, name: "Firefighter 1", active: true },
+    { id: "historical", department_id: dept, name: "Fire Fighter I (2008 Edition)", active: true, canonical_certification_id: "standard" },
+    { id: "ice-rescue", department_id: dept, name: "Ice Rescue", active: true },
+  ];
+  personnel();
+  await click("+ Add Certification");
+  assert.ok(!tree().some(element => element.type === "button" && text(element) === "Fire Fighter I (2008 Edition)"));
+  assert.ok(tree().some(element => element.type === "button" && text(element) === "Ice Rescue"));
+  await click("Firefighter 1");
+  const noExpiration = find(element => element.type === "input" && element.props.value === "no-expiration");
+  (noExpiration.props.onChange as () => void)();
+  changeLabel("Edition / Standard Details", "IFSAC 2008 Edition");
+  await submit();
+  assert.equal(db.member_certifications[0].certification_id, "standard");
+  assert.deepEqual(db.member_certifications[0].member_certification_details,
+    [{ edition_details: "IFSAC 2008 Edition", source_reference: null }]);
+});
+
+test("a new department-specific Ice Rescue type is created normally without an equivalence mapping", async () => {
+  const created = await resolveCertificationCatalogEntry({
+    supabase: client, departmentId: dept, editorMemberId: editor, catalog: [], selectedId: null,
+    name: "Ice Rescue", selection: { emsAuthority: "", emsLevel: "" },
+  });
+  assert.equal(created.name, "Ice Rescue");
+  assert.equal(created.ems_authority, null);
+  assert.equal(created.canonical_certification_id ?? null, null);
+  assert.equal(db.certifications.length, 1);
+  assert.equal(db.certifications[0].department_id, dept);
+});
+
+test("a corrected standard Firefighter 1 record restores its literal recovered Reciprocity details during editing", async () => {
+  db.certifications = [{ id: "standard", department_id: dept, name: "Firefighter 1", active: true }];
+  db.member_certifications = [{ id: "corrected-record", member_id: member, department_id: dept,
+    certification_id: "standard", issued_at: "1997-01-01", expires_at: null, notes: null,
+    certificate_number: null, supporting_document_id: null,
+    member_certification_details: { edition_details: "Reciprocity", source_reference: "approved evidence" } }];
+  personnel();
+  assert.ok(tree().some(element => text(element).includes("Edition / Standard Details: Reciprocity")));
+  await click("Edit");
+  const details = find(element => element.type === "input" && element.props.value === "Reciprocity");
+  assert.equal(details.props.value, "Reciprocity");
+  await submit();
+  assert.equal(db.member_certifications[0].certification_id, "standard");
 });
 
 test("a newly assigned CCP credential supersedes older Paramedic credentials through unchanged authoritative rules", async () => {

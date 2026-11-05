@@ -111,6 +111,8 @@ type MemberCertificationRow = {
 };
 
 type CertificationTypeRow = {
+  canonical_certification_id?: string | null;
+  department_id?: string;
 	id: string;
 	name: string;
 	ems_authority: "iowa" | "nremt" | null;
@@ -307,7 +309,7 @@ export default async function MobilePage() {
 			.order("expires_at", { ascending: true }),
 		supabase
 			.from("certifications")
-			.select("id, name, ems_authority, ems_certification_level")
+			.select("id, name, ems_authority, ems_certification_level, canonical_certification_id, department_id")
 			.eq("department_id", currentMember.departmentId),
 		supabase
 			.from("training_requirements")
@@ -388,7 +390,9 @@ export default async function MobilePage() {
 		qualification_id: row.qualification_id,
 	}));
 	const memberCertifications = buildCanonicalMemberCertificationRows({
-		certificationTypes: certificationTypes.map((row) => ({ id: row.id, name: row.name, active: true } satisfies CatalogRow)),
+		certificationTypes: certificationTypes.map((row) => ({
+			canonical_certification_id: typeof row.canonical_certification_id === "string" ? row.canonical_certification_id : null, department_id: typeof row.department_id === "string" ? row.department_id : undefined, id: row.id, name: row.name, active: true
+		} satisfies CatalogRow)),
 		qualificationTypes,
 		memberCertifications: rawMemberCertifications,
 		memberQualifications,
@@ -570,7 +574,9 @@ export default async function MobilePage() {
 		certificationTypeById,
 		emsTrackProfiles,
 		roleRequiredCertifications,
-		certificationCatalog: certificationTypes.map((row) => ({ id: row.id, name: row.name, active: true } satisfies CatalogRow)),
+		certificationCatalog: certificationTypes.map((row) => ({
+			canonical_certification_id: typeof row.canonical_certification_id === "string" ? row.canonical_certification_id : null, department_id: typeof row.department_id === "string" ? row.department_id : undefined, id: row.id, name: row.name, active: true
+		} satisfies CatalogRow)),
 		qualificationCatalog: qualificationTypes,
 		roleRequiredQualifications,
 		memberQualifications,

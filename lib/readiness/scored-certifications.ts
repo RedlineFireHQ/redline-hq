@@ -1,4 +1,5 @@
 import type { CertificationStatus } from "@/lib/readiness/member-readiness";
+import { createCertificationResolver, type CanonicalCertification } from "@/lib/credentials/canonical-certifications";
 
 type EmsAuthority = "iowa" | "nremt";
 
@@ -23,30 +24,42 @@ export function buildScoredCertificationStatuses(params: {
 	includeNremtAuthority: boolean;
 	includeNonExpiringRoleRequirements?: boolean;
 	certificationNameById?: Map<string, string>;
+	certificationCatalog?: Array<CanonicalCertification & { name?: string }>;
 }) {
 	const selectedIds = new Set<string>();
 	const selected: Array<{ certificationId: string; certificationName: string; status: CertificationStatus }> = [];
-	const byId = new Map(params.certificationStatuses.map((row) => [row.certificationId, row]));
+	const resolve = createCertificationResolver(params.certificationCatalog ?? []);
+	const canonicalNameById = new Map((params.certificationCatalog ?? []).map(row => [row.id, row.name]));
+	const byId = new Map<string, CertificationStatusInput>();
+	const priority = { expired: 0, expiring_soon: 1, current: 2 };
+	for (const row of params.certificationStatuses) {
+		const id = resolve(row.certificationId);
+		const previous = byId.get(id);
+		if (!previous || priority[row.status] > priority[previous.status] ||
+			(row.status === previous.status && row.expiresAt === null)) byId.set(id, row);
+	}
 
 	for (const row of params.roleRequiredCertifications) {
 		if (!params.memberDepartmentRoleId || row.department_role_id !== params.memberDepartmentRoleId) {
 			continue;
 		}
 
-		if (selectedIds.has(row.certification_id)) {
+		const certificationId = resolve(row.certification_id);
+		if (selectedIds.has(certificationId)) {
 			continue;
 		}
 
-		const existing = byId.get(row.certification_id);
+		const existing = byId.get(certificationId);
 		if (existing?.expiresAt === null && !params.includeNonExpiringRoleRequirements) {
 			continue;
 		}
-		selectedIds.add(row.certification_id);
+		selectedIds.add(certificationId);
 		selected.push({
-			certificationId: row.certification_id,
+			certificationId,
 			certificationName:
+				params.certificationNameById?.get(certificationId) ??
+				canonicalNameById.get(certificationId) ??
 				existing?.certificationName ??
-				params.certificationNameById?.get(row.certification_id) ??
 				"Certification",
 			status: existing?.status ?? "expired",
 		});

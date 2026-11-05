@@ -17,6 +17,7 @@ import {
   type RoleRequiredQualificationRow,
   type SupportingDocumentRow,
 } from "@/lib/credentials/facade";
+import { isSelectableCertification } from "@/lib/credentials/canonical-certifications";
 import { getRoleRequirementStatus } from "@/lib/role-requirements";
 import { supabase } from "@/lib/supabase";
 import EmsCertificationFields from "@/components/ems/EmsCertificationFields";
@@ -96,6 +97,7 @@ type DepartmentRoleRow = {
 };
 
 type CredentialFormState = EmsCertificationSelection & {
+  editionDetails: string;
   certificationSource: "existing" | "new";
   certificationId: string;
   newCertificationName: string;
@@ -155,6 +157,7 @@ function getLocalDateString(date = new Date()) {
 
 function emptyCredentialState(defaultCredentialId = ""): CredentialFormState {
   return {
+    editionDetails: "",
     certificationSource: "existing",
     certificationId: defaultCredentialId,
     newCertificationName: "",
@@ -266,7 +269,7 @@ export default function AddMemberButton({
 
   const orderedRoles = useMemo(() => sortRoles(departmentRoles), [departmentRoles]);
   const activeCertificationOptions = useMemo(
-    () => certificationTypes.filter((item) => item.active).sort((left, right) => left.name.localeCompare(right.name)),
+    () => certificationTypes.filter(isSelectableCertification).sort((left, right) => left.name.localeCompare(right.name)),
     [certificationTypes],
   );
 
@@ -319,7 +322,9 @@ export default function AddMemberButton({
   const hasMissingRequiredCredentials = useMemo(
     () => getRoleRequirementStatus({
       memberDepartmentRoleId: selectedRoleId || null,
-      certificationTypes: certificationTypes.map((row) => ({ id: row.id, name: row.name, active: row.active })),
+      certificationTypes: certificationTypes.map((row) => ({
+        canonical_certification_id: typeof row.canonical_certification_id === "string" ? row.canonical_certification_id : null, department_id: typeof row.department_id === "string" ? row.department_id : undefined, id: row.id, name: row.name, active: row.active
+      })),
       qualificationTypes: qualificationTypes.map((row) => ({ id: row.id, name: row.name, active: row.active })),
       roleRequiredCertifications,
       roleRequiredQualifications,
@@ -412,7 +417,7 @@ export default function AddMemberButton({
         .order("name", { ascending: true }),
       supabase
         .from("certifications")
-        .select("id, name, active, ems_authority, ems_certification_level")
+        .select("id, name, active, ems_authority, ems_certification_level, canonical_certification_id, department_id")
         .eq("department_id", departmentId)
         .order("name", { ascending: true }),
       supabase
@@ -465,18 +470,19 @@ export default function AddMemberButton({
     }));
 
     const certifications: CertificationCatalogRow[] = (certificationsResult.data ?? []).map((row) => ({
+      canonical_certification_id: typeof row.canonical_certification_id === "string" ? row.canonical_certification_id : null,
+      department_id: departmentId,
       id: String(row.id),
       name: typeof row.name === "string" ? row.name : "",
       active: row.active !== false,
       ems_authority: row.ems_authority === "iowa" || row.ems_authority === "nremt" ? row.ems_authority : null,
-      ems_certification_level:
-        row.ems_certification_level === "emr" ||
+      ems_certification_level: row.ems_certification_level === "emr" ||
         row.ems_certification_level === "emt" ||
         row.ems_certification_level === "aemt" ||
         row.ems_certification_level === "paramedic" ||
         row.ems_certification_level === "ccp"
-          ? row.ems_certification_level
-          : null,
+        ? row.ems_certification_level
+        : null,
     }));
 
     const qualifications: QualificationCatalogRow[] = (qualificationsResult.data ?? []).map((row) => ({
@@ -559,22 +565,19 @@ export default function AddMemberButton({
       throw new Error("This member already has that certification.");
     }
 
-    const { data, error } = await supabase
-      .from("member_certifications")
-      .insert({
-        department_id: departmentId,
-        member_id: createdMemberId,
-        certification_id: selectedCertification.id,
-        certificate_number: credentialForm.certificateNumber.trim() || null,
-        issued_at: credentialForm.achievedAt,
-        expires_at: expiresForMember ? credentialForm.expiresAt : null,
-        supporting_document_id: credentialForm.supportingDocumentId || null,
-        notes: credentialForm.notes.trim() || null,
-        created_by: currentMemberId,
-        updated_by: currentMemberId,
-      })
-      .select("id, member_id, certification_id, issued_at, expires_at, supporting_document_id")
-      .single();
+    const { data, error } = await supabase.rpc("save_member_certification_with_details", {
+      p_department_id: departmentId,
+      p_member_id: createdMemberId,
+      p_record_id: null,
+      p_certification_id: selectedCertification.id,
+      p_certificate_number: credentialForm.certificateNumber.trim() || null,
+      p_issued_at: credentialForm.achievedAt,
+      p_expires_at: expiresForMember ? credentialForm.expiresAt : null,
+      p_supporting_document_id: credentialForm.supportingDocumentId || null,
+      p_notes: credentialForm.notes.trim() || null,
+      p_editor_member_id: currentMemberId,
+      p_edition_details: credentialForm.editionDetails,
+    });
 
     if (error || !data) {
       const typedError = error as ApiError | null;
@@ -1224,6 +1227,15 @@ export default function AddMemberButton({
                     )}
                   </div>
 
+                  <label className="text-sm text-neutral-300 md:col-span-2">
+                    <span className="mb-2 block">Edition / Standard Details (optional)</span>
+                    <input type="text" value={credentialForm.editionDetails}
+                      onChange={(event) => {
+                        setCredentialDraftDirty(true);
+                        setCredentialForm(current => ({ ...current, editionDetails: event.target.value }));
+                      }}
+                      className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-white" />
+                  </label>
                   <EmsCertificationFields value={credentialForm} onChange={(selection) => {
                     setCredentialDraftDirty(true);
                     setCredentialForm((current) => ({

@@ -33,6 +33,8 @@ import {
 import { supabase } from "@/lib/supabase";
 
 type CertificationCatalogRow = {
+  canonical_certification_id?: string | null;
+  department_id?: string;
   id: string;
   name: string;
   ems_authority: "iowa" | "nremt" | null;
@@ -263,7 +265,7 @@ export default function MyReadinessPanel() {
           .eq("member_id", memberId),
         supabase
           .from("certifications")
-          .select("id, name, ems_authority, ems_certification_level")
+          .select("id, name, ems_authority, ems_certification_level, canonical_certification_id, department_id")
           .eq("department_id", departmentId),
         supabase
           .from("ems_member_track_profiles")
@@ -421,7 +423,9 @@ export default function MyReadinessPanel() {
         expires_at: typeof row.expires_at === "string" ? row.expires_at : null,
       }));
       const certificationRows = buildCanonicalMemberCertificationRows({
-        certificationTypes: certificationCatalogRows.map((row) => ({ id: row.id, name: row.name, active: true } satisfies CatalogRow)),
+        certificationTypes: certificationCatalogRows.map((row) => ({
+          canonical_certification_id: typeof row.canonical_certification_id === "string" ? row.canonical_certification_id : null, department_id: typeof row.department_id === "string" ? row.department_id : undefined, id: row.id, name: row.name, active: true
+        } satisfies CatalogRow)),
         qualificationTypes,
         memberCertifications: rawCertificationRows,
         memberQualifications,
@@ -652,7 +656,9 @@ export default function MyReadinessPanel() {
           department_role_id: row.department_role_id,
           certification_id: row.certification_id,
         })),
-        certificationCatalog: certificationCatalogRows.map((row) => ({ id: row.id, name: row.name, active: true } satisfies CatalogRow)),
+        certificationCatalog: certificationCatalogRows.map((row) => ({
+          canonical_certification_id: typeof row.canonical_certification_id === "string" ? row.canonical_certification_id : null, department_id: typeof row.department_id === "string" ? row.department_id : undefined, id: row.id, name: row.name, active: true
+        } satisfies CatalogRow)),
         qualificationCatalog: qualificationTypes,
         roleRequiredQualifications,
         memberQualifications,

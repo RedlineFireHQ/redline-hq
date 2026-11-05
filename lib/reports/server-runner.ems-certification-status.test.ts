@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { runInNewContext } from "node:vm";
 import test from "node:test";
+import type { ReactElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import ts from "typescript";
 
 import { calculateEmsReadiness, type EmsManualAllocation, type EmsTrainingRecord } from "@/lib/ems/calculation";
 import { IOWA_REQUIREMENTS } from "@/lib/ems/requirements";
 import { runReport } from "./server-runner";
-import type { ReportRunRequest, ReportRunResponse } from "./types";
+import type { ReportResultPayload, ReportRunRequest, ReportRunResponse } from "./types";
 
 type Row = Record<string, unknown>;
 type TableData = Record<string, Row[]>;
@@ -87,7 +93,7 @@ function applyFilters(rows: Row[], filters: Array<{ key: string; op: "eq" | "in"
   });
 }
 
-function createSupabaseMock(tableData: TableData) {
+function createSupabaseMock(tableData: TableData, selections: Array<{ table: string; columns?: string }> = []) {
   class QueryBuilder {
     private readonly tableName: string;
     private readonly rows: Row[];
@@ -99,7 +105,8 @@ function createSupabaseMock(tableData: TableData) {
       this.rows = tableData[tableName] ?? [];
     }
 
-    select() {
+    select(columns?: string) {
+      selections.push({ table: this.tableName, columns });
       return this;
     }
 
@@ -166,6 +173,91 @@ function getRowByMember(rows: Row[], memberName: string) {
   assert.ok(row, `Expected report row for ${memberName}`);
   return row;
 }
+
+function renderPrintSection(result: ReportResultPayload) {
+  const source = ts.createSourceFile("ReportsWorkspace.tsx",
+    readFileSync(new URL("../../components/reports/ReportsWorkspace.tsx", import.meta.url), "utf8"),
+    ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let section: ts.JsxElement | undefined;
+  const findSection = (node: ts.Node) => {
+    if (ts.isJsxElement(node) && node.openingElement.attributes.properties.some(attribute =>
+      ts.isJsxAttribute(attribute) && attribute.name.getText(source) === "className" &&
+      attribute.initializer && ts.isStringLiteral(attribute.initializer) &&
+      attribute.initializer.text === "hidden print:block")) section = node;
+    ts.forEachChild(node, findSection);
+  };
+  findSection(source);
+  assert.ok(section, "The actual report print section must exist");
+  const asText = source.statements.find(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === "asText");
+  assert.ok(asText);
+  const compiled = ts.transpileModule(`${asText.getText(source)}
+    export function render(result) { const generatedDateLabel = result.generatedAt; return ${section.getText(source)}; }`, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText;
+  const printModule = { exports: {} as { render: (payload: ReportResultPayload) => ReactElement } };
+  const load = runInNewContext(`(function(require, module, exports) { ${compiled}\n })`);
+  load(createRequire(import.meta.url), printModule, printModule.exports);
+  return renderToStaticMarkup(printModule.exports.render(result));
+}
+
+test("EMS individual-certification report and actual print section retain exact edition details and unchanged filters", async () => {
+  const departmentId = "dep-a";
+  const wording = "IFSAC 2019 Edition; Reciprocity";
+  const tableData: TableData = {
+    members: [
+      { id: "m1", department_id: departmentId, first_name: "Alex", last_name: "Current" },
+      { id: "m2", department_id: departmentId, first_name: "Blair", last_name: "Expired" },
+    ],
+    certifications: [
+      { id: "emt", department_id: departmentId, name: "EMT" },
+      { id: "fire", department_id: departmentId, name: "Firefighter 1" },
+    ],
+    member_certifications: [
+      { id: "current", department_id: departmentId, member_id: "m1", certification_id: "emt",
+        certificate_number: "EMS-1", issued_at: "2025-01-01", expires_at: null, notes: "Original notes",
+        member_certification_details: [{ edition_details: wording, source_reference: "Synthetic evidence" }] },
+      { id: "expired", department_id: departmentId, member_id: "m2", certification_id: "emt",
+        certificate_number: "EMS-2", issued_at: "2025-01-01", expires_at: "2025-02-01", notes: null,
+        member_certification_details: [] },
+      { id: "non-ems", department_id: departmentId, member_id: "m1", certification_id: "fire",
+        certificate_number: null, issued_at: "2025-01-01", expires_at: null, notes: null,
+        member_certification_details: [{ edition_details: "EMS 2019 Edition", source_reference: null }] },
+    ],
+  };
+  const before = structuredClone(tableData);
+  const selections: Array<{ table: string; columns?: string }> = [];
+  const context = { supabase: createSupabaseMock(tableData, selections), departmentId,
+    departmentName: "Synthetic department", memberRole: "owner" } as never;
+  const request = makeRequest({ report_type: "personnel-certifications", member_id: "all", certification_status: "all" });
+  const response = await runReport(request, context);
+  assert.equal(response.ok, true);
+  const payload = response as Extract<ReportRunResponse, { ok: true }>;
+  assert.match(selections.find(selection => selection.table === "member_certifications")?.columns ?? "",
+    /member_certification_details\(edition_details, source_reference\)/);
+  assert.equal(payload.rows.length, 2, "Edition text must not cause a fire certification to be classified as EMS");
+  assert.deepEqual(payload.rows.map(row => row.member_name), ["Blair Expired", "Alex Current"], "Existing expiration sorting is preserved");
+  const current = getRowByMember(payload.rows, "Alex Current");
+  assert.equal(current.item_name, `EMT (${wording})`);
+  assert.equal(current.category_name, "EMT");
+  assert.equal(current.status, "Current");
+  assert.equal(current.expires_at, "No Expiration");
+  const expired = getRowByMember(payload.rows, "Blair Expired");
+  assert.equal(expired.item_name, "EMT", "Missing edition details must not invent wording");
+  assert.equal(expired.status, "Expired");
+  assert.ok(payload.columns.some(column => column.key === "item_name"), "The display name must be a printed report column");
+  const printed = renderPrintSection(payload);
+  assert.ok(printed.includes(`EMT (${wording})`), "The actual print JSX must render the exact saved edition wording");
+  assert.ok(printed.includes(">EMT</td>"), "The record without details must also print unchanged");
+
+  const filtered = await runReport({ ...request,
+    filters: { ...request.filters, member_id: "m1", certification_status: "current" } }, context);
+  assert.equal(filtered.ok, true);
+  assert.deepEqual(filtered.rows, [current]);
+  const searched = await runReport({ ...request, searchTerm: wording }, context);
+  assert.equal(searched.ok, true);
+  assert.equal(searched.rows.length, 0, "Existing search fields must not change");
+  assert.deepEqual(tableData, before, "Reports and printing must not mutate credential records");
+});
 
 test("EMS certification-status report matches existing readiness engine behavior and supports EMS filters", async () => {
   const departmentId = "dep-a";

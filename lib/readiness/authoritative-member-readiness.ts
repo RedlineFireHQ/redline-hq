@@ -126,6 +126,7 @@ export function computeAuthoritativeMemberReadiness(input: ComputeMemberReadines
   });
 
   const scoredCertificationStatuses = buildScoredCertificationStatuses({
+    certificationCatalog: input.certificationCatalog,
     memberDepartmentRoleId: input.memberDepartmentRoleId,
     certificationStatuses: certificationStatuses.map((row) => ({
       certificationId: row.certificationId,
@@ -564,4 +565,3 @@ export function getAuthoritativeCoachSummary(input: {
     href: "/my-readiness",
   };
 }
-

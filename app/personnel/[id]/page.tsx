@@ -29,6 +29,8 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { notFound, redirect } from "next/navigation";
 
 type CertificationTypeRow = {
+  canonical_certification_id?: string | null;
+  department_id?: string;
   id: string;
   name: string;
   description: string | null;
@@ -45,6 +47,7 @@ type QualificationRow = {
 };
 
 type MemberCertificationRow = {
+  member_certification_details?: import("@/lib/credentials/canonical-certifications").CertificationDetailsRelation;
   id: string;
   member_id: string;
   certification_id: string;
@@ -388,7 +391,7 @@ export default async function PersonnelProfilePage({
       .order("name", { ascending: true }),
     supabase
       .from("certifications")
-      .select("id, name, description, active, ems_authority, ems_certification_level")
+      .select("id, name, description, active, ems_authority, ems_certification_level, canonical_certification_id, department_id")
       .eq("department_id", currentMember.departmentId)
       .order("name", { ascending: true }),
     supabase
@@ -399,7 +402,7 @@ export default async function PersonnelProfilePage({
     supabase
       .from("member_certifications")
       .select(
-        "id, member_id, certification_id, certificate_number, issued_at, expires_at, supporting_document_id, notes, created_by, updated_by, created_at, updated_at",
+        "id, member_id, certification_id, certificate_number, issued_at, expires_at, supporting_document_id, notes, created_by, updated_by, created_at, updated_at, member_certification_details(edition_details, source_reference)",
       )
       .eq("department_id", currentMember.departmentId)
       .eq("member_id", id)
@@ -617,19 +620,19 @@ export default async function PersonnelProfilePage({
   }));
 
   const certificationTypes: CertificationTypeRow[] = (certificationTypesData ?? []).map((row) => ({
+    canonical_certification_id: typeof row.canonical_certification_id === "string" ? row.canonical_certification_id : null, department_id: typeof row.department_id === "string" ? row.department_id : undefined,
     id: String(row.id),
     name: typeof row.name === "string" ? row.name : "",
     description: typeof row.description === "string" ? row.description : null,
     active: typeof row.active === "boolean" ? row.active : null,
     ems_authority: row.ems_authority === "iowa" || row.ems_authority === "nremt" ? row.ems_authority : null,
-    ems_certification_level:
-      row.ems_certification_level === "emr" ||
+    ems_certification_level: row.ems_certification_level === "emr" ||
       row.ems_certification_level === "emt" ||
       row.ems_certification_level === "aemt" ||
       row.ems_certification_level === "paramedic" ||
       row.ems_certification_level === "ccp"
-        ? row.ems_certification_level
-        : null,
+      ? row.ems_certification_level
+      : null,
   }));
 
   const qualificationTypes: QualificationRow[] = (qualificationTypesData ?? []).map((row) => ({
@@ -640,6 +643,7 @@ export default async function PersonnelProfilePage({
   }));
 
   const memberCertifications: MemberCertificationRow[] = (memberCertificationsData ?? []).map((row) => ({
+    member_certification_details: row.member_certification_details,
     id: String(row.id),
     member_id: typeof row.member_id === "string" ? row.member_id : "",
     certification_id: typeof row.certification_id === "string" ? row.certification_id : "",
@@ -850,7 +854,9 @@ export default async function PersonnelProfilePage({
   const totalTrainingHours = trainingHistory.reduce((total, item) => total + (item.hoursCredit ?? 0), 0);
 
   const canonicalMemberCertificationRows = buildCanonicalMemberCertificationRows({
-    certificationTypes: certificationTypes.map((row) => ({ id: row.id, name: row.name, active: row.active } satisfies CatalogRow)),
+    certificationTypes: certificationTypes.map((row) => ({
+      canonical_certification_id: typeof row.canonical_certification_id === "string" ? row.canonical_certification_id : null, department_id: typeof row.department_id === "string" ? row.department_id : undefined, id: row.id, name: row.name, active: row.active
+    } satisfies CatalogRow)),
     qualificationTypes: qualificationTypes.map((row) => ({ id: row.id, name: row.name, active: row.active } satisfies CatalogRow)),
     memberCertifications: memberCertifications,
     memberQualifications: memberQualifications,
@@ -964,7 +970,9 @@ export default async function PersonnelProfilePage({
     certificationTypeById,
     emsTrackProfiles,
     roleRequiredCertifications,
-    certificationCatalog: certificationTypes.map((row) => ({ id: row.id, name: row.name, active: row.active } satisfies CatalogRow)),
+    certificationCatalog: certificationTypes.map((row) => ({
+      canonical_certification_id: typeof row.canonical_certification_id === "string" ? row.canonical_certification_id : null, department_id: typeof row.department_id === "string" ? row.department_id : undefined, id: row.id, name: row.name, active: row.active
+    } satisfies CatalogRow)),
     qualificationCatalog: qualificationTypes.map((row) => ({ id: row.id, name: row.name, active: row.active } satisfies CatalogRow)),
     roleRequiredQualifications,
     memberQualifications: memberQualifications.map((row) => ({ qualification_id: row.qualification_id })),

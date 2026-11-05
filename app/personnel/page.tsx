@@ -70,7 +70,7 @@ export default async function PersonnelPage() {
       .eq("department_id", currentMember.departmentId),
     supabase
       .from("certifications")
-      .select("id, name, active")
+      .select("id, name, active, canonical_certification_id, department_id")
       .eq("department_id", currentMember.departmentId),
     supabase
       .from("qualifications")
@@ -122,6 +122,7 @@ export default async function PersonnelPage() {
     active: typeof row.active === "boolean" ? row.active : true,
   }));
   const certificationTypes: CatalogRow[] = (certificationTypesData ?? []).map((row) => ({
+    canonical_certification_id: typeof row.canonical_certification_id === "string" ? row.canonical_certification_id : null, department_id: typeof row.department_id === "string" ? row.department_id : undefined,
     id: String(row.id),
     name: typeof row.name === "string" ? row.name : "",
     active: typeof row.active === "boolean" ? row.active : true,
