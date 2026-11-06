@@ -111,6 +111,7 @@ export type ReportBreakdowns = {
 
 export type ReportResultPayload = {
 	ok: true;
+	presentation?: "training-member-summary";
 	comingSoon: boolean;
 	source: {
 		key: ReportCategoryKey;

@@ -5469,6 +5469,40 @@ async function runTrainingReport(
 		return left.memberName.localeCompare(right.memberName, undefined, { sensitivity: "base" });
 	});
 
+	if (!memberFilter || memberFilter === "all") {
+		const periodDate = new Intl.DateTimeFormat("en-US", {
+			month: "short", day: "numeric", year: "numeric", timeZone: "UTC",
+		});
+		return {
+			ok: true,
+			presentation: "training-member-summary",
+			comingSoon: false,
+			source: { key: source.key, name: source.name, description: source.description },
+			departmentName: context.departmentName,
+			generatedAt: new Date().toISOString(),
+			period: {
+				from: request.dateRange.from,
+				to: request.dateRange.to,
+				label: `${periodDate.format(new Date(`${request.dateRange.from}T00:00:00Z`))} to ${periodDate.format(new Date(`${request.dateRange.to}T00:00:00Z`))}`,
+				basisLabel: getTrainingPeriodBasisLabel(),
+			},
+			filtersApplied: buildAppliedFilters(source, request.filters, request.searchTerm),
+			summary: [{ label: "Department Training Hours", value: `${formatHoursValue(totalHours)} hrs` }],
+			breakdowns: { members: memberBreakdown },
+			columns: [
+				{ key: "member_name", label: "Member" },
+				{ key: "hours", label: "Total Training Hours", align: "right" },
+			],
+			rows: memberBreakdown.map((member) => ({
+				member_name: member.memberName,
+				hours: formatHoursValue(member.totalHours),
+			})),
+			totalRows: memberBreakdown.length,
+			page: 1,
+			pageSize: Math.max(1, memberBreakdown.length),
+		};
+	}
+
 	const categoryBreakdownByKey = new Map<string, {
 		categoryId: string | null;
 		categoryName: string;

@@ -1013,7 +1013,9 @@ export default function ReportsWorkspace({
 		}
 	};
 
-	const canPrint = Boolean(result && !result.comingSoon && result.rows.length > 0);
+	const isTrainingMemberSummary = result?.presentation === "training-member-summary";
+	const hasReportOutput = Boolean(result && (result.rows.length > 0 || isTrainingMemberSummary));
+	const canPrint = Boolean(result && !result.comingSoon && hasReportOutput);
 	const isEmsCertificationStatusResult = Boolean(
 		result &&
 		result.source.key === "ems" &&
@@ -1022,7 +1024,7 @@ export default function ReportsWorkspace({
 
 	return (
 		<div className="space-y-6">
-			<section className="rounded-2xl border border-white/10 bg-[#111111] p-6 shadow-[0_20px_50px_rgba(0,0,0,0.3)]">
+			<section className={`rounded-2xl border border-white/10 bg-[#111111] p-6 shadow-[0_20px_50px_rgba(0,0,0,0.3)] ${isTrainingMemberSummary ? "print:hidden" : ""}`}>
 				<p className="text-xs font-semibold uppercase tracking-[0.24em] text-red-500">Reports</p>
 				<h1
 					className="mt-2 text-[2.25rem] font-[700] leading-none tracking-[-0.06em] text-white"
@@ -1036,7 +1038,7 @@ export default function ReportsWorkspace({
 				) : null}
 			</section>
 
-			<section className="rounded-2xl border border-white/10 bg-[#111111] p-5">
+			<section className={`rounded-2xl border border-white/10 bg-[#111111] p-5 ${isTrainingMemberSummary ? "print:hidden" : ""}`}>
 				<div className="grid gap-4 xl:grid-cols-2">
 					<div>
 						<label htmlFor="report-category" className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500">
@@ -1212,14 +1214,14 @@ export default function ReportsWorkspace({
 				</div>
 			</section>
 
-			<section className="rounded-2xl border border-white/10 bg-[#111111] p-5">
+			<section className={`rounded-2xl border border-white/10 bg-[#111111] p-5 ${isTrainingMemberSummary ? "print:hidden" : ""}`}>
 				<div className="flex items-center justify-between gap-3">
 					<div>
 						<p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Results</p>
 						<h2 className="mt-1 text-2xl font-black tracking-tight text-white">Report Output</h2>
 					</div>
 					{result ? (
-						<p className="text-sm text-zinc-400">{result.totalRows} record{result.totalRows === 1 ? "" : "s"}</p>
+						<p className="text-sm text-zinc-400">{result.totalRows} {isTrainingMemberSummary ? "member" : "record"}{result.totalRows === 1 ? "" : "s"}</p>
 					) : null}
 				</div>
 
@@ -1241,13 +1243,13 @@ export default function ReportsWorkspace({
 					</div>
 				) : null}
 
-				{result && !result.comingSoon && result.rows.length === 0 ? (
+				{result && !result.comingSoon && result.rows.length === 0 && !isTrainingMemberSummary ? (
 					<div className="mt-5 rounded-xl border border-white/10 bg-[#0f0f0f] px-4 py-8 text-sm text-zinc-400">
 						No results found for the selected filters.
 					</div>
 				) : null}
 
-				{result && !result.comingSoon && result.rows.length > 0 ? (
+				{result && !result.comingSoon && hasReportOutput ? (
 					<div className="mt-5 space-y-4">
 						<div className="rounded-xl border border-white/10 bg-[#0f0f0f] px-4 py-3 text-xs text-zinc-400">
 							<div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
@@ -1275,7 +1277,7 @@ export default function ReportsWorkspace({
 							{result.summary && result.summary.length > 0 ? (
 								<div className="mt-3 border-t border-white/10 pt-3 text-sm text-zinc-300">
 									<p className="text-xs uppercase tracking-[0.14em] text-zinc-500">Summary</p>
-									<p className="mt-1">
+									<p className={isTrainingMemberSummary ? "mt-1 text-2xl font-bold text-white" : "mt-1"}>
 										{result.summary.map((item) => `${item.label}: ${item.value}`).join(" • ")}
 									</p>
 								</div>
@@ -1303,7 +1305,7 @@ export default function ReportsWorkspace({
 				) : null}
 			</section>
 
-			{result && !result.comingSoon && result.rows.length > 0 ? (
+			{result && !result.comingSoon && hasReportOutput ? (
 				<section className="hidden print:block">
 					<h1 className="text-2xl font-bold text-black">{result.source.name} Report</h1>
 					<p className="mt-1 text-sm text-black">Department: {result.departmentName ?? "Unknown Department"}</p>
@@ -1316,11 +1318,11 @@ export default function ReportsWorkspace({
 						</p>
 					) : null}
 					{result.summary && result.summary.length > 0 ? (
-						<p className="text-sm text-black">
+						<p className={result.presentation === "training-member-summary" ? "mt-3 text-xl font-bold text-black" : "text-sm text-black"}>
 							Summary: {result.summary.map((item) => `${item.label}: ${item.value}`).join("; ")}
 						</p>
 					) : null}
-					<p className="mt-2 text-sm text-black">Records: {result.totalRows}</p>
+					<p className="mt-2 text-sm text-black">{result.presentation === "training-member-summary" ? "Members" : "Records"}: {result.totalRows}</p>
 
 					<table className="mt-4 w-full border-collapse text-left text-xs text-black">
 						<thead>
@@ -1334,7 +1336,7 @@ export default function ReportsWorkspace({
 						</thead>
 						<tbody>
 							{result.rows.map((row, index) => (
-								<tr key={`${index}-${asText(row.id)}`}>
+								<tr key={`${index}-${asText(row.id)}`} className={result.presentation === "training-member-summary" ? "break-inside-avoid" : undefined}>
 									{result.columns.map((column) => (
 										<td key={column.key} className="border border-black px-2 py-1">
 											{asText(row[column.key])}
