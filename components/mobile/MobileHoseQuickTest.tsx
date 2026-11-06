@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { supabase } from "@/lib/supabase";
-import { completeHoseTest } from "@/lib/fire-hose-testing";
+import { completeHoseTest, hoseTestingDate } from "@/lib/fire-hose-testing";
 
 type HoseStatus = "untested" | "passed" | "failed";
 type Step = "testing" | "summary";
@@ -38,10 +38,6 @@ type Props = {
   initialError: string | null;
 };
 
-function today() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function formatDate(value: string) {
   const parsed = new Date(`${value}T00:00:00`);
   if (Number.isNaN(parsed.getTime())) return value;
@@ -66,7 +62,7 @@ export default function MobileHoseQuickTest({
   initialError,
 }: Props) {
   const router = useRouter();
-  const [testingDate, setTestingDate] = useState(today());
+  const [testingDate, setTestingDate] = useState(() => hoseTestingDate());
   const [statuses, setStatuses] = useState<Record<string, HoseStatus>>(Object.fromEntries(hoses.map((hose) => [hose.id, "untested"])));
   const [quickInput, setQuickInput] = useState("");
   const [selectedHoseId, setSelectedHoseId] = useState("");

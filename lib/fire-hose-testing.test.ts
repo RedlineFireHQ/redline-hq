@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { completeHoseTest, formatHoseTestDate, hoseNextTestLabel } from "./fire-hose-testing";
+import { completeHoseTest, formatHoseTestDate, hoseNextTestLabel, hoseTestingDate } from "./fire-hose-testing";
 
 test("completion uses one atomic RPC with the actual testing date and exact results", async () => {
   const calls: unknown[] = [];
@@ -28,6 +28,21 @@ test("database failure and missing saved session are explicit errors", async () 
   }
 });
 
+test("completion preserves an explicitly selected historical date without normalizing it to today", async () => {
+  const calls: unknown[] = [];
+  const client = {
+    rpc: async (...args: unknown[]) => { calls.push(args); return { data: "historical-session", error: null }; },
+  } as unknown as SupabaseClient;
+  await completeHoseTest(client, {
+    departmentId: "synthetic-department", testingDate: "2024-02-29", tester: "Local Tester",
+    results: [{ hose_id: "synthetic-hose", result: "pass" }],
+  });
+  assert.deepEqual(calls, [["complete_fire_hose_test", {
+    p_department_id: "synthetic-department", p_test_date: "2024-02-29",
+    p_tester: "Local Tester", p_results: [{ hose_id: "synthetic-hose", result: "pass" }],
+  }]]);
+});
+
 test("date display includes the actual day without shifting a date-only value", () => {
   assert.equal(formatHoseTestDate("2026-11-05"), "Nov 5, 2026");
   assert.equal(formatHoseTestDate("2028-02-29"), "Feb 29, 2028");
@@ -36,11 +51,35 @@ test("date display includes the actual day without shifting a date-only value", 
 });
 
 test("due indicator uses calendar days, including due today, and preserves missing dates", () => {
-  const today = new Date(2026, 10, 5, 20, 0);
+  const today = new Date("2026-11-06T02:00:00Z");
   assert.equal(hoseNextTestLabel("2026-11-04", today), "Overdue");
   assert.equal(hoseNextTestLabel("2026-11-05", today), "Nov 5, 2026");
   assert.equal(hoseNextTestLabel("2027-11-05", today), "Nov 5, 2027");
   assert.equal(hoseNextTestLabel(null, today), "Pending");
+});
+
+test("hose test defaults follow the configured Central calendar, not UTC or the device", () => {
+  assert.equal(hoseTestingDate(new Date("2026-11-06T00:24:00Z")), "2026-11-05");
+  assert.equal(hoseTestingDate(new Date("2026-11-06T05:59:59Z")), "2026-11-05");
+  assert.equal(hoseTestingDate(new Date("2026-11-06T06:00:00Z")), "2026-11-06");
+  assert.equal(hoseTestingDate(new Date("2026-07-06T04:59:59Z")), "2026-07-05");
+  assert.equal(hoseTestingDate(new Date("2026-07-06T05:00:00Z")), "2026-07-06");
+  assert.equal(hoseTestingDate(new Date("2028-03-01T01:00:00Z")), "2028-02-29");
+  assert.equal(hoseTestingDate(new Date("2026-03-08T08:00:00Z")), "2026-03-08");
+  assert.equal(hoseTestingDate(new Date("2026-11-01T07:00:00Z")), "2026-11-01");
+  assert.equal(hoseTestingDate(new Date("2026-11-06T00:24:00Z"), "America/Los_Angeles"), "2026-11-05");
+  assert.equal(hoseNextTestLabel("2026-11-05", new Date("2026-11-06T00:24:00Z")), "Nov 5, 2026");
+});
+
+test("both test workflows use department-calendar defaults and retain explicitly selected dates", () => {
+  const desktop = readFileSync(new URL("../components/inventory/HoseTestingSessionModal.tsx", import.meta.url), "utf8");
+  const mobile = readFileSync(new URL("../components/mobile/MobileHoseQuickTest.tsx", import.meta.url), "utf8");
+  for (const source of [desktop, mobile]) {
+    assert.match(source, /useState\(\(\) => hoseTestingDate\(\)\)/);
+    assert.match(source, /setTestingDate\(event\.target\.value\)/);
+    assert.doesNotMatch(source, /toISOString\(\)\.(slice|split)/);
+  }
+  assert.match(desktop, /resumeValues\.testingDate \|\| hoseTestingDate\(\)/);
 });
 
 test("inventory column order and initial/refresh queries include existing last-test field", () => {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { hoseTestingDate } from "@/lib/fire-hose-testing";
 
 export type HoseTestingStatus = "untested" | "passed" | "failed";
 
@@ -32,10 +33,6 @@ interface HoseTestingSessionModalProps {
 	resumeValues?: HoseTestingSessionValues | null;
 }
 
-function todayIsoDate() {
-	return new Date().toISOString().split("T")[0];
-}
-
 export default function HoseTestingSessionModal({
 	isOpen,
 	hoses,
@@ -46,7 +43,7 @@ export default function HoseTestingSessionModal({
 	onCreateDeficiencies,
 	resumeValues = null,
 }: HoseTestingSessionModalProps) {
-	const [testingDate, setTestingDate] = useState(todayIsoDate());
+	const [testingDate, setTestingDate] = useState(() => hoseTestingDate());
 	const [tester, setTester] = useState("");
 	const [hoseStatuses, setHoseStatuses] = useState<Record<string, HoseTestingStatus>>({});
 	const [sessionStep, setSessionStep] = useState<"testing" | "summary">("testing");
@@ -62,7 +59,7 @@ export default function HoseTestingSessionModal({
 		}
 
 		if (resumeValues) {
-			setTestingDate(resumeValues.testingDate || todayIsoDate());
+			setTestingDate(resumeValues.testingDate || hoseTestingDate());
 			setTester(resumeValues.tester || defaultTester);
 			setHoseStatuses(
 				Object.fromEntries(
@@ -71,7 +68,7 @@ export default function HoseTestingSessionModal({
 			);
 			setSessionStep("summary");
 		} else {
-			setTestingDate(todayIsoDate());
+			setTestingDate(hoseTestingDate());
 			setTester(defaultTester);
 			setHoseStatuses(Object.fromEntries(hoses.map((hose) => [hose.id, "untested"])));
 			setSessionStep("testing");

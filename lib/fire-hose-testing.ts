@@ -1,6 +1,15 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { department } from "./department";
 
 export type CompletedHoseResult = { hose_id: string; result: "pass" | "fail" };
+
+export function hoseTestingDate(now = new Date(), timeZone = department.timezone): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(now);
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value;
+  return `${value("year")}-${value("month")}-${value("day")}`;
+}
 
 export async function completeHoseTest(
   client: SupabaseClient,
@@ -26,6 +35,6 @@ export function formatHoseTestDate(value: string | null | undefined): string {
 
 export function hoseNextTestLabel(value: string | null | undefined, today = new Date()): string {
   if (!value) return "Pending";
-  const localToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const localToday = hoseTestingDate(today);
   return value < localToday ? "Overdue" : formatHoseTestDate(value);
 }

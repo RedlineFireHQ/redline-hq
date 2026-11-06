@@ -191,3 +191,27 @@ definitions and synthetic fixtures support the implementation but cannot prove
 those omitted deployed objects. This is the specific evidence limitation, not
 a request to run another SQL script. No Production connection or operation was
 performed during this pass.
+
+## Central calendar timezone correction - November 5, 2026
+
+The original desktop modal and mobile Quick Test defaulted their date inputs
+with `new Date().toISOString()`, taking the UTC day. After 6 PM Central Standard
+Time that incorrectly selected tomorrow. The shared `hoseTestingDate` helper
+now formats the instant using the existing application department timezone,
+`America/Chicago`, independent of the server/browser timezone. This matches the
+existing Central calendar convention; no per-department timezone database field
+or new configuration is introduced. Both workflows use it only for defaults;
+explicit input selections, resumed historical dates and RPC date payloads remain
+unchanged. Due-day comparisons use the same department calendar.
+
+The database calendar-year anniversary remains unchanged, including February
+29 -> February 28. No new schema migration is required. Focused tests cover
+the reported 6:24 PM rollover, Central midnight, summer time, DST boundaries,
+leap day, host-timezone independence and selected historical dates.
+
+Read-only Production preview identified two marked Cedar Bluff sessions at
+6:31:47 PM and 6:32:46 PM Central on November 5, with six passing results and
+six inventories carrying November 6 / November 6 next year. The exact
+ID-scoped correction draft and snapshot are kept as private session artifacts,
+not automatic migrations. Production record corrections require Adam's approval;
+deployment of the code fix must not execute that draft.
