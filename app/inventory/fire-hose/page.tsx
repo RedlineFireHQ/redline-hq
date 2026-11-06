@@ -2,6 +2,7 @@ import InventoryCategoryWorkspace from "@/components/inventory/InventoryCategory
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { getCurrentMember } from "@/lib/current-member";
 import { hasDepartmentPermission } from "@/lib/member-permissions";
+import { formatHoseTestDate, hoseNextTestLabel } from "@/lib/fire-hose-testing";
 
 const quickActions = [
 	{ label: "+ Add Hose", tone: "primary" as const },
@@ -13,6 +14,7 @@ const columns = [
 	{ key: "hoseSize", label: "Hose Size" },
 	{ key: "length", label: "Length" },
 	{ key: "inServiceDate", label: "In Service Date" },
+	{ key: "lastTestDate", label: "Last Test Date" },
 	{ key: "nextTestDate", label: "Next Test Date" },
 	{ key: "status", label: "Status" },
 ];
@@ -25,26 +27,6 @@ function formatMonthYear(value: string | null) {
 	const parsed = new Date(value);
 	if (Number.isNaN(parsed.getTime())) {
 		return value;
-	}
-
-	return parsed.toLocaleDateString("en-US", { month: "short", year: "numeric" });
-}
-
-function formatNextTestDate(value: string | null) {
-	if (!value) {
-		return "Pending";
-	}
-
-	const parsed = new Date(value);
-	if (Number.isNaN(parsed.getTime())) {
-		return value;
-	}
-
-	const today = new Date();
-	today.setHours(0, 0, 0, 0);
-
-	if (parsed.getTime() < today.getTime()) {
-		return "Overdue";
 	}
 
 	return parsed.toLocaleDateString("en-US", { month: "short", year: "numeric" });
@@ -128,7 +110,7 @@ export default async function FireHoseInventoryPage() {
 		const { data, error } = await supabase
 			.from("fire_hose")
 			.select(
-				"id, inventory_number, hose_size, hose_length, booster_reel, in_service_date, next_test_date, status",
+				"id, inventory_number, hose_size, hose_length, booster_reel, in_service_date, last_test_date, next_test_date, status",
 			)
 			.eq("department_id", departmentId)
 			.order("created_at", { ascending: false });
@@ -209,7 +191,9 @@ export default async function FireHoseInventoryPage() {
 				length: row.booster_reel ? "N/A (Booster Reel Hose)" : `${row.hose_length ?? "-"} ft`,
 				inServiceDateRaw: row.in_service_date ?? "",
 				inServiceDate: formatMonthYear(row.in_service_date),
-				nextTestDate: formatNextTestDate(row.next_test_date),
+				lastTestDate: formatHoseTestDate(row.last_test_date),
+				nextTestDateRaw: row.next_test_date ?? "",
+				nextTestDate: hoseNextTestLabel(row.next_test_date),
 				deficiencyStatus: hasActiveDeficiency ? "Active" : "None",
 				hasActiveDeficiency: hasActiveDeficiency ? "true" : "false",
 				status: row.status,

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { supabase } from "@/lib/supabase";
+import { completeHoseTest } from "@/lib/fire-hose-testing";
 
 type HoseStatus = "untested" | "passed" | "failed";
 type Step = "testing" | "summary";
@@ -39,13 +40,6 @@ type Props = {
 
 function today() {
   return new Date().toISOString().slice(0, 10);
-}
-
-function addOneYearIso(value: string) {
-  const parsed = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) return value;
-  parsed.setFullYear(parsed.getFullYear() + 1);
-  return parsed.toISOString().slice(0, 10);
 }
 
 function formatDate(value: string) {
@@ -203,39 +197,19 @@ export default function MobileHoseQuickTest({
     }
     setSaving(true);
     setError(null);
-    const nextTestDate = addOneYearIso(testingDate);
-
-    for (const hose of testedHoses) {
-      const hasActiveDeficiency = activeDeficiencyIds.has(hose.id);
-      const nextStatus = statuses[hose.id] === "failed" || hasActiveDeficiency ? "Out of Service" : "Ready";
-      const update = await supabase.from("fire_hose").update({ next_test_date: nextTestDate, status: nextStatus }).eq("id", hose.id).eq("department_id", departmentId).select("id, next_test_date, status").single();
-      if (update.error || !update.data || update.data.next_test_date !== nextTestDate || update.data.status !== nextStatus) {
-        setError(update.error?.message || `Unable to save hose test result for ${hose.inventory_number}.`);
-        setSaving(false);
-        return;
-      }
-    }
-
-    const sessionInsert = await supabase.from("fire_hose_testing_sessions").insert({ department_id: departmentId, test_date: testingDate, tester: memberName || "Unknown Tester" }).select("id").single();
-    if (sessionInsert.error || !sessionInsert.data?.id) {
-      setError(sessionInsert.error?.message || "Unable to save testing session history.");
-      setSaving(false);
-      return;
-    }
-
-    const sessionId = sessionInsert.data.id;
-    const resultsPayload = testedHoses.map((hose) => ({ testing_session_id: sessionId, department_id: departmentId, hose_id: hose.id, inventory_number: hose.inventory_number, test_date: testingDate, tester: memberName || "Unknown Tester", result: statuses[hose.id] === "failed" ? "fail" : "pass" }));
-    const resultsInsert = await supabase.from("fire_hose_testing_results").insert(resultsPayload);
-    if (resultsInsert.error) {
-      setError(resultsInsert.error.message || "Unable to save hose test result history.");
-      setSaving(false);
-      return;
-    }
-    const verification = await supabase.from("fire_hose_testing_results").select("hose_id, result, tester, testing_session_id").eq("testing_session_id", sessionId).eq("department_id", departmentId);
-    const expectedByHoseId = new Map(resultsPayload.map((row) => [row.hose_id, row.result]));
-    const mismatch = (verification.data ?? []).length !== resultsPayload.length || (verification.data ?? []).some((row) => expectedByHoseId.get(row.hose_id) !== row.result || row.tester !== (memberName || "Unknown Tester") || row.testing_session_id !== sessionId);
-    if (verification.error || mismatch) {
-      setError(verification.error?.message || "Saved hose testing results did not match expected values.");
+    try {
+      await completeHoseTest(supabase, {
+        departmentId,
+        testingDate,
+        tester: memberName || "Unknown Tester",
+        results: testedHoses.map((hose) => ({
+          hose_id: hose.id,
+          result: statuses[hose.id] === "failed" ? "fail" : "pass",
+        })),
+      });
+    } catch (cause) {
+      console.error("Unable to complete hose testing:", cause);
+      setError(cause instanceof Error ? cause.message : "Unable to save the completed hose test.");
       setSaving(false);
       return;
     }
