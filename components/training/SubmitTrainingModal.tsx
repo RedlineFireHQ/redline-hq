@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { EMS_CORE_TOPICS, type EmsCoreTopicCode } from "@/lib/ems/requirements";
 import { triggerEmsAllocationRecalculation } from "@/lib/ems/recalculate-client";
 import { supabase } from "@/lib/supabase";
+import { buildOutsideSubmissionNotes } from "@/lib/training/outside-submission-notes";
 
 type TrainingCategoryRow = {
   id: string;
@@ -107,28 +108,6 @@ function isEmsCategoryName(value: string | null | undefined) {
 
 function sanitizeFileName(name: string) {
   return name.replace(/[^a-zA-Z0-9._-]/g, "_");
-}
-
-function buildOutsideSubmissionNotes(input: {
-  trainingMethod: string;
-  instructorName: string;
-  location: string;
-}) {
-  const lines: string[] = [];
-
-  if (input.trainingMethod.trim()) {
-    lines.push(`Method: ${input.trainingMethod.trim()}`);
-  }
-
-  if (input.instructorName.trim()) {
-    lines.push(`Instructor: ${input.instructorName.trim()}`);
-  }
-
-  if (input.location.trim()) {
-    lines.push(`Location: ${input.location.trim()}`);
-  }
-
-  return lines.length > 0 ? lines.join("\n") : null;
 }
 
 interface SubmitTrainingModalProps {

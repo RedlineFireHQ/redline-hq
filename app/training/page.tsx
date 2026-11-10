@@ -6,6 +6,7 @@ import { hasAssignedDepartmentPermission } from "@/lib/member-permissions";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { calculateDepartmentTrainingMemberHours } from "@/lib/training/training-hours";
+import { parseOutsideSubmissionNotes } from "@/lib/training/outside-submission-notes";
 
 type TrainingCategoryRow = {
   id: string;
@@ -662,7 +663,7 @@ export default async function TrainingPage() {
       .order("course_name", { ascending: true }),
     supabase
       .from("training_outside_submissions")
-      .select("id, member_id, title, category_id, training_date, hours, status")
+      .select("id, member_id, title, category_id, training_date, hours, status, notes, is_ems_training, ems_provider_name")
       .eq("department_id", currentMember.departmentId)
       .eq("status", "approved")
       .order("training_date", { ascending: false }),
@@ -906,14 +907,40 @@ export default async function TrainingPage() {
     training_date: string;
     hours: number | string | null;
     status: string;
-  }>).map((row) => ({
-    id: row.id,
-    title: row.title ?? "Self-Reported Training",
-    categoryName: categories.find((category) => category.id === row.category_id)?.name ?? "Uncategorized",
-    trainingDate: row.training_date,
-    hours: typeof row.hours === "string" ? Number.parseFloat(row.hours) : row.hours,
-    submitterName: managerMemberNameById.get(row.member_id) ?? "Unknown Member",
-  }));
+    notes: string | null;
+    is_ems_training: boolean | null;
+    ems_provider_name: string | null;
+  }>).map((row) => {
+    const noteDetails = parseOutsideSubmissionNotes(row.notes);
+    // EMS submissions store the instructor/provider in ems_provider_name
+    // instead of the notes convention.
+    const instructorName =
+      noteDetails.instructorName ?? (row.is_ems_training === true ? row.ems_provider_name : null);
+
+    // Attendance: the submitting member plus every credited participant, deduplicated.
+    const attendeeIds = new Set<string>([row.member_id]);
+    for (const participant of (departmentOutsideParticipantsData ?? []) as Array<{ submission_id: string; member_id: string }>) {
+      if (participant.submission_id === row.id && participant.member_id) {
+        attendeeIds.add(participant.member_id);
+      }
+    }
+    const attendeeNames = Array.from(attendeeIds).map(
+      (memberId) => managerMemberNameById.get(memberId) ?? "Unknown Member",
+    );
+
+    return {
+      id: row.id,
+      title: row.title ?? "Self-Reported Training",
+      categoryName: categories.find((category) => category.id === row.category_id)?.name ?? "Uncategorized",
+      trainingDate: row.training_date,
+      hours: typeof row.hours === "string" ? Number.parseFloat(row.hours) : row.hours,
+      submitterName: managerMemberNameById.get(row.member_id) ?? "Unknown Member",
+      instructorName,
+      location: noteDetails.location,
+      trainingMethod: noteDetails.trainingMethod,
+      attendeeNames,
+    };
+  });
 
   return (
     <TrainingWorkspace

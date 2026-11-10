@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { EMS_CORE_TOPICS, type EmsCoreTopicCode } from "@/lib/ems/requirements";
 import { triggerEmsAllocationRecalculationForMembers } from "@/lib/ems/recalculate-client";
 import { supabase } from "@/lib/supabase";
+import { buildOutsideSubmissionNotes } from "@/lib/training/outside-submission-notes";
 
 type Category = { id: string; name: string; active: boolean };
 type EmsCourse = { id: string; course_name: string; active: boolean };
@@ -147,14 +148,11 @@ export default function MobileTrainingForm({
           p_ems_needs_review: isEms && (emsNeedsReview || emsTopic === "other"),
           p_ems_provider_name: isEms ? provider.trim() || null : null,
           p_description: details.trim() || null,
-          p_notes:
-            [
-              trainingMethod ? `Method: ${trainingMethod}` : "",
-              provider.trim() && !isEms ? `Instructor: ${provider.trim()}` : "",
-              location.trim() ? `Location: ${location.trim()}` : "",
-            ]
-              .filter(Boolean)
-              .join("\n") || null,
+          p_notes: buildOutsideSubmissionNotes({
+            trainingMethod,
+            instructorName: isEms ? "" : provider,
+            location,
+          }),
           p_participant_ids: Array.from(new Set(participants)),
         },
       );

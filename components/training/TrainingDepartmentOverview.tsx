@@ -22,6 +22,10 @@ export type SelfReportedTraining = {
   trainingDate: string;
   hours: number | null;
   submitterName: string;
+  instructorName?: string | null;
+  location?: string | null;
+  trainingMethod?: string | null;
+  attendeeNames?: string[];
 };
 
 interface TrainingDepartmentOverviewProps {
