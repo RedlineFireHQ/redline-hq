@@ -71,14 +71,32 @@ export function getTrainingComplianceBucketByCategoryName(categoryName: string |
 export function getTrainingComplianceBucketByCategoryId(
   categoryId: string | null,
   categoryNameById: Map<string, string>,
+  categoryBucketById?: Map<string, string | null | undefined>,
 ): TrainingComplianceBucket {
+  const explicitBucket = categoryId ? normalizeExplicitComplianceBucket(categoryBucketById?.get(categoryId)) : null;
+  if (explicitBucket) {
+    return explicitBucket;
+  }
+
   const categoryName = categoryId ? categoryNameById.get(categoryId) ?? null : null;
   return getTrainingComplianceBucketByCategoryName(categoryName);
+}
+
+// Explicit per-category classification stored in training_categories.compliance_bucket.
+// When present it is authoritative; the keyword matcher above remains only as a
+// fallback for categories that have not been classified yet.
+export function normalizeExplicitComplianceBucket(value: string | null | undefined): TrainingComplianceBucket | null {
+  if (value === "fire_annual" || value === "ems_ce" || value === "other") {
+    return value;
+  }
+
+  return null;
 }
 
 export function calculateComplianceBucketHours(
   rows: TrainingHoursInput[],
   categoryNameById: Map<string, string>,
+  categoryBucketById?: Map<string, string | null | undefined>,
 ): HoursBucketTotals {
   const totals: HoursBucketTotals = {
     fireAnnualHours: 0,
@@ -95,7 +113,7 @@ export function calculateComplianceBucketHours(
 
     totals.totalHours += hours;
 
-    const bucket = getTrainingComplianceBucketByCategoryId(row.categoryId, categoryNameById);
+    const bucket = getTrainingComplianceBucketByCategoryId(row.categoryId, categoryNameById, categoryBucketById);
     if (bucket === "fire_annual") {
       totals.fireAnnualHours += hours;
       continue;

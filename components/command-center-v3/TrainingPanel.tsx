@@ -18,6 +18,7 @@ import { calculateComplianceBucketHours } from "@/lib/training/compliance-bucket
 type TrainingCategoryRow = {
   id: string;
   name: string;
+  compliance_bucket?: string | null;
 };
 
 type TrainingEventRow = {
@@ -178,7 +179,7 @@ export default function TrainingPanel() {
           .eq("department_id", departmentId),
         supabase
           .from("training_categories")
-          .select("id, name")
+          .select("id, name, compliance_bucket")
           .eq("department_id", departmentId),
         supabase
           .from("member_certifications")
@@ -232,6 +233,7 @@ export default function TrainingPanel() {
       const attendedEvents = events.filter((event) => attendedEventIds.includes(event.id));
       const assignmentById = new Map(assignments.map((row) => [row.id, row]));
       const categoryNameById = new Map(categories.map((row) => [row.id, row.name]));
+      const categoryBucketById = new Map(categories.map((row) => [row.id, row.compliance_bucket ?? null]));
 
       const currentYear = new Date().getFullYear();
       const currentYearStartKey = `${currentYear}-01-01`;
@@ -258,7 +260,7 @@ export default function TrainingPanel() {
           }),
       ];
 
-      const fireTrainingHoursTotal = calculateComplianceBucketHours(fireComplianceRows, categoryNameById).fireAnnualHours;
+      const fireTrainingHoursTotal = calculateComplianceBucketHours(fireComplianceRows, categoryNameById, categoryBucketById).fireAnnualHours;
 
       const certificationTypeById = buildCertificationTypeMetaById(
         certificationCatalog.map((row) => ({

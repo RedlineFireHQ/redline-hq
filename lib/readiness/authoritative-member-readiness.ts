@@ -64,6 +64,7 @@ export type ComputeMemberReadinessInput = {
 
   requirements: RequirementInput[];
   categoryNameById: Map<string, string>;
+  categoryBucketById?: Map<string, string | null | undefined>;
   fireAnnualComplianceRows: Array<{ categoryId: string | null; hours: number | string | null }>;
   categoryHours: Array<{ categoryId: string | null; categoryName: string; hours: number }>;
   trainingAssignments?: TrainingAssignmentInput[];
@@ -165,6 +166,7 @@ export function computeAuthoritativeMemberReadiness(input: ComputeMemberReadines
   const fireAnnualTrainingHours = calculateComplianceBucketHours(
     input.fireAnnualComplianceRows,
     input.categoryNameById,
+    input.categoryBucketById,
   ).fireAnnualHours;
 
   const readiness = buildMemberReadinessScore({

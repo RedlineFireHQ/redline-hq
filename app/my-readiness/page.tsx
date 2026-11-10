@@ -123,6 +123,7 @@ type TrainingCategoryRow = {
   id: string;
   name: string;
   active: boolean;
+  compliance_bucket?: string | null;
 };
 
 type EmsCourseDefinitionRow = {
@@ -278,6 +279,14 @@ function isEmsLikeCertificationName(value: string) {
 
 function isActionableCoachMessage(actionNeeded: string) {
   return !/^no action needed\.?$/i.test(actionNeeded.trim());
+}
+
+function toDisplayBucket(bucket: "fire_annual" | "ems_ce" | "other"): "fire" | "ems" | "other" {
+  if (bucket === "fire_annual") {
+    return "fire";
+  }
+
+  return bucket === "ems_ce" ? "ems" : "other";
 }
 
 function isInCalendarYear(value: string | null | undefined, year: number) {
@@ -723,7 +732,7 @@ export default async function MyReadinessPage() {
   if (categoryIds.length > 0) {
     const { data: categoryRows, error: categoryError } = await supabase
       .from("training_categories")
-      .select("id, name")
+      .select("id, name, compliance_bucket")
       .eq("department_id", currentMember.departmentId)
       .in("id", categoryIds);
 
@@ -772,6 +781,7 @@ export default async function MyReadinessPage() {
   }));
 
   const categoryNameById = new Map(categories.map((row) => [row.id, row.name]));
+  const categoryBucketById = new Map(categories.map((row) => [row.id, row.compliance_bucket ?? null]));
   const memberCertificationDocumentIds = Array.from(
     new Set(
       memberCertifications
@@ -854,16 +864,24 @@ export default async function MyReadinessPage() {
 
   const currentCalendarYear = new Date().getUTCFullYear();
 
+  // Calendar-year inputs so readiness scoring and displayed annual hours share
+  // the same boundaries on every surface.
+  const attendedEventsThisYear = attendedEvents.filter((event) => isInCalendarYear(event.starts_at, currentCalendarYear));
+  const approvedOutsideThisYear = approvedOutside.filter((submission) => isInCalendarYear(submission.training_date, currentCalendarYear));
+  const approvedHomeworkMembersThisYear = approvedHomeworkMembers.filter((approvedHomework) =>
+    isInCalendarYear(approvedHomework.completed_at ?? approvedHomework.updated_at ?? approvedHomework.created_at, currentCalendarYear),
+  );
+
   const fireAnnualComplianceRows = [
-    ...attendedEvents.map((event) => ({
+    ...attendedEventsThisYear.map((event) => ({
       categoryId: event.category_id,
       hours: event.hours_credit,
     })),
-    ...approvedOutside.map((submission) => ({
+    ...approvedOutsideThisYear.map((submission) => ({
       categoryId: submission.category_id,
       hours: submission.hours,
     })),
-    ...approvedHomeworkMembers.map((approvedHomework) => {
+    ...approvedHomeworkMembersThisYear.map((approvedHomework) => {
       const assignment = assignmentById.get(approvedHomework.training_assignment_id);
       const assignmentHours = assignment ? parseHours(assignment.hours_credit) : 0;
       const rowHours = parseHours(approvedHomework.hours_earned);
@@ -876,7 +894,7 @@ export default async function MyReadinessPage() {
 
   const categoryHoursMap = new Map<string, { categoryId: string | null; name: string; hours: number }>();
 
-  for (const event of attendedEvents) {
+  for (const event of attendedEventsThisYear) {
     const categoryName = event.category_id ? categoryNameById.get(event.category_id) ?? "Uncategorized" : "Uncategorized";
     const key = event.category_id || "uncategorized";
     const current = categoryHoursMap.get(key) ?? { categoryId: event.category_id, name: categoryName, hours: 0 };
@@ -884,7 +902,7 @@ export default async function MyReadinessPage() {
     categoryHoursMap.set(key, current);
   }
 
-  for (const submission of approvedOutside) {
+  for (const submission of approvedOutsideThisYear) {
     const categoryName = submission.category_id
       ? categoryNameById.get(submission.category_id) ?? "Uncategorized"
       : "Uncategorized";
@@ -894,7 +912,7 @@ export default async function MyReadinessPage() {
      categoryHoursMap.set(key, current);
    }
 
-   for (const approvedHomework of approvedHomeworkMembers) {
+   for (const approvedHomework of approvedHomeworkMembersThisYear) {
     const assignment = assignmentById.get(approvedHomework.training_assignment_id);
     if (!assignment) {
       continue;
@@ -918,7 +936,7 @@ export default async function MyReadinessPage() {
       .filter((event) => isInCalendarYear(event.starts_at, currentCalendarYear))
       .map((event) => ({
         id: `event-${event.id}`,
-        bucket: event.is_ems_training === true ? "ems" as const : "fire" as const,
+        bucket: toDisplayBucket(getTrainingComplianceBucketByCategoryId(event.category_id, categoryNameById, categoryBucketById)),
         categoryId: event.category_id,
         categoryName: event.category_id ? categoryNameById.get(event.category_id) ?? "Uncategorized" : "Uncategorized",
         hours: parseHours(event.hours_credit),
@@ -927,7 +945,7 @@ export default async function MyReadinessPage() {
       .filter((submission) => isInCalendarYear(submission.training_date, currentCalendarYear))
       .map((submission) => ({
         id: `outside-${submission.id}`,
-        bucket: submission.is_ems_training === true ? "ems" as const : "fire" as const,
+        bucket: toDisplayBucket(getTrainingComplianceBucketByCategoryId(submission.category_id, categoryNameById, categoryBucketById)),
         categoryId: submission.category_id,
         categoryName: submission.category_id ? categoryNameById.get(submission.category_id) ?? "Uncategorized" : "Uncategorized",
         hours: parseHours(submission.hours),
@@ -949,17 +967,17 @@ export default async function MyReadinessPage() {
         const categoryName = assignment.category_id
           ? categoryNameById.get(assignment.category_id) ?? "Uncategorized"
           : "Uncategorized";
-        const classificationBucket = getTrainingComplianceBucketByCategoryId(assignment.category_id, categoryNameById);
+        const classificationBucket = getTrainingComplianceBucketByCategoryId(assignment.category_id, categoryNameById, categoryBucketById);
 
         return {
           id: `homework-${approvedHomework.id}`,
-          bucket: classificationBucket === "ems_ce" ? "ems" as const : "fire" as const,
+          bucket: toDisplayBucket(classificationBucket),
           categoryId: assignment.category_id,
           categoryName,
           hours: rowHours > 0 ? rowHours : assignmentHours,
         };
       })
-      .filter((row): row is { id: string; bucket: "fire" | "ems"; categoryId: string | null; categoryName: string; hours: number } => row !== null),
+      .filter((row): row is { id: string; bucket: "fire" | "ems" | "other"; categoryId: string | null; categoryName: string; hours: number } => row !== null),
   ].filter((row) => row.hours > 0);
 
   const calendarYearFireTrainingHours = calendarYearRecords
@@ -968,14 +986,21 @@ export default async function MyReadinessPage() {
   const calendarYearEmsTrainingHours = calendarYearRecords
     .filter((row) => row.bucket === "ems")
     .reduce((total, row) => total + row.hours, 0);
-  const calendarYearTotalTrainingHours = calendarYearFireTrainingHours + calendarYearEmsTrainingHours;
+  const calendarYearOtherTrainingHours = calendarYearRecords
+    .filter((row) => row.bucket === "other")
+    .reduce((total, row) => total + row.hours, 0);
+  // Every approved record counts toward the member's total, regardless of bucket.
+  const calendarYearTotalTrainingHours =
+    calendarYearFireTrainingHours + calendarYearEmsTrainingHours + calendarYearOtherTrainingHours;
 
   const fireTrainingByCategoryMap = new Map<string, { categoryName: string; hours: number }>();
   const emsTrainingByCategoryMap = new Map<string, { categoryName: string; hours: number }>();
+  const otherTrainingByCategoryMap = new Map<string, { categoryName: string; hours: number }>();
 
   for (const row of calendarYearRecords) {
     const key = row.categoryId ?? `uncategorized-${row.bucket}`;
-    const sourceMap = row.bucket === "ems" ? emsTrainingByCategoryMap : fireTrainingByCategoryMap;
+    const sourceMap =
+      row.bucket === "ems" ? emsTrainingByCategoryMap : row.bucket === "other" ? otherTrainingByCategoryMap : fireTrainingByCategoryMap;
     const current = sourceMap.get(key) ?? { categoryName: row.categoryName, hours: 0 };
     current.hours += row.hours;
     sourceMap.set(key, current);
@@ -983,6 +1008,7 @@ export default async function MyReadinessPage() {
 
   const fireTrainingBreakdown = Array.from(fireTrainingByCategoryMap.values()).sort((a, b) => b.hours - a.hours);
   const emsTrainingBreakdown = Array.from(emsTrainingByCategoryMap.values()).sort((a, b) => b.hours - a.hours);
+  const otherTrainingBreakdown = Array.from(otherTrainingByCategoryMap.values()).sort((a, b) => b.hours - a.hours);
 
   const assignedDeficiencyIds = assignedDeficiencies.map((row) => row.id).filter((id) => typeof id === "string" && id.length > 0);
   let assignmentHistoryRows: DeficiencyAssignmentHistoryRow[] = [];
@@ -1030,6 +1056,7 @@ export default async function MyReadinessPage() {
     memberQualifications,
     requirements,
     categoryNameById,
+    categoryBucketById,
     fireAnnualComplianceRows,
     categoryHours: Array.from(categoryHoursMap.values()).map((row) => ({ categoryId: row.categoryId, categoryName: row.name, hours: row.hours })),
     trainingAssignments: assignments,
@@ -1330,7 +1357,7 @@ export default async function MyReadinessPage() {
              />
            </div>
 
-           <div className="mt-4 grid gap-3 md:grid-cols-3">
+           <div className="mt-4 grid gap-3 md:grid-cols-4">
              <div className="rounded-xl border border-white/10 bg-[#141414] px-4 py-3">
                <p className="text-xs uppercase tracking-[0.14em] text-neutral-400">Total Training</p>
                <p className="mt-1 text-2xl font-semibold text-white">{calendarYearTotalTrainingHours.toFixed(2)} hrs</p>
@@ -1342,6 +1369,10 @@ export default async function MyReadinessPage() {
              <div className="rounded-xl border border-sky-500/20 bg-[#141414] px-4 py-3">
                <p className="text-xs uppercase tracking-[0.14em] text-sky-300">EMS Training</p>
                <p className="mt-1 text-2xl font-semibold text-sky-100">{calendarYearEmsTrainingHours.toFixed(2)} hrs</p>
+             </div>
+             <div className="rounded-xl border border-amber-500/20 bg-[#141414] px-4 py-3">
+               <p className="text-xs uppercase tracking-[0.14em] text-amber-300">Other Training</p>
+               <p className="mt-1 text-2xl font-semibold text-amber-100">{calendarYearOtherTrainingHours.toFixed(2)} hrs</p>
              </div>
            </div>
 
@@ -1436,6 +1467,22 @@ export default async function MyReadinessPage() {
                        <div key={`ems-${row.categoryName}-${index}`} className="flex items-center justify-between rounded-md border border-sky-500/10 bg-white/[0.02] px-2.5 py-1.5 text-sm text-neutral-200">
                          <span>{row.categoryName}</span>
                          <span className="font-semibold text-sky-100">{row.hours.toFixed(2)} hrs</span>
+                       </div>
+                     ))}
+                   </div>
+                 )}
+               </div>
+
+               <div className="self-start rounded-lg border border-amber-500/20 bg-[#151515] p-3">
+                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-amber-300">Other Training</p>
+                 {otherTrainingBreakdown.length === 0 ? (
+                   <p className="mt-2 text-sm text-neutral-400">No other training hours recorded this year.</p>
+                 ) : (
+                   <div className="mt-2 space-y-1.5">
+                     {otherTrainingBreakdown.map((row, index) => (
+                       <div key={`other-${row.categoryName}-${index}`} className="flex items-center justify-between rounded-md border border-amber-500/10 bg-white/[0.02] px-2.5 py-1.5 text-sm text-neutral-200">
+                         <span>{row.categoryName}</span>
+                         <span className="font-semibold text-amber-100">{row.hours.toFixed(2)} hrs</span>
                        </div>
                      ))}
                    </div>

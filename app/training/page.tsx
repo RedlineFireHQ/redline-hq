@@ -5,6 +5,7 @@ import { getCurrentMember } from "@/lib/current-member";
 import { hasAssignedDepartmentPermission } from "@/lib/member-permissions";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { calculateDepartmentTrainingMemberHours } from "@/lib/training/training-hours";
 
 type TrainingCategoryRow = {
   id: string;
@@ -145,7 +146,8 @@ type EmsCourseDefinitionRow = {
 function calculateDepartmentTrainingHoursThisYear(input: {
   events: Array<{ id: string; starts_at: string; hours_credit: number | string | null }>;
   attendanceRows: Array<{ training_event_id: string; attendance_status: string }>;
-  outsideSubmissions: Array<{ training_date: string; hours: number | string | null; status: string }>;
+  outsideSubmissions: Array<{ id: string; member_id: string; training_date: string; hours: number | string | null; status: string }>;
+  outsideParticipants: Array<{ submission_id: string; member_id: string }>;
   assignments: Array<{ id: string; hours_credit: number | string | null }>;
   assignmentMembers: Array<{
     training_assignment_id: string;
@@ -156,40 +158,10 @@ function calculateDepartmentTrainingHoursThisYear(input: {
     hours_earned: number | string | null;
   }>;
 }) {
-  const currentYear = new Date().getFullYear();
-  const isInCurrentYear = (value: string | null | undefined) => {
-    if (!value) {
-      return false;
-    }
-
-    const parsed = new Date(value);
-    return !Number.isNaN(parsed.getTime()) && parsed.getFullYear() === currentYear;
-  };
-  const parseHoursValue = (value: number | string | null) => {
-    const parsed = typeof value === "number" ? value : Number.parseFloat(value ?? "");
-    return Number.isFinite(parsed) ? parsed : 0;
-  };
-
-  const eventHoursById = new Map(input.events.map((event) => [event.id, event]));
-  const attendanceHours = input.attendanceRows
-    .filter((row) => row.attendance_status === "attending")
-    .reduce((total, row) => {
-      const event = eventHoursById.get(row.training_event_id);
-      return event && isInCurrentYear(event.starts_at) ? total + parseHoursValue(event.hours_credit) : total;
-    }, 0);
-  const outsideHours = input.outsideSubmissions
-    .filter((row) => row.status === "approved" && isInCurrentYear(row.training_date))
-    .reduce((total, row) => total + parseHoursValue(row.hours), 0);
-  const assignmentHoursById = new Map(input.assignments.map((assignment) => [assignment.id, assignment]));
-  const approvedAssignmentHours = input.assignmentMembers
-    .filter((row) => row.completion_status === "approved" && isInCurrentYear(row.completed_at ?? row.updated_at ?? row.created_at))
-    .reduce((total, row) => {
-      const assignment = assignmentHoursById.get(row.training_assignment_id);
-      const earnedHours = parseHoursValue(row.hours_earned);
-      return total + (earnedHours > 0 ? earnedHours : parseHoursValue(assignment?.hours_credit ?? null));
-    }, 0);
-
-  return attendanceHours + outsideHours + approvedAssignmentHours;
+  return calculateDepartmentTrainingMemberHours({
+    ...input,
+    calendarYear: new Date().getFullYear(),
+  });
 }
 
 export default async function TrainingPage() {
@@ -225,6 +197,7 @@ export default async function TrainingPage() {
       { data: departmentEventsData, error: departmentEventsError },
       { data: departmentAttendanceData, error: departmentAttendanceError },
       { data: departmentOutsideData, error: departmentOutsideError },
+      { data: departmentOutsideParticipantsData, error: departmentOutsideParticipantsError },
       { data: departmentAssignmentsData, error: departmentAssignmentsError },
       { data: departmentAssignmentMembersData, error: departmentAssignmentMembersError },
       { data: departmentMembersData, error: departmentMembersError },
@@ -276,6 +249,7 @@ export default async function TrainingPage() {
         .select("training_event_id, member_id, attendance_status, completion_status")
         .eq("department_id", currentMember.departmentId),
       departmentDataClient.from("training_outside_submissions").select("id, member_id, title, category_id, training_date, hours, status").eq("department_id", currentMember.departmentId),
+      departmentDataClient.from("training_outside_submission_members").select("submission_id, member_id").eq("department_id", currentMember.departmentId),
       departmentDataClient.from("training_assignments").select("id, hours_credit").eq("department_id", currentMember.departmentId),
       departmentDataClient.from("training_assignment_members").select("training_assignment_id, completion_status, completed_at, updated_at, created_at, hours_earned").eq("department_id", currentMember.departmentId),
       departmentDataClient.from("members").select("id, first_name, last_name").eq("department_id", currentMember.departmentId).eq("active", true),
@@ -304,14 +278,15 @@ export default async function TrainingPage() {
     if (emsCourseDefinitionsError) {
       throw new Error(emsCourseDefinitionsError.message || "Unable to load EMS course definitions.");
     }
-    if (departmentEventsError || departmentAttendanceError || departmentOutsideError || departmentAssignmentsError || departmentAssignmentMembersError) {
+    if (departmentEventsError || departmentAttendanceError || departmentOutsideError || departmentOutsideParticipantsError || departmentAssignmentsError || departmentAssignmentMembersError) {
       throw new Error("Unable to load department training totals.");
     }
 
     const departmentTrainingHoursThisYear = calculateDepartmentTrainingHoursThisYear({
       events: (departmentEventsData ?? []) as Array<{ id: string; starts_at: string; hours_credit: number | string | null }>,
       attendanceRows: (departmentAttendanceData ?? []) as Array<{ training_event_id: string; attendance_status: string }>,
-      outsideSubmissions: (departmentOutsideData ?? []) as Array<{ training_date: string; hours: number | string | null; status: string }>,
+      outsideSubmissions: (departmentOutsideData ?? []) as Array<{ id: string; member_id: string; training_date: string; hours: number | string | null; status: string }>,
+      outsideParticipants: (departmentOutsideParticipantsData ?? []) as Array<{ submission_id: string; member_id: string }>,
       assignments: (departmentAssignmentsData ?? []) as Array<{ id: string; hours_credit: number | string | null }>,
       assignmentMembers: (departmentAssignmentMembersData ?? []) as Array<{ training_assignment_id: string; completion_status: string; completed_at: string | null; updated_at: string; created_at: string; hours_earned: number | string | null }>,
     });
@@ -604,6 +579,7 @@ export default async function TrainingPage() {
     { data: assignmentEvidenceData, error: assignmentEvidenceError },
     { data: emsCourseDefinitionsData, error: emsCourseDefinitionsError },
     { data: approvedOutsideDisplayData, error: approvedOutsideDisplayError },
+    { data: departmentOutsideParticipantsData, error: departmentOutsideParticipantsError },
   ] = await Promise.all([
     supabase
       .from("training_categories")
@@ -690,6 +666,10 @@ export default async function TrainingPage() {
       .eq("department_id", currentMember.departmentId)
       .eq("status", "approved")
       .order("training_date", { ascending: false }),
+    supabase
+      .from("training_outside_submission_members")
+      .select("submission_id, member_id")
+      .eq("department_id", currentMember.departmentId),
   ]);
 
   if (categoriesError) {
@@ -900,7 +880,17 @@ export default async function TrainingPage() {
   const departmentTrainingHoursThisYear = calculateDepartmentTrainingHoursThisYear({
     events,
     attendanceRows,
-    outsideSubmissions,
+    outsideSubmissions:
+      approvedOutsideDisplayError
+        ? []
+        : ((approvedOutsideDisplayData ?? []) as Array<{ id: string; member_id: string; training_date: string; hours: number | string | null }>).map((row) => ({
+            ...row,
+            status: "approved",
+          })),
+    outsideParticipants:
+      departmentOutsideParticipantsError
+        ? []
+        : ((departmentOutsideParticipantsData ?? []) as Array<{ submission_id: string; member_id: string }>),
     assignments,
     assignmentMembers,
   });
