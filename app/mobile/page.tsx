@@ -147,6 +147,7 @@ type DeficiencyAssignmentHistoryRow = {
 type TrainingCategoryRow = {
 	id: string;
 	name: string;
+	compliance_bucket?: string | null;
 };
 
 function normalizeDeficiencyStatus(relation: DeficiencyStatusRelation | DeficiencyStatusRelation[] | null) {
@@ -293,12 +294,13 @@ export default async function MobilePage() {
 			.eq("member_id", currentMember.id)
 			.eq("attendance_status", "attending"),
 		supabase
-			.from("training_outside_submissions")
-			.select("id, category_id, training_date, hours, status")
-			.eq("department_id", currentMember.departmentId)
-			.eq("member_id", currentMember.id)
-			.eq("status", "approved")
-			.order("training_date", { ascending: false }),
+			.rpc("get_member_training_outside_submissions", { p_department_id: currentMember.departmentId, p_member_id: currentMember.id })
+			.then((result) => ({
+				data: ((result.data ?? []) as OutsideSubmissionRow[])
+					.filter((row) => row.status === "approved")
+					.sort((left, right) => String(right.training_date).localeCompare(String(left.training_date))),
+				error: result.error,
+			})),
 		supabase
 			.from("member_certifications")
 			.select("id, certification_id, certificate_number, issued_at, expires_at, supporting_document_id, created_at, updated_at")
@@ -460,7 +462,7 @@ export default async function MobilePage() {
 	if (categoryIds.length > 0) {
 		const { data: categoryRows } = await supabase
 			.from("training_categories")
-			.select("id, name")
+			.select("id, name, compliance_bucket")
 			.eq("department_id", currentMember.departmentId)
 			.in("id", categoryIds);
 
@@ -468,6 +470,7 @@ export default async function MobilePage() {
 	}
 
 	const categoryNameById = new Map(categories.map((row) => [row.id, row.name]));
+	const categoryBucketById = new Map(categories.map((row) => [row.id, row.compliance_bucket ?? null]));
 	const certificationNameById = new Map(certificationTypes.map((row) => [row.id, row.name]));
 	const certificationTypeById = buildCertificationTypeMetaById(
 		certificationTypes.map((row) => ({
@@ -485,16 +488,25 @@ export default async function MobilePage() {
 	const assignmentById = new Map(assignments.map((row) => [row.id, row]));
 	const approvedHomeworkMembers = assignmentMembers.filter((row) => row.completion_status === "approved");
 
+	// Calendar-year boundary shared by every surface labeled annual/"This Year".
+	const mobileYearPrefix = `${new Date().getUTCFullYear()}-`;
+	const attendedEventsThisYear = attendedEvents.filter((event) => typeof event.starts_at === "string" && event.starts_at.startsWith(mobileYearPrefix));
+	const approvedOutsideThisYear = approvedOutside.filter((submission) => typeof submission.training_date === "string" && submission.training_date.startsWith(mobileYearPrefix));
+	const approvedHomeworkMembersThisYear = approvedHomeworkMembers.filter((row) => {
+		const completion = row.completed_at ?? null;
+		return typeof completion === "string" && completion.startsWith(mobileYearPrefix);
+	});
+
 	const fireAnnualComplianceRows = [
-		...attendedEvents.map((event) => ({
+		...attendedEventsThisYear.map((event) => ({
 			categoryId: event.category_id,
 			hours: event.hours_credit,
 		})),
-		...approvedOutside.map((submission) => ({
+		...approvedOutsideThisYear.map((submission) => ({
 			categoryId: submission.category_id,
 			hours: submission.hours,
 		})),
-		...approvedHomeworkMembers.map((approvedHomework) => {
+		...approvedHomeworkMembersThisYear.map((approvedHomework) => {
 			const assignment = assignmentById.get(approvedHomework.training_assignment_id);
 			const assignmentHours = assignment ? parseHours(assignment.hours_credit) : 0;
 			const rowHours = parseHours(approvedHomework.hours_earned);
@@ -506,21 +518,21 @@ export default async function MobilePage() {
 	];
 
 	const categoryHoursMap = new Map<string, { categoryId: string | null; name: string; hours: number }>();
-	for (const event of attendedEvents) {
+	for (const event of attendedEventsThisYear) {
 		const categoryName = event.category_id ? categoryNameById.get(event.category_id) ?? "Uncategorized" : "Uncategorized";
 		const key = event.category_id || "uncategorized";
 		const current = categoryHoursMap.get(key) ?? { categoryId: event.category_id, name: categoryName, hours: 0 };
 		current.hours += parseHours(event.hours_credit);
 		categoryHoursMap.set(key, current);
 	}
-	for (const submission of approvedOutside) {
+	for (const submission of approvedOutsideThisYear) {
 		const categoryName = submission.category_id ? categoryNameById.get(submission.category_id) ?? "Uncategorized" : "Uncategorized";
 		const key = submission.category_id || "uncategorized";
 		const current = categoryHoursMap.get(key) ?? { categoryId: submission.category_id, name: categoryName, hours: 0 };
 		current.hours += parseHours(submission.hours);
 		categoryHoursMap.set(key, current);
 	}
-	for (const approvedHomework of approvedHomeworkMembers) {
+	for (const approvedHomework of approvedHomeworkMembersThisYear) {
 		const assignment = assignmentById.get(approvedHomework.training_assignment_id);
 		if (!assignment) {
 			continue;
@@ -576,6 +588,7 @@ export default async function MobilePage() {
 		memberQualifications,
 		requirements,
 		categoryNameById,
+		categoryBucketById,
 		fireAnnualComplianceRows,
 		categoryHours: Array.from(categoryHoursMap.values()).map((row) => ({ categoryId: row.categoryId, categoryName: row.name, hours: row.hours })),
 		trainingAssignments: assignments,

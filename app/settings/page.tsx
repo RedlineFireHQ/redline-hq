@@ -30,6 +30,7 @@ type TrainingCategoryRow = {
   name: string;
   description: string | null;
   active: boolean;
+  compliance_bucket: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -111,7 +112,7 @@ export default async function SettingsPage() {
       .order("name", { ascending: true }),
     supabase
       .from("training_categories")
-      .select("id, name, description, active, created_at, updated_at")
+      .select("id, name, description, active, compliance_bucket, created_at, updated_at")
       .eq("department_id", currentMember.departmentId)
       .order("active", { ascending: false })
       .order("created_at", { ascending: true }),
@@ -280,6 +281,7 @@ export default async function SettingsPage() {
     name: typeof row.name === "string" ? row.name : "",
     description: typeof row.description === "string" ? row.description : null,
     active: typeof row.active === "boolean" ? row.active : true,
+    compliance_bucket: typeof row.compliance_bucket === "string" ? row.compliance_bucket : null,
     created_at: typeof row.created_at === "string" ? row.created_at : new Date().toISOString(),
     updated_at: typeof row.updated_at === "string" ? row.updated_at : new Date().toISOString(),
   }));

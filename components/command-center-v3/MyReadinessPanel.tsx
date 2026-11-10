@@ -47,18 +47,21 @@ type MemberTrainingEventRow = {
   id: string;
   category_id: string | null;
   hours_credit: number | string | null;
+  starts_at: string | null;
 };
 
 type MemberApprovedOutsideTrainingRow = {
   id: string;
   category_id: string | null;
   hours: number | string | null;
+  training_date: string | null;
 };
 
 type TrainingAssignmentMemberRow = {
   training_assignment_id: string;
   completion_status: string;
   hours_earned: number | string | null;
+  completed_at?: string | null;
 };
 
 type TrainingAssignmentRow = {
@@ -71,6 +74,7 @@ type TrainingAssignmentRow = {
 type CategoryRow = {
   id: string;
   name: string;
+  compliance_bucket?: string | null;
 };
 
 type DepartmentRoleRow = {
@@ -478,6 +482,7 @@ export default function MyReadinessPanel() {
         id: String(row.id),
         category_id: typeof row.category_id === "string" ? row.category_id : null,
         hours: typeof row.hours === "number" || typeof row.hours === "string" ? row.hours : null,
+        training_date: typeof row.training_date === "string" ? row.training_date : null,
       }));
 
       const assignmentMemberRows: TrainingAssignmentMemberInput[] = (assignmentMembersData ?? []).map((row) => ({
@@ -515,6 +520,7 @@ export default function MyReadinessPanel() {
           training_assignment_id: row.training_assignment_id,
           completion_status: row.completion_status,
           hours_earned: row.hours_earned,
+          completed_at: row.completed_at ?? null,
         }));
 
       const assignmentsById = new Map(
@@ -537,7 +543,7 @@ export default function MyReadinessPanel() {
       if (attendedEventIds.length > 0) {
         const { data: eventsData, error: eventsError } = await supabase
           .from("training_events")
-          .select("id, category_id, hours_credit")
+          .select("id, category_id, hours_credit, starts_at")
           .eq("department_id", departmentId)
           .in("id", attendedEventIds);
 
@@ -554,6 +560,7 @@ export default function MyReadinessPanel() {
           id: String(row.id),
           category_id: typeof row.category_id === "string" ? row.category_id : null,
           hours_credit: typeof row.hours_credit === "number" || typeof row.hours_credit === "string" ? row.hours_credit : null,
+          starts_at: typeof row.starts_at === "string" ? row.starts_at : null,
         }));
       }
 
@@ -571,7 +578,7 @@ export default function MyReadinessPanel() {
       if (categoryIds.length > 0) {
         const { data: categoriesData, error: categoriesError } = await supabase
           .from("training_categories")
-          .select("id, name")
+          .select("id, name, compliance_bucket")
           .eq("department_id", departmentId)
           .in("id", categoryIds);
 
@@ -587,13 +594,22 @@ export default function MyReadinessPanel() {
         categories = (categoriesData ?? []).map((row) => ({
           id: String(row.id),
           name: typeof row.name === "string" ? row.name : "Category",
+          compliance_bucket: typeof row.compliance_bucket === "string" ? row.compliance_bucket : null,
         }));
       }
 
       const categoryNameMap = new Map(categories.map((row) => [row.id, row.name]));
+      const categoryBucketMap = new Map(categories.map((row) => [row.id, row.compliance_bucket ?? null]));
       const categoryHoursMap = new Map<string, { categoryId: string | null; categoryName: string; hours: number }>();
 
-      for (const row of attendedEvents) {
+      // Calendar-year boundary shared by every surface labeled annual/"This Year".
+      const panelYear = String(new Date().getFullYear());
+      const inPanelYear = (value: string | null | undefined) => typeof value === "string" && value.slice(0, 4) === panelYear;
+      const attendedEventsThisYear = attendedEvents.filter((row) => inPanelYear(row.starts_at));
+      const approvedRowsThisYear = approvedRows.filter((row) => inPanelYear(row.training_date));
+      const approvedAssignmentMembersThisYear = approvedAssignmentMembers.filter((row) => inPanelYear(row.completed_at));
+
+      for (const row of attendedEventsThisYear) {
         const key = row.category_id || "uncategorized";
         const categoryName = row.category_id ? categoryNameMap.get(row.category_id) || "Uncategorized" : "Uncategorized";
         const current = categoryHoursMap.get(key) ?? { categoryId: row.category_id, categoryName, hours: 0 };
@@ -601,7 +617,7 @@ export default function MyReadinessPanel() {
         categoryHoursMap.set(key, current);
       }
 
-      for (const row of approvedRows) {
+      for (const row of approvedRowsThisYear) {
         const key = row.category_id || "uncategorized";
         const categoryName = row.category_id ? categoryNameMap.get(row.category_id) || "Uncategorized" : "Uncategorized";
         const current = categoryHoursMap.get(key) ?? { categoryId: row.category_id, categoryName, hours: 0 };
@@ -609,7 +625,7 @@ export default function MyReadinessPanel() {
         categoryHoursMap.set(key, current);
       }
 
-      for (const row of approvedAssignmentMembers) {
+      for (const row of approvedAssignmentMembersThisYear) {
         const assignment = assignmentsById.get(row.training_assignment_id);
         if (!assignment || assignment.status === "archived") {
           continue;
@@ -626,9 +642,9 @@ export default function MyReadinessPanel() {
       }
 
       const complianceRows = [
-        ...attendedEvents.map((row) => ({ categoryId: row.category_id, hours: row.hours_credit })),
-        ...approvedRows.map((row) => ({ categoryId: row.category_id, hours: row.hours })),
-        ...approvedAssignmentMembers.map((row) => {
+        ...attendedEventsThisYear.map((row) => ({ categoryId: row.category_id, hours: row.hours_credit })),
+        ...approvedRowsThisYear.map((row) => ({ categoryId: row.category_id, hours: row.hours })),
+        ...approvedAssignmentMembersThisYear.map((row) => {
           const assignment = assignmentsById.get(row.training_assignment_id);
           const assignmentHours = assignment ? parseHours(assignment.hours_credit) : 0;
           const rowHours = parseHours(row.hours_earned);
@@ -658,6 +674,7 @@ export default function MyReadinessPanel() {
         memberQualifications,
         requirements: activeRequirements,
         categoryNameById: categoryNameMap,
+        categoryBucketById: categoryBucketMap,
         fireAnnualComplianceRows: complianceRows,
         categoryHours: Array.from(categoryHoursMap.values()),
         trainingAssignments: trainingAssignmentRows,

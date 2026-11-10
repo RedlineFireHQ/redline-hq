@@ -48,10 +48,16 @@ export default async function MobileMyReadinessPage() {
   const events = (eventRows ?? []) as Row[];
   const outside = (outsideResult.data ?? []) as Row[];
   const categoryIds = Array.from(new Set([...events.map((row) => stringValue(row.category_id)), ...outside.map((row) => stringValue(row.category_id))].filter((value): value is string => Boolean(value))));
-  const { data: categoryRows } = categoryIds.length > 0 ? await supabase.from("training_categories").select("id, name, active").eq("department_id", departmentId).in("id", categoryIds) : { data: [] };
+  const { data: categoryRows } = categoryIds.length > 0 ? await supabase.from("training_categories").select("id, name, active, compliance_bucket").eq("department_id", departmentId).in("id", categoryIds) : { data: [] };
   const categoryNameById = new Map(((categoryRows ?? []) as Row[]).map((row) => [String(row.id), String(row.name ?? "Uncategorized")]));
+  const categoryBucketById = new Map(((categoryRows ?? []) as Row[]).map((row) => [String(row.id), (row.compliance_bucket as string | null) ?? null]));
+  // Calendar-year boundary shared by every surface labeled annual/"This Year".
+  const currentCalendarYearPrefix = `${new Date().getUTCFullYear()}-`;
+  const inCurrentYear = (value: unknown) => typeof value === "string" && value.startsWith(currentCalendarYearPrefix);
+  const eventsThisYear = events.filter((row) => inCurrentYear(row.starts_at));
+  const approvedOutsideThisYear = outside.filter((item) => item.status === "approved" && inCurrentYear(item.training_date));
   const categoryHoursMap = new Map<string, { categoryId: string | null; categoryName: string; hours: number }>();
-  for (const row of [...events, ...outside.filter((item) => item.status === "approved")]) {
+  for (const row of [...eventsThisYear, ...approvedOutsideThisYear]) {
     const categoryId = stringValue(row.category_id); const key = categoryId ?? "uncategorized";
     const current = categoryHoursMap.get(key) ?? { categoryId, categoryName: categoryId ? categoryNameById.get(categoryId) ?? "Uncategorized" : "Uncategorized", hours: 0 };
     current.hours += numberValue(row.hours_credit ?? row.hours); categoryHoursMap.set(key, current);
@@ -76,7 +82,8 @@ export default async function MobileMyReadinessPage() {
     memberQualifications: (memberQualificationResult.data ?? []) as Array<{ qualification_id: string }>,
     requirements: (requirementResult.data ?? []) as RequirementInput[],
     categoryNameById,
-    fireAnnualComplianceRows: [...events, ...outside.filter((row) => row.status === "approved")].map((row) => ({ categoryId: stringValue(row.category_id), hours: (row.hours_credit ?? row.hours) as number | string | null })),
+    categoryBucketById,
+    fireAnnualComplianceRows: [...eventsThisYear, ...approvedOutsideThisYear].map((row) => ({ categoryId: stringValue(row.category_id), hours: (row.hours_credit ?? row.hours) as number | string | null })),
     categoryHours: Array.from(categoryHoursMap.values()),
     trainingAssignments: [] as TrainingAssignmentInput[],
     assignmentMembers: (assignmentMemberResult.data ?? []) as TrainingAssignmentMemberInput[],

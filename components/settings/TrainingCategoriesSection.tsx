@@ -3,12 +3,14 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { getTrainingComplianceBucketByCategoryName, type TrainingComplianceBucket } from "@/lib/training/compliance-buckets";
 
 type TrainingCategoryRow = {
   id: string;
   name: string;
   description: string | null;
   active: boolean;
+  compliance_bucket: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -17,7 +19,14 @@ type TrainingCategoryFormState = {
   name: string;
   description: string;
   active: boolean;
+  complianceBucket: TrainingComplianceBucket;
 };
+
+const COMPLIANCE_BUCKET_OPTIONS: Array<{ value: TrainingComplianceBucket; label: string; description: string }> = [
+  { value: "fire_annual", label: "Fire Training", description: "Counts toward annual/ISO Fire Training hours." },
+  { value: "ems_ce", label: "EMS Training", description: "Counts toward EMS continuing education hours." },
+  { value: "other", label: "Other Training", description: "Counts toward total training hours only." },
+];
 
 interface TrainingCategoriesSectionProps {
   departmentId: string;
@@ -30,6 +39,7 @@ function emptyFormState(): TrainingCategoryFormState {
     name: "",
     description: "",
     active: true,
+    complianceBucket: "other",
   };
 }
 
@@ -70,6 +80,10 @@ export default function TrainingCategoriesSection({
       name: category.name,
       description: category.description ?? "",
       active: category.active,
+      complianceBucket:
+        category.compliance_bucket === "fire_annual" || category.compliance_bucket === "ems_ce" || category.compliance_bucket === "other"
+          ? category.compliance_bucket
+          : getTrainingComplianceBucketByCategoryName(category.name),
     });
     setIsModalOpen(true);
   }
@@ -121,6 +135,7 @@ export default function TrainingCategoriesSection({
             name,
             description: description || null,
             active: formState.active,
+            compliance_bucket: formState.complianceBucket,
             updated_by: currentMemberId,
           })
           .eq("id", editingCategoryId)
@@ -144,6 +159,7 @@ export default function TrainingCategoriesSection({
                   name,
                   description: description || null,
                   active: formState.active,
+                  compliance_bucket: formState.complianceBucket,
                   updated_at: new Date().toISOString(),
                 }
               : category,
@@ -157,10 +173,11 @@ export default function TrainingCategoriesSection({
             name,
             description: description || null,
             active: formState.active,
+            compliance_bucket: formState.complianceBucket,
             created_by: currentMemberId,
             updated_by: currentMemberId,
           })
-          .select("id, name, description, active, created_at, updated_at")
+          .select("id, name, description, active, compliance_bucket, created_at, updated_at")
           .single();
 
         if (error || !data) {
@@ -178,6 +195,7 @@ export default function TrainingCategoriesSection({
           name: typeof data.name === "string" ? data.name : name,
           description: typeof data.description === "string" ? data.description : null,
           active: typeof data.active === "boolean" ? data.active : formState.active,
+          compliance_bucket: typeof data.compliance_bucket === "string" ? data.compliance_bucket : formState.complianceBucket,
           created_at: typeof data.created_at === "string" ? data.created_at : new Date().toISOString(),
           updated_at: typeof data.updated_at === "string" ? data.updated_at : new Date().toISOString(),
         };
@@ -315,6 +333,27 @@ export default function TrainingCategoriesSection({
                     onChange={(event) => setFormState((current) => ({ ...current, description: event.target.value }))}
                     className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
                   />
+                </label>
+
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Compliance Classification</span>
+                  <select
+                    value={formState.complianceBucket}
+                    onChange={(event) =>
+                      setFormState((current) => ({ ...current, complianceBucket: event.target.value as TrainingComplianceBucket }))
+                    }
+                    className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
+                  >
+                    {COMPLIANCE_BUCKET_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1.5 text-xs text-neutral-400">
+                    {COMPLIANCE_BUCKET_OPTIONS.find((option) => option.value === formState.complianceBucket)?.description}
+                    {" "}All hours always count toward total training hours.
+                  </p>
                 </label>
 
                 <label className="flex items-center gap-3 rounded-xl border border-white/10 bg-[#1b1b1b] px-4 py-3">

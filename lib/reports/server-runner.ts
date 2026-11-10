@@ -5174,7 +5174,7 @@ async function runTrainingReport(
 		new Set(assignmentMemberRows.map((row) => row.training_assignment_id).filter(Boolean)),
 	);
 
-	const [eventsQuery, assignmentsQuery] = await Promise.all([
+	const [eventsQuery, assignmentsQuery, outsideParticipantsQuery] = await Promise.all([
 		eventIds.length > 0
 			? context.supabase
 					.from("training_events")
@@ -5189,21 +5189,34 @@ async function runTrainingReport(
 					.eq("department_id", context.departmentId)
 					.in("id", assignmentIds)
 			: Promise.resolve({ data: [] as unknown[], error: null }),
+		outsideRows.length > 0
+			? context.supabase
+					.from("training_outside_submission_members")
+					.select("submission_id, member_id")
+					.eq("department_id", context.departmentId)
+					.in("submission_id", outsideRows.map((row) => row.id))
+			: Promise.resolve({ data: [] as unknown[], error: null }),
 	]);
 
-	if (eventsQuery.error || assignmentsQuery.error) {
+	if (eventsQuery.error || assignmentsQuery.error || outsideParticipantsQuery.error) {
 		return buildError(
 			"QUERY_ERROR",
-			eventsQuery.error?.message || assignmentsQuery.error?.message || "Unable to load training metadata.",
+			eventsQuery.error?.message || assignmentsQuery.error?.message || outsideParticipantsQuery.error?.message || "Unable to load training metadata.",
 		);
 	}
 
 	const eventRows = (eventsQuery.data ?? []) as TrainingEventRow[];
 	const assignmentRows = (assignmentsQuery.data ?? []) as TrainingAssignmentRow[];
+	const outsideParticipantRows = (outsideParticipantsQuery.data ?? []) as Array<{ submission_id: string; member_id: string }>;
 
 	const memberIds = Array.from(
 		new Set(
-			[...attendanceRows.map((row) => row.member_id), ...outsideRows.map((row) => row.member_id), ...assignmentMemberRows.map((row) => row.member_id)].filter(Boolean),
+			[
+				...attendanceRows.map((row) => row.member_id),
+				...outsideRows.map((row) => row.member_id),
+				...outsideParticipantRows.map((row) => row.member_id),
+				...assignmentMemberRows.map((row) => row.member_id),
+			].filter(Boolean),
 		),
 	);
 
@@ -5280,21 +5293,32 @@ async function runTrainingReport(
 			continue;
 		}
 
-		records.push({
-			id: `outside-${row.id}`,
-			sourceType: "Outside Submission",
-			trainingDateRaw: row.training_date,
-			memberId: row.member_id,
-			memberName: memberNameById.get(row.member_id) ?? row.member_id,
-			trainingName: normalizeText(row.title) || "Outside Training",
-			categoryId: row.category_id,
-			categoryName: row.category_id ? (categoryNameById.get(row.category_id) ?? "Uncategorized") : "Uncategorized",
-			hours: parseHoursValue(row.hours),
-			instructorName: "-",
-			trainingType: "Outside Submission",
-			location: "-",
-			searchableDescription: `${normalizeText(row.description)} ${normalizeText(row.notes)}`.trim(),
-		});
+		// Credit the owner and every distinct participant once each; the owner is
+		// deduplicated when they also appear in the participant list.
+		const creditedMemberIds = new Set<string>([row.member_id]);
+		for (const participant of outsideParticipantRows) {
+			if (participant.submission_id === row.id && participant.member_id) {
+				creditedMemberIds.add(participant.member_id);
+			}
+		}
+
+		for (const creditedMemberId of creditedMemberIds) {
+			records.push({
+				id: `outside-${row.id}-${creditedMemberId}`,
+				sourceType: "Outside Submission",
+				trainingDateRaw: row.training_date,
+				memberId: creditedMemberId,
+				memberName: memberNameById.get(creditedMemberId) ?? creditedMemberId,
+				trainingName: normalizeText(row.title) || "Outside Training",
+				categoryId: row.category_id,
+				categoryName: row.category_id ? (categoryNameById.get(row.category_id) ?? "Uncategorized") : "Uncategorized",
+				hours: parseHoursValue(row.hours),
+				instructorName: "-",
+				trainingType: "Outside Submission",
+				location: "-",
+				searchableDescription: `${normalizeText(row.description)} ${normalizeText(row.notes)}`.trim(),
+			});
+		}
 	}
 
 	for (const row of assignmentMemberRows) {

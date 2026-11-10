@@ -134,6 +134,7 @@ type MemberApprovedOutsideTrainingRow = {
 type TrainingCategoryLookupRow = {
   id: string;
   name: string;
+  compliance_bucket?: string | null;
 };
 
 type EmsTrackRow = {
@@ -171,6 +172,9 @@ type TrainingAssignmentMemberRow = {
   training_assignment_id: string;
   completion_status: string;
   hours_earned: number | string | null;
+  completed_at?: string | null;
+  updated_at?: string | null;
+  created_at?: string | null;
 };
 
 type TrainingAssignmentRow = {
@@ -465,7 +469,7 @@ export default async function PersonnelProfilePage({
       .order("sort_order", { ascending: true }),
     supabase
       .from("training_assignment_members")
-      .select("training_assignment_id, completion_status, hours_earned")
+      .select("training_assignment_id, completion_status, hours_earned, completed_at, updated_at, created_at")
       .eq("department_id", currentMember.departmentId)
       .eq("member_id", id)
       .eq("completion_status", "approved"),
@@ -733,6 +737,9 @@ export default async function PersonnelProfilePage({
     training_assignment_id: typeof row.training_assignment_id === "string" ? row.training_assignment_id : "",
     completion_status: typeof row.completion_status === "string" ? row.completion_status : "",
     hours_earned: typeof row.hours_earned === "number" || typeof row.hours_earned === "string" ? row.hours_earned : null,
+    completed_at: typeof row.completed_at === "string" ? row.completed_at : null,
+    updated_at: typeof row.updated_at === "string" ? row.updated_at : null,
+    created_at: typeof row.created_at === "string" ? row.created_at : null,
   }));
   const trainingAssignments: TrainingAssignmentRow[] = (trainingAssignmentsData ?? []).map((row) => ({
     id: String(row.id),
@@ -795,10 +802,11 @@ export default async function PersonnelProfilePage({
   );
 
   let trainingCategoryLookup = new Map<string, string>();
+  let trainingCategoryBucketLookup = new Map<string, string | null>();
   if (categoryIds.length > 0) {
     const { data: trainingCategoryData, error: trainingCategoryError } = await supabase
       .from("training_categories")
-      .select("id, name")
+      .select("id, name, compliance_bucket")
       .eq("department_id", currentMember.departmentId)
       .in("id", categoryIds);
 
@@ -809,9 +817,11 @@ export default async function PersonnelProfilePage({
     const categoryRows: TrainingCategoryLookupRow[] = (trainingCategoryData ?? []).map((row) => ({
       id: String(row.id),
       name: typeof row.name === "string" ? row.name : "Uncategorized",
+      compliance_bucket: typeof row.compliance_bucket === "string" ? row.compliance_bucket : null,
     }));
 
     trainingCategoryLookup = new Map(categoryRows.map((row) => [row.id, row.name]));
+    trainingCategoryBucketLookup = new Map(categoryRows.map((row) => [row.id, row.compliance_bucket ?? null]));
   }
 
   const eventHistoryItems: MemberTrainingHistoryItem[] = trainingEvents.map((event) => ({
@@ -883,10 +893,15 @@ export default async function PersonnelProfilePage({
   const departmentRoleById = new Map(departmentRoles.map((row) => [row.id, row.name]));
 
   const assignmentById = new Map(trainingAssignments.map((row) => [row.id, row]));
+  // Calendar-year boundary shared by every surface labeled annual/"This Year".
+  const profileYearPrefix = `${new Date().getUTCFullYear()}-`;
+  const inProfileYear = (value: string | null | undefined) => typeof value === "string" && value.startsWith(profileYearPrefix);
   const complianceRows: Array<{ categoryId: string | null; hours: number | string | null }> = [
-    ...trainingEvents.map((row) => ({ categoryId: row.category_id, hours: row.hours_credit })),
-    ...approvedOutsideTraining.map((row) => ({ categoryId: row.category_id, hours: row.hours })),
-    ...approvedAssignmentMembers.map((row) => {
+    ...trainingEvents.filter((row) => inProfileYear(row.starts_at)).map((row) => ({ categoryId: row.category_id, hours: row.hours_credit })),
+    ...approvedOutsideTraining.filter((row) => inProfileYear(row.training_date)).map((row) => ({ categoryId: row.category_id, hours: row.hours })),
+    ...approvedAssignmentMembers
+      .filter((row) => inProfileYear(row.completed_at ?? row.updated_at ?? row.created_at))
+      .map((row) => {
       const assignment = assignmentById.get(row.training_assignment_id);
       const assignmentHours = assignment ? parseHours(assignment.hours_credit) ?? 0 : 0;
       const rowHours = parseHours(row.hours_earned) ?? 0;
@@ -972,6 +987,7 @@ export default async function PersonnelProfilePage({
     memberQualifications: memberQualifications.map((row) => ({ qualification_id: row.qualification_id })),
     requirements: readinessRequirements,
     categoryNameById: trainingCategoryLookup,
+    categoryBucketById: trainingCategoryBucketLookup,
     fireAnnualComplianceRows: complianceRows,
     categoryHours: Array.from(categoryHoursMap.values()).map((row) => ({ categoryId: row.categoryId, categoryName: row.categoryName, hours: row.hours })),
     deficiencyItems,
