@@ -2309,6 +2309,276 @@ export default function TrainingWorkspace({
     }
   }
 
+  // Self-service completion for the signed-in member's assigned training.
+  // Rendered in both the member view and the management workspace so members
+  // with training-management permissions can also complete their own training.
+  const myAssignedTrainingSection = (
+            <section className="rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
+              <h2 className="text-2xl font-semibold text-white">My Assigned Training</h2>
+              <p className="mt-2 text-sm text-neutral-400">
+                Required assigned training appears here and contributes training credit when completed.
+              </p>
+
+              {homeworkProgressError ? (
+                <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                  {homeworkProgressError}
+                </div>
+              ) : null}
+
+              {homeworkProgressSuccessMessage ? (
+                <div className="mt-4 rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-200">
+                  {homeworkProgressSuccessMessage}
+                </div>
+              ) : null}
+
+              {myHomeworkRows.length === 0 ? (
+                <div className="mt-5 rounded-xl border border-dashed border-neutral-700 bg-neutral-950 p-8 text-center text-neutral-400">
+                  No assigned training yet.
+                </div>
+              ) : (
+                <div className="mt-5 space-y-3">
+                  {myHomeworkRows.map((assignmentMember) => {
+                    const assignment = assignmentById.get(assignmentMember.training_assignment_id);
+                    if (!assignment) {
+                      return null;
+                    }
+
+                    const evidenceFiles = assignmentEvidenceByMemberRowId.get(assignmentMember.id) ?? [];
+                    const submissionStatus = normalizeHomeworkStatusLabel(assignmentMember.completion_status);
+                    const normalizedStatus = assignmentMember.completion_status.trim().toLowerCase();
+                    const requiresReview = assignment.review_required === true;
+                    const isPendingReview = normalizedStatus === "pending_review" || normalizedStatus === "submitted";
+                    const canUseCompletedTogether = normalizedStatus === "pending_review";
+                    const isRejected = normalizedStatus === "rejected";
+                    const isApproved = assignmentMember.completion_status === "approved";
+                    const isSubmitting = submittingHomeworkMemberId === assignmentMember.id;
+                    const isOpeningTraining = openingHomeworkMemberId === assignmentMember.id;
+                    const hasOpenedTraining =
+                      normalizedStatus === "in_progress" ||
+                      isPendingReview ||
+                      isApproved ||
+                      (openedHomeworkMemberIds.has(assignmentMember.id) && !isRejected);
+                    const hasTrainingMaterial =
+                      Boolean(assignment.description?.trim()) ||
+                      Boolean(assignment.supporting_document_id) ||
+                      Boolean(assignment.external_video_url) ||
+                      Boolean(assignment.external_audio_url);
+                    const materialGate = getHomeworkMaterialGate(assignment, assignmentMember.id);
+                    const canShowOpenTrainingButton = !isPendingReview && !hasOpenedTraining;
+                    const showSubmittedMessage = requiresReview && isPendingReview;
+
+                    return (
+                      <div key={assignmentMember.id} className="rounded-xl border border-white/10 bg-[#141414] p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="text-base font-semibold text-white">{assignment.title}</p>
+                            <p className="mt-1 text-xs text-neutral-400">
+                              {getCategoryNameById(categories, assignment.category_id)}
+                              {assignment.hours_credit !== null ? ` • ${formatHours(assignment.hours_credit)} hrs` : ""}
+                              {assignmentMember.due_at ? ` • Due ${formatDateOnly(assignmentMember.due_at)}` : assignment.due_at ? ` • Due ${formatDateOnly(assignment.due_at)}` : ""}
+                            </p>
+                          </div>
+
+                          <span className={`rounded-full border px-2.5 py-1 text-xs uppercase tracking-[0.14em] ${homeworkStatusStyles(assignmentMember.completion_status)}`}>
+                            {submissionStatus}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 grid gap-2 text-xs text-neutral-400 md:grid-cols-2">
+                          <p>{assignment.is_required ? "Required" : "Optional"}</p>
+                          <p>Review required: {assignment.review_required ? "Yes" : "No"}</p>
+                        </div>
+
+                        {evidenceFiles.length > 0 ? (
+                          <div className="mt-3 rounded-lg border border-white/10 bg-[#101010] p-3">
+                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">Evidence</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {evidenceFiles.map((file) => (
+                                <button
+                                  key={file.id}
+                                  type="button"
+                                  onClick={() => openHomeworkEvidence(file.file_path)}
+                                  className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-neutral-200 transition hover:bg-white/[0.08]"
+                                >
+                                  {file.file_name}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+
+                        {!isApproved ? (
+                          <div className="mt-4 rounded-lg border border-white/10 bg-[#101010] p-3">
+                            {isRejected ? (
+                              <div className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2.5">
+                                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-red-200">Rejected</p>
+                                {assignmentMember.review_notes?.trim() ? (
+                                  <p className="mt-1 text-sm text-red-100">Officer feedback: {assignmentMember.review_notes.trim()}</p>
+                                ) : (
+                                  <p className="mt-1 text-sm text-red-100">Officer feedback is not provided. Review the assignment and resubmit for review.</p>
+                                )}
+                              </div>
+                            ) : null}
+
+                            {canShowOpenTrainingButton ? (
+                              <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                  type="button"
+                                  disabled={isOpeningTraining}
+                                  onClick={() => openHomeworkTraining(assignmentMember)}
+                                  className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-amber-100 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                  {isOpeningTraining ? "Opening..." : "Open Training"}
+                                </button>
+                              </div>
+                            ) : showSubmittedMessage ? (
+                              <p className="text-sm font-semibold text-amber-200">Assigned training submitted for review.</p>
+                            ) : null}
+
+                            {assignmentMember.completion_notes?.trim() ? (
+                              <p className="mt-2 text-sm text-neutral-300">{assignmentMember.completion_notes.trim()}</p>
+                            ) : null}
+
+                            {hasOpenedTraining ? (
+                              <div className="mt-3 rounded-lg border border-white/10 bg-[#121212] p-3">
+                                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Assigned Material</p>
+
+                                {assignment.description?.trim() ? (
+                                  <p className="mt-2 whitespace-pre-wrap text-sm text-neutral-200">{assignment.description.trim()}</p>
+                                ) : null}
+
+                                <div className="mt-3 flex flex-wrap items-center gap-2">
+                                  {assignment.supporting_document_id ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const supportingDocumentId = assignment.supporting_document_id;
+                                        if (!supportingDocumentId) {
+                                          return;
+                                        }
+
+                                        markHomeworkMaterialOpened(assignmentMember.id, "document");
+                                        openHomeworkSupportingDocument(supportingDocumentId);
+                                      }}
+                                      className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-200 transition hover:bg-white/[0.08]"
+                                    >
+                                      Open Document
+                                    </button>
+                                  ) : null}
+
+                                  {assignment.external_video_url ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => openHomeworkVideo(assignmentMember.id, assignment.external_video_url || "")}
+                                      className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-200 transition hover:bg-white/[0.08]"
+                                    >
+                                      Open Video
+                                    </button>
+                                  ) : null}
+
+                                  {assignment.external_audio_url ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => openHomeworkAudio(assignmentMember.id, assignment.external_audio_url || "")}
+                                      className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-200 transition hover:bg-white/[0.08]"
+                                    >
+                                      Open Audio
+                                    </button>
+                                  ) : null}
+                                </div>
+
+                                {!materialGate.canSubmit ? (
+                                  <p className="mt-3 text-xs text-amber-200">
+                                    Open all assigned training materials before submitting.
+                                  </p>
+                                ) : null}
+
+                                {!hasTrainingMaterial ? (
+                                  <p className="mt-3 text-xs text-neutral-400">
+                                    {requiresReview
+                                      ? "This assignment is instructions-only. Review the assignment details, then submit for review."
+                                      : "This assignment is instructions-only. Review the assignment details, then complete training."}
+                                  </p>
+                                ) : null}
+                              </div>
+                            ) : null}
+
+                            {hasOpenedTraining && !isPendingReview ? (
+                              <>
+                                <label className="mt-3 block">
+                                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Completion Notes</span>
+                                  <textarea
+                                    rows={3}
+                                    value={homeworkCompletionNotesByMemberId[assignmentMember.id] ?? assignmentMember.completion_notes ?? ""}
+                                    onChange={(event) =>
+                                      setHomeworkCompletionNotesByMemberId((current) => ({
+                                        ...current,
+                                        [assignmentMember.id]: event.target.value,
+                                      }))
+                                    }
+                                    className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
+                                  />
+                                </label>
+
+                                <label className="mt-3 block">
+                                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Evidence (Optional)</span>
+                                  <input
+                                    ref={(input) => {
+                                      homeworkEvidenceInputRefs.current.set(assignmentMember.id, input);
+                                    }}
+                                    type="file"
+                                    onChange={(event) =>
+                                      setHomeworkEvidenceFileByMemberId((current) => ({
+                                        ...current,
+                                        [assignmentMember.id]: (event.target.files ?? [])[0] ?? null,
+                                      }))
+                                    }
+                                    className="block w-full text-sm text-zinc-400 file:mr-4 file:rounded-lg file:border-0 file:bg-red-600 file:px-4 file:py-2 file:font-semibold file:text-white hover:file:bg-red-500"
+                                  />
+                                </label>
+
+                                <div className="mt-3 flex flex-wrap items-center gap-2">
+                                  {canUseCompletedTogether ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => openCompletedTogetherDialog(assignmentMember)}
+                                      className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-100 transition hover:bg-white/[0.08]"
+                                    >
+                                      Completed Together / Add Others
+                                    </button>
+                                  ) : null}
+                                  <button
+                                    type="button"
+                                    disabled={isSubmitting || !materialGate.canSubmit}
+                                      onClick={() => {
+                                        if (requiresReview) {
+                                          requestHomeworkSubmission(assignmentMember);
+                                          return;
+                                        }
+
+                                        requestHomeworkCompletion(assignmentMember);
+                                      }}
+                                    className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-red-100 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    {isSubmitting ? "Submitting..." : requiresReview ? "Submit for Review" : "Complete Training"}
+                                  </button>
+                                </div>
+                              </>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <p className="mt-4 text-sm font-semibold text-emerald-300">
+                            Complete • {formatHours(assignmentMember.hours_earned ?? assignment.hours_credit ?? null)} hrs
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+  );
+
   if (!hasManagementCapabilities) {
     return (
       <div className="space-y-6 pb-6">
@@ -2327,270 +2597,7 @@ export default function TrainingWorkspace({
           </p>
         </div>
 
-        <section className="rounded-2xl border border-neutral-800 bg-neutral-900 p-6">
-          <h2 className="text-2xl font-semibold text-white">My Assigned Training</h2>
-          <p className="mt-2 text-sm text-neutral-400">
-            Required assigned training appears here and contributes training credit when completed.
-          </p>
-
-          {homeworkProgressError ? (
-            <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-              {homeworkProgressError}
-            </div>
-          ) : null}
-
-          {homeworkProgressSuccessMessage ? (
-            <div className="mt-4 rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-200">
-              {homeworkProgressSuccessMessage}
-            </div>
-          ) : null}
-
-          {myHomeworkRows.length === 0 ? (
-            <div className="mt-5 rounded-xl border border-dashed border-neutral-700 bg-neutral-950 p-8 text-center text-neutral-400">
-              No assigned training yet.
-            </div>
-          ) : (
-            <div className="mt-5 space-y-3">
-              {myHomeworkRows.map((assignmentMember) => {
-                const assignment = assignmentById.get(assignmentMember.training_assignment_id);
-                if (!assignment) {
-                  return null;
-                }
-
-                const evidenceFiles = assignmentEvidenceByMemberRowId.get(assignmentMember.id) ?? [];
-                const submissionStatus = normalizeHomeworkStatusLabel(assignmentMember.completion_status);
-                const normalizedStatus = assignmentMember.completion_status.trim().toLowerCase();
-                const requiresReview = assignment.review_required === true;
-                const isPendingReview = normalizedStatus === "pending_review" || normalizedStatus === "submitted";
-                const canUseCompletedTogether = normalizedStatus === "pending_review";
-                const isRejected = normalizedStatus === "rejected";
-                const isApproved = assignmentMember.completion_status === "approved";
-                const isSubmitting = submittingHomeworkMemberId === assignmentMember.id;
-                const isOpeningTraining = openingHomeworkMemberId === assignmentMember.id;
-                const hasOpenedTraining =
-                  normalizedStatus === "in_progress" ||
-                  isPendingReview ||
-                  isApproved ||
-                  (openedHomeworkMemberIds.has(assignmentMember.id) && !isRejected);
-                const hasTrainingMaterial =
-                  Boolean(assignment.description?.trim()) ||
-                  Boolean(assignment.supporting_document_id) ||
-                  Boolean(assignment.external_video_url) ||
-                  Boolean(assignment.external_audio_url);
-                const materialGate = getHomeworkMaterialGate(assignment, assignmentMember.id);
-                const canShowOpenTrainingButton = !isPendingReview && !hasOpenedTraining;
-                const showSubmittedMessage = requiresReview && isPendingReview;
-
-                return (
-                  <div key={assignmentMember.id} className="rounded-xl border border-white/10 bg-[#141414] p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="text-base font-semibold text-white">{assignment.title}</p>
-                        <p className="mt-1 text-xs text-neutral-400">
-                          {getCategoryNameById(categories, assignment.category_id)}
-                          {assignment.hours_credit !== null ? ` • ${formatHours(assignment.hours_credit)} hrs` : ""}
-                          {assignmentMember.due_at ? ` • Due ${formatDateOnly(assignmentMember.due_at)}` : assignment.due_at ? ` • Due ${formatDateOnly(assignment.due_at)}` : ""}
-                        </p>
-                      </div>
-
-                      <span className={`rounded-full border px-2.5 py-1 text-xs uppercase tracking-[0.14em] ${homeworkStatusStyles(assignmentMember.completion_status)}`}>
-                        {submissionStatus}
-                      </span>
-                    </div>
-
-                    <div className="mt-3 grid gap-2 text-xs text-neutral-400 md:grid-cols-2">
-                      <p>{assignment.is_required ? "Required" : "Optional"}</p>
-                      <p>Review required: {assignment.review_required ? "Yes" : "No"}</p>
-                    </div>
-
-                    {evidenceFiles.length > 0 ? (
-                      <div className="mt-3 rounded-lg border border-white/10 bg-[#101010] p-3">
-                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">Evidence</p>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {evidenceFiles.map((file) => (
-                            <button
-                              key={file.id}
-                              type="button"
-                              onClick={() => openHomeworkEvidence(file.file_path)}
-                              className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-neutral-200 transition hover:bg-white/[0.08]"
-                            >
-                              {file.file_name}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-
-                    {!isApproved ? (
-                      <div className="mt-4 rounded-lg border border-white/10 bg-[#101010] p-3">
-                        {isRejected ? (
-                          <div className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2.5">
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-red-200">Rejected</p>
-                            {assignmentMember.review_notes?.trim() ? (
-                              <p className="mt-1 text-sm text-red-100">Officer feedback: {assignmentMember.review_notes.trim()}</p>
-                            ) : (
-                              <p className="mt-1 text-sm text-red-100">Officer feedback is not provided. Review the assignment and resubmit for review.</p>
-                            )}
-                          </div>
-                        ) : null}
-
-                        {canShowOpenTrainingButton ? (
-                          <div className="flex flex-wrap items-center gap-2">
-                            <button
-                              type="button"
-                              disabled={isOpeningTraining}
-                              onClick={() => openHomeworkTraining(assignmentMember)}
-                              className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-amber-100 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              {isOpeningTraining ? "Opening..." : "Open Training"}
-                            </button>
-                          </div>
-                        ) : showSubmittedMessage ? (
-                          <p className="text-sm font-semibold text-amber-200">Assigned training submitted for review.</p>
-                        ) : null}
-
-                        {assignmentMember.completion_notes?.trim() ? (
-                          <p className="mt-2 text-sm text-neutral-300">{assignmentMember.completion_notes.trim()}</p>
-                        ) : null}
-
-                        {hasOpenedTraining ? (
-                          <div className="mt-3 rounded-lg border border-white/10 bg-[#121212] p-3">
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Assigned Material</p>
-
-                            {assignment.description?.trim() ? (
-                              <p className="mt-2 whitespace-pre-wrap text-sm text-neutral-200">{assignment.description.trim()}</p>
-                            ) : null}
-
-                            <div className="mt-3 flex flex-wrap items-center gap-2">
-                              {assignment.supporting_document_id ? (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const supportingDocumentId = assignment.supporting_document_id;
-                                    if (!supportingDocumentId) {
-                                      return;
-                                    }
-
-                                    markHomeworkMaterialOpened(assignmentMember.id, "document");
-                                    openHomeworkSupportingDocument(supportingDocumentId);
-                                  }}
-                                  className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-200 transition hover:bg-white/[0.08]"
-                                >
-                                  Open Document
-                                </button>
-                              ) : null}
-
-                              {assignment.external_video_url ? (
-                                <button
-                                  type="button"
-                                  onClick={() => openHomeworkVideo(assignmentMember.id, assignment.external_video_url || "")}
-                                  className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-200 transition hover:bg-white/[0.08]"
-                                >
-                                  Open Video
-                                </button>
-                              ) : null}
-
-                              {assignment.external_audio_url ? (
-                                <button
-                                  type="button"
-                                  onClick={() => openHomeworkAudio(assignmentMember.id, assignment.external_audio_url || "")}
-                                  className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-200 transition hover:bg-white/[0.08]"
-                                >
-                                  Open Audio
-                                </button>
-                              ) : null}
-                            </div>
-
-                            {!materialGate.canSubmit ? (
-                              <p className="mt-3 text-xs text-amber-200">
-                                Open all assigned training materials before submitting.
-                              </p>
-                            ) : null}
-
-                            {!hasTrainingMaterial ? (
-                              <p className="mt-3 text-xs text-neutral-400">
-                                {requiresReview
-                                  ? "This assignment is instructions-only. Review the assignment details, then submit for review."
-                                  : "This assignment is instructions-only. Review the assignment details, then complete training."}
-                              </p>
-                            ) : null}
-                          </div>
-                        ) : null}
-
-                        {hasOpenedTraining && !isPendingReview ? (
-                          <>
-                            <label className="mt-3 block">
-                              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Completion Notes</span>
-                              <textarea
-                                rows={3}
-                                value={homeworkCompletionNotesByMemberId[assignmentMember.id] ?? assignmentMember.completion_notes ?? ""}
-                                onChange={(event) =>
-                                  setHomeworkCompletionNotesByMemberId((current) => ({
-                                    ...current,
-                                    [assignmentMember.id]: event.target.value,
-                                  }))
-                                }
-                                className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
-                              />
-                            </label>
-
-                            <label className="mt-3 block">
-                              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Evidence (Optional)</span>
-                              <input
-                                ref={(input) => {
-                                  homeworkEvidenceInputRefs.current.set(assignmentMember.id, input);
-                                }}
-                                type="file"
-                                onChange={(event) =>
-                                  setHomeworkEvidenceFileByMemberId((current) => ({
-                                    ...current,
-                                    [assignmentMember.id]: (event.target.files ?? [])[0] ?? null,
-                                  }))
-                                }
-                                className="block w-full text-sm text-zinc-400 file:mr-4 file:rounded-lg file:border-0 file:bg-red-600 file:px-4 file:py-2 file:font-semibold file:text-white hover:file:bg-red-500"
-                              />
-                            </label>
-
-                            <div className="mt-3 flex flex-wrap items-center gap-2">
-                              {canUseCompletedTogether ? (
-                                <button
-                                  type="button"
-                                  onClick={() => openCompletedTogetherDialog(assignmentMember)}
-                                  className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-neutral-100 transition hover:bg-white/[0.08]"
-                                >
-                                  Completed Together / Add Others
-                                </button>
-                              ) : null}
-                              <button
-                                type="button"
-                                disabled={isSubmitting || !materialGate.canSubmit}
-                                  onClick={() => {
-                                    if (requiresReview) {
-                                      requestHomeworkSubmission(assignmentMember);
-                                      return;
-                                    }
-
-                                    requestHomeworkCompletion(assignmentMember);
-                                  }}
-                                className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-red-100 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60"
-                              >
-                                {isSubmitting ? "Submitting..." : requiresReview ? "Submit for Review" : "Complete Training"}
-                              </button>
-                            </div>
-                          </>
-                        ) : null}
-                      </div>
-                    ) : (
-                      <p className="mt-4 text-sm font-semibold text-emerald-300">
-                        Complete • {formatHours(assignmentMember.hours_earned ?? assignment.hours_credit ?? null)} hrs
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
+        {myAssignedTrainingSection}
 
         {activeCategories.length === 0 ? (
           <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-5 py-4 text-sm text-amber-100">
@@ -2717,6 +2724,8 @@ export default function TrainingWorkspace({
           {homeworkSuccessMessage}
         </div>
       ) : null}
+
+      {myHomeworkRows.length > 0 ? myAssignedTrainingSection : null}
 
       {homeworkSaveError ? (
         <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
