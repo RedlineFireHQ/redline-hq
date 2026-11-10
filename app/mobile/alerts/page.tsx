@@ -1,5 +1,15 @@
-import Link from "next/link";
+import { redirect } from "next/navigation";
+import MobileAlertsList from "@/components/mobile/MobileAlertsList";
+import { getCurrentMember } from "@/lib/current-member";
+import { createSupabaseServerClient } from "@/lib/supabase-server";
 
-export default function MobileAlertsPage() {
-  return <main className="min-h-screen bg-[#080808] px-4 py-5 text-white sm:px-6"><div className="mx-auto max-w-3xl"><Link href="/mobile" className="inline-flex min-h-12 items-center text-sm font-bold text-white/65">Back to Field Actions</Link><header className="mt-5 border-b border-white/10 pb-5"><p className="text-xs font-black uppercase tracking-[0.22em] text-[#ef2b2d]">Mobile</p><h1 className="mt-2 text-3xl font-black">Alerts</h1><p className="mt-2 text-sm leading-6 text-white/60">Your department alerts will appear here.</p></header><section className="mt-5 rounded-2xl border border-white/10 bg-[#121212] p-5"><p className="text-sm font-bold leading-6 text-white/55">Alerts are not configured yet. This space is ready for training, deficiency, certification, and activity notifications.</p></section></div></main>;
+export default async function MobileAlertsPage() {
+  const supabase = await createSupabaseServerClient();
+  const currentMember = await getCurrentMember(supabase);
+
+  if (!currentMember?.departmentId) {
+    redirect("/login");
+  }
+
+  return <MobileAlertsList memberId={currentMember.id} />;
 }

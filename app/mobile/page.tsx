@@ -281,6 +281,7 @@ export default async function MobilePage() {
 		{ data: assignedDeficiencyRows },
 		{ data: assignmentMemberRows },
 		{ data: emsTrackProfileRows },
+		{ count: unreadNotificationCount },
 	] = await Promise.all([
 		supabase
 			.from("departments")
@@ -364,6 +365,11 @@ export default async function MobilePage() {
 			.eq("department_id", currentMember.departmentId)
 			.eq("member_id", currentMember.id)
 			.order("effective_start_date", { ascending: false }),
+		supabase
+			.from("notifications")
+			.select("id", { count: "exact", head: true })
+			.eq("member_id", currentMember.id)
+			.is("read_at", null),
 	]);
 
 	const departmentName = (deptRow as { name?: string } | null)?.name ?? "Redline Fire Department";
@@ -630,7 +636,8 @@ export default async function MobilePage() {
 	const progressLength = (readiness / 100) * arcLength;
 	const tickCount = 18;
 	const innerTickCount = 36;
-	const notificationCount = assignedDeficiencies.length;
+	// Unread in-app notifications (training assignments, deficiency assignments, etc.).
+	const notificationCount = unreadNotificationCount ?? 0;
 	const visibleQuickActions = quickActions.filter((item) => {
 		if (item.label === "Reports") return hasMobileReportsAccess;
 		return true;
@@ -659,14 +666,14 @@ export default async function MobilePage() {
 
 					<div className="absolute left-6 right-6 top-20">
 						<div className="flex items-start justify-between">
-							<button className={`relative mt-2 rounded-full border border-white/25 bg-black/30 p-2 text-white shadow-[0_8px_18px_rgba(0,0,0,0.28)] ${buttonInteraction}`}>
+							<Link href="/mobile/alerts" className={`relative mt-2 inline-flex rounded-full border border-white/25 bg-black/30 p-2 text-white shadow-[0_8px_18px_rgba(0,0,0,0.28)] ${buttonInteraction}`}>
 								<Bell className="h-6 w-6" />
 								{notificationCount > 0 && (
 									<span className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full bg-[#ef2b2d] text-xs font-bold text-white">
 										{notificationCount}
 									</span>
 								)}
-							</button>
+							</Link>
 						</div>
 
 						<p className="mt-6 -translate-y-[116px] text-[12px] font-semibold uppercase tracking-[0.22em] text-white/75">
