@@ -15,6 +15,7 @@ import {
 	type MemberCertificationAuthorityRow,
 } from "@/lib/ems/authoritative-certifications";
 import { getCertificationStatus } from "@/lib/readiness/member-readiness";
+import { parseOutsideSubmissionNotes } from "@/lib/training/outside-submission-notes";
 import { buildDateRangeFromPreset, buildUtcBoundsForDateRange, formatReportPeriodLabel, parseDateOnly } from "@/lib/reports/date-range";
 import { runInventoryReport } from "@/lib/reports/inventory-report";
 import { getReportSourceConfig } from "@/lib/reports/registry";
@@ -5293,6 +5294,8 @@ async function runTrainingReport(
 			continue;
 		}
 
+		const noteDetails = parseOutsideSubmissionNotes(row.notes);
+
 		// Credit the owner and every distinct participant once each; the owner is
 		// deduplicated when they also appear in the participant list.
 		const creditedMemberIds = new Set<string>([row.member_id]);
@@ -5313,9 +5316,9 @@ async function runTrainingReport(
 				categoryId: row.category_id,
 				categoryName: row.category_id ? (categoryNameById.get(row.category_id) ?? "Uncategorized") : "Uncategorized",
 				hours: parseHoursValue(row.hours),
-				instructorName: "-",
+				instructorName: noteDetails.instructorName ?? "-",
 				trainingType: "Outside Submission",
-				location: "-",
+				location: noteDetails.location ?? "-",
 				searchableDescription: `${normalizeText(row.description)} ${normalizeText(row.notes)}`.trim(),
 			});
 		}

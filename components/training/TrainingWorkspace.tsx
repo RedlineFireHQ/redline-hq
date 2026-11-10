@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CalendarDays, Clock3, MapPin, Plus, UserRound } from "lucide-react";
+import { CalendarDays, Clock3, MapPin, Plus, UserRound, Users } from "lucide-react";
 import { EMS_CORE_TOPICS, type EmsCoreTopicCode } from "@/lib/ems/requirements";
 import { triggerEmsAllocationRecalculation, triggerEmsAllocationRecalculationForMembers } from "@/lib/ems/recalculate-client";
 import { supabase } from "@/lib/supabase";
@@ -3110,9 +3110,13 @@ export default function TrainingWorkspace({
                         <td className="px-4 py-3 text-sm text-neutral-200">{submission.categoryName}</td>
                         <td className="px-4 py-3 text-sm text-neutral-200">{formatDateOnly(submission.trainingDate)}</td>
                         <td className="px-4 py-3 text-sm text-neutral-200">{formatHours(submission.hours)}</td>
-                        <td className="px-4 py-3 text-sm text-neutral-200">-</td>
-                        <td className="px-4 py-3 text-sm text-neutral-200">-</td>
-                        <td className="px-4 py-3 text-sm text-neutral-200">-</td>
+                        <td className="px-4 py-3 text-sm text-neutral-200">{submission.instructorName || "-"}</td>
+                        <td className="px-4 py-3 text-sm text-neutral-200">{submission.location || "-"}</td>
+                        <td className="px-4 py-3 text-sm text-neutral-200">
+                          {submission.attendeeNames && submission.attendeeNames.length > 0
+                            ? `${submission.attendeeNames.length} attended (${submission.attendeeNames.join(", ")})`
+                            : "-"}
+                        </td>
                         <td className="px-4 py-3">
                           <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs uppercase tracking-[0.14em] text-neutral-200">
                             approved
@@ -3186,6 +3190,20 @@ export default function TrainingWorkspace({
                         <Clock3 className="h-4 w-4 text-neutral-500" />
                         {formatHours(submission.hours)} hrs
                       </div>
+                      <div className="inline-flex items-center gap-2">
+                        <UserRound className="h-4 w-4 text-neutral-500" />
+                        {submission.instructorName || "No instructor"}
+                      </div>
+                      <div className="inline-flex items-center gap-2">
+                        <MapPin className="h-4 w-4 text-neutral-500" />
+                        {submission.location || "No location"}
+                      </div>
+                      {submission.attendeeNames && submission.attendeeNames.length > 0 ? (
+                        <div className="inline-flex items-center gap-2">
+                          <Users className="h-4 w-4 text-neutral-500" />
+                          {submission.attendeeNames.length} attended ({submission.attendeeNames.join(", ")})
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 );
