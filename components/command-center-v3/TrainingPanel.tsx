@@ -335,6 +335,7 @@ export default function TrainingPanel() {
               level: activeIowaProfile.certification_level,
               status: activeIowaProfile.track_status,
               expirationDate: activeIowaProfile.expiration_date,
+              cycleStartDate: activeIowaProfile.effective_start_date ?? null,
               maintainTrack: activeIowaProfile.maintain_track === true,
             }
           : null,
@@ -343,6 +344,7 @@ export default function TrainingPanel() {
               level: activeNremtProfile.certification_level,
               status: activeNremtProfile.track_status,
               expirationDate: activeNremtProfile.expiration_date,
+              cycleStartDate: activeNremtProfile.effective_start_date ?? null,
               maintainTrack: activeNremtProfile.maintain_track === true,
             }
           : null,

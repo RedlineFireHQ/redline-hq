@@ -331,6 +331,19 @@ export default async function PersonnelProfilePage({
     currentMember.role,
     "certification_management",
   ));
+  const canManageEmsTracking =
+    (await hasDepartmentPermission(
+      supabase,
+      currentMember.departmentId,
+      currentMember.role,
+      "ems_certification_tracking_management",
+    )) ||
+    (await hasDepartmentPermission(
+      supabase,
+      currentMember.departmentId,
+      currentMember.role,
+      "ems_management",
+    ));
 
   if (!isSelfProfile && !hasPersonnelAccess) {
     redirect("/");
@@ -1124,8 +1137,7 @@ export default async function PersonnelProfilePage({
               memberId={String(member.id)}
               editorMemberId={currentMember.id}
               trackRows={emsTrackProfiles}
-              certificationTypes={certificationTypes}
-              memberCertifications={canonicalMemberCertificationRows}
+              canManage={canManageEmsTracking}
             />
           </div>
 

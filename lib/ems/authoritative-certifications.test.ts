@@ -52,7 +52,7 @@ const nremtBaseTrack: EmsTrackProfileAuthorityRow = {
   effective_end_date: null,
 };
 
-test("Iowa certification metadata is authoritative for number and expiration", () => {
+test("manually entered Iowa tracker details are preserved and not overridden by Personnel Certifications", () => {
   const authoritative = resolve([
     {
       member_id: "m1",
@@ -77,11 +77,11 @@ test("Iowa certification metadata is authoritative for number and expiration", (
   });
 
   assert.ok(projected);
-  assert.equal(projected.certification_number, "IA-AUTH-100");
-  assert.equal(projected.expiration_date, authoritative.iowa?.expirationDate ?? null);
+  assert.equal(projected.certification_number, "IA-TRACK-OLD");
+  assert.equal(projected.expiration_date, iowaBaseTrack.expiration_date);
 });
 
-test("NREMT certification metadata is authoritative for number and expiration", () => {
+test("manually entered NREMT tracker details are preserved and not overridden by Personnel Certifications", () => {
   const authoritative = resolve([
     {
       member_id: "m1",
@@ -99,89 +99,40 @@ test("NREMT certification metadata is authoritative for number and expiration", 
   });
 
   assert.ok(projected);
-  assert.equal(projected.certification_number, "NR-AUTH-200");
-  assert.equal(projected.expiration_date, authoritative.nremt?.expirationDate ?? null);
+  assert.equal(projected.certification_number, "NR-TRACK-OLD");
+  assert.equal(projected.expiration_date, nremtBaseTrack.expiration_date);
 });
 
-test("Generic EMTB does not override Iowa or NREMT authoritative certifications", () => {
+test("a missing tracker is never synthesized from Personnel Certifications", () => {
   const authoritative = resolve([
     {
       member_id: "m1",
       certification_id: "iowa-emt",
       certificate_number: "IA-AUTH-101",
       issued_at: "2026-08-01",
-      expires_at: addDays(-1),
-    },
-    {
-      member_id: "m1",
-      certification_id: "nremt-emt",
-      certificate_number: "NR-AUTH-201",
-      issued_at: "2026-08-01",
-      expires_at: addDays(-2),
-    },
-    {
-      member_id: "m1",
-      certification_id: "generic-emtb",
-      certificate_number: "EMTB-GENERIC-OVERRIDE",
-      issued_at: "2026-08-20",
-      expires_at: addDays(365),
+      expires_at: addDays(120),
     },
   ]);
 
-  const iowaProjected = applyAuthoritativeCertificationToTrackProfile({
+  const projected = applyAuthoritativeCertificationToTrackProfile({
     track: "iowa",
-    profile: iowaBaseTrack,
+    profile: null,
     authoritativeCertification: authoritative.iowa,
   });
-  const nremtProjected = applyAuthoritativeCertificationToTrackProfile({
-    track: "nremt",
-    profile: nremtBaseTrack,
-    authoritativeCertification: authoritative.nremt,
-  });
 
-  assert.ok(iowaProjected);
-  assert.ok(nremtProjected);
-  assert.equal(iowaProjected.certification_number, "IA-AUTH-101");
-  assert.equal(nremtProjected.certification_number, "NR-AUTH-201");
-
-  const iowaStatus = resolveCertificationStatusFromTrack({
-    track: iowaProjected,
-    warningDays: 60,
-    genericStatus: "current",
-  });
-  const nremtStatus = resolveCertificationStatusFromTrack({
-    track: nremtProjected,
-    warningDays: 60,
-    genericStatus: "current",
-  });
-
-  assert.equal(iowaStatus, "expired");
-  assert.equal(nremtStatus, "expired");
+  assert.equal(projected, null);
 });
 
-test("Updating authoritative expiration updates derived EMS status", () => {
-  const currentCert = {
-    member_id: "m1",
-    certification_id: "iowa-emt",
-    certificate_number: "IA-AUTH-102",
-    issued_at: "2026-08-01",
-    expires_at: addDays(100),
-  } satisfies MemberCertificationAuthorityRow;
-
-  const expiredCert = {
-    ...currentCert,
-    expires_at: addDays(-3),
-  };
-
+test("Updating the tracker's own expiration updates derived EMS status", () => {
   const currentProjected = applyAuthoritativeCertificationToTrackProfile({
     track: "iowa",
-    profile: iowaBaseTrack,
-    authoritativeCertification: resolve([currentCert]).iowa,
+    profile: { ...iowaBaseTrack, expiration_date: addDays(100) },
+    authoritativeCertification: null,
   });
   const expiredProjected = applyAuthoritativeCertificationToTrackProfile({
     track: "iowa",
-    profile: iowaBaseTrack,
-    authoritativeCertification: resolve([expiredCert]).iowa,
+    profile: { ...iowaBaseTrack, expiration_date: addDays(-3) },
+    authoritativeCertification: null,
   });
 
   assert.ok(currentProjected);

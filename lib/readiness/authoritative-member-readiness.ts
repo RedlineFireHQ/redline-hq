@@ -3,7 +3,6 @@ import {
   applyAuthoritativeCertificationToTrackProfile,
   findCurrentTrackProfile,
   resolveAuthoritativeEmsCertificationsForMember,
-  resolveCertificationStatusFromTrack,
   type EmsAuthority,
   type EmsTrackProfileAuthorityRow,
   type MemberCertificationAuthorityRow,
@@ -110,18 +109,15 @@ export function computeAuthoritativeMemberReadiness(input: ComputeMemberReadines
   });
 
   const certificationStatuses = input.canonicalMemberCertifications.map((row) => {
+    // Certification status (and therefore readiness impact) comes from the
+    // Personnel Certifications record itself. The supplemental EMS CE tracker
+    // never alters certification status or readiness scores.
     const genericStatus = getCertificationStatus(row.expires_at, READINESS_CERTIFICATION_WARNING_DAYS);
-    const meta = input.certificationTypeById.get(row.certification_id);
-    const track = meta?.authority === "iowa" ? activeIowaProfile : meta?.authority === "nremt" ? activeNremtProfile : null;
 
     return {
       certificationId: row.certification_id,
       certificationName: input.certificationNameById.get(row.certification_id) ?? "Certification",
-      status: resolveCertificationStatusFromTrack({
-        track,
-        warningDays: READINESS_CERTIFICATION_WARNING_DAYS,
-        genericStatus,
-      }),
+      status: genericStatus,
       expiresAt: row.expires_at,
     };
   });

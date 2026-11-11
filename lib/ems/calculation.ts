@@ -36,6 +36,8 @@ export type EmsTrackProfileInput = {
   level: EmsCertificationLevel;
   status: EmsTrackStatus;
   expirationDate: string | null;
+  // Certification issue/renewal date: the start of the active CE cycle.
+  cycleStartDate: string | null;
   maintainTrack: boolean;
 };
 
@@ -50,6 +52,8 @@ type TopicProgress = {
 type IowaProgress = {
   status: "not_configured" | "not_maintained" | "needs_attention" | "on_track" | "complete";
   expirationDate: string | null;
+  cycleStartDate: string | null;
+  daysRemaining: number | null;
   totalRequired: number;
   totalCompleted: number;
   totalRemaining: number;
@@ -57,8 +61,10 @@ type IowaProgress = {
 };
 
 type NremtProgress = {
-  status: "not_maintained" | "needs_attention" | "on_track" | "complete";
+  status: "not_configured" | "not_maintained" | "needs_attention" | "on_track" | "complete";
   expirationDate: string | null;
+  cycleStartDate: string | null;
+  daysRemaining: number | null;
   totalRequired: number;
   totalCompleted: number;
   totalRemaining: number;
@@ -125,11 +131,65 @@ function isAutoCreditableNremtRecord(record: EmsTrainingRecord, level: EmsCertif
   return record.eligibleForNremt && !record.needsReview && isTopicApplicableToTrack(record.coreTopic, "nremt", level);
 }
 
+// A tracker is only fully configured once an authorized person has entered the
+// certification issue/renewal date and expiration date. Without them we cannot
+// bound the CE cycle, so no progress or On Track status should be shown.
+export function isTrackFullyConfigured(profile: EmsTrackProfileInput | null): profile is EmsTrackProfileInput & {
+  expirationDate: string;
+  cycleStartDate: string;
+} {
+  return profile !== null && typeof profile.expirationDate === "string" && profile.expirationDate.length > 0 &&
+    typeof profile.cycleStartDate === "string" && profile.cycleStartDate.length > 0;
+}
+
+type CyclePacing = {
+  elapsedFraction: number;
+  daysRemaining: number;
+};
+
+export function computeCyclePacing(
+  cycleStartDate: string | null,
+  expirationDate: string | null,
+  now = new Date(),
+): CyclePacing | null {
+  if (!cycleStartDate || !expirationDate) {
+    return null;
+  }
+
+  const start = new Date(`${cycleStartDate}T00:00:00`).getTime();
+  const end = new Date(`${expirationDate}T00:00:00`).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+    return null;
+  }
+
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const elapsedFraction = Math.min(1, Math.max(0, (today - start) / (end - start)));
+  const daysRemaining = Math.max(0, Math.ceil((end - today) / dayMs));
+
+  return { elapsedFraction, daysRemaining };
+}
+
+// On Track means keeping pace with the cycle: completed hours must meet the
+// share of required hours proportional to the elapsed portion of the cycle.
+// A small early-cycle grace keeps brand-new cycles from flagging immediately.
+const PACE_GRACE_FRACTION = 0.08;
+
+function isKeepingPace(totalCompleted: number, totalRequired: number, pacing: CyclePacing | null) {
+  if (!pacing) {
+    return false;
+  }
+
+  const expected = totalRequired * Math.max(0, pacing.elapsedFraction - PACE_GRACE_FRACTION);
+  return totalCompleted >= roundHours(expected);
+}
+
 export function calculateEmsReadiness(input: {
   iowaProfile: EmsTrackProfileInput | null;
   nremtProfile: EmsTrackProfileInput | null;
   trainingRecords: EmsTrainingRecord[];
   manualAllocations?: EmsManualAllocation[];
+  now?: Date;
 }): EmsReadinessResult {
   const warnings: string[] = [];
 
@@ -269,15 +329,22 @@ export function calculateEmsReadiness(input: {
   const iowaTotalCompleted = sum(iowaTopics.map((topic) => topic.completed));
   const iowaTotalRequired = iowaRequirement?.totalRequiredHours ?? 0;
   const iowaTotalRemaining = clampNonNegative(iowaTotalRequired - iowaTotalCompleted);
+  const iowaPacing = computeCyclePacing(input.iowaProfile?.cycleStartDate ?? null, input.iowaProfile?.expirationDate ?? null, input.now ?? new Date());
 
   let iowaStatus: IowaProgress["status"] = "not_configured";
-  if (!input.iowaProfile || input.iowaProfile.status === "not_maintained") {
+  if (!input.iowaProfile) {
+    iowaStatus = "not_configured";
+  } else if (input.iowaProfile.status === "not_maintained") {
     iowaStatus = "not_maintained";
+  } else if (!isTrackFullyConfigured(input.iowaProfile)) {
+    // Missing issue/renewal or expiration date: the cycle cannot be bounded,
+    // so never show progress or On Track.
+    iowaStatus = "not_configured";
   } else if (input.iowaProfile.status === "inactive" || input.iowaProfile.status === "expired" || iowaExpiredByDate) {
     iowaStatus = "needs_attention";
   } else if (iowaTotalRemaining <= 0 && iowaTopics.every((topic) => topic.complete)) {
     iowaStatus = "complete";
-  } else if (iowaTotalCompleted > 0) {
+  } else if (isKeepingPace(iowaTotalCompleted, iowaTotalRequired, iowaPacing)) {
     iowaStatus = "on_track";
   } else {
     iowaStatus = "needs_attention";
@@ -313,30 +380,35 @@ export function calculateEmsReadiness(input: {
 
   const nremtTotalRequired = nremtRequirement?.totalNccpRequiredHours ?? 0;
   const nremtTotalRemaining = clampNonNegative(nremtTotalRequired - nremtTotalCompleted);
+  const nremtPacing = computeCyclePacing(input.nremtProfile?.cycleStartDate ?? null, input.nremtProfile?.expirationDate ?? null, input.now ?? new Date());
 
   let nremtStatus: NremtProgress["status"] = "not_maintained";
   if (applyNremt) {
-    if (input.nremtProfile?.status === "inactive" || input.nremtProfile?.status === "expired" || nremtExpiredByDate) {
-      nremtStatus = "needs_attention";
-    }
+    if (!isTrackFullyConfigured(input.nremtProfile)) {
+      nremtStatus = "not_configured";
+    } else {
+      if (input.nremtProfile?.status === "inactive" || input.nremtProfile?.status === "expired" || nremtExpiredByDate) {
+        nremtStatus = "needs_attention";
+      }
 
-    const componentQuantified = nremtLocalRequired !== null && nremtIndividualRequired !== null;
-    const componentsComplete =
-      nremtNationalComponentRemaining <= 0 &&
-      (nremtLocalRemaining ?? 0) <= 0 &&
-      (nremtIndividualRemaining ?? 0) <= 0 &&
-      (!nationalOnly || nremtNationalTopics.every((topic) => topic.complete));
+      const componentQuantified = nremtLocalRequired !== null && nremtIndividualRequired !== null;
+      const componentsComplete =
+        nremtNationalComponentRemaining <= 0 &&
+        (nremtLocalRemaining ?? 0) <= 0 &&
+        (nremtIndividualRemaining ?? 0) <= 0 &&
+        (!nationalOnly || nremtNationalTopics.every((topic) => topic.complete));
 
-    if (nremtStatus !== "needs_attention" && componentQuantified && componentsComplete && nremtTotalRemaining <= 0) {
-      nremtStatus = "complete";
-    } else if (nremtStatus !== "needs_attention" && nremtTotalCompleted > 0) {
-      nremtStatus = "on_track";
-    } else if (nremtStatus !== "needs_attention") {
-      nremtStatus = "needs_attention";
-    }
+      if (nremtStatus !== "needs_attention" && componentQuantified && componentsComplete && nremtTotalRemaining <= 0) {
+        nremtStatus = "complete";
+      } else if (nremtStatus !== "needs_attention" && isKeepingPace(nremtTotalCompleted, nremtTotalRequired, nremtPacing)) {
+        nremtStatus = "on_track";
+      } else if (nremtStatus !== "needs_attention") {
+        nremtStatus = "needs_attention";
+      }
 
-    if (!componentQuantified) {
-      warnings.push("NREMT Local/State and Individual component required-hour split NEEDS AUTHORITATIVE VERIFICATION.");
+      if (!componentQuantified) {
+        warnings.push("NREMT Local/State and Individual component required-hour split NEEDS AUTHORITATIVE VERIFICATION.");
+      }
     }
   }
 
@@ -362,6 +434,8 @@ export function calculateEmsReadiness(input: {
     iowa: {
       status: iowaStatus,
       expirationDate: input.iowaProfile?.expirationDate ?? null,
+      cycleStartDate: input.iowaProfile?.cycleStartDate ?? null,
+      daysRemaining: iowaPacing?.daysRemaining ?? null,
       totalRequired: iowaTotalRequired,
       totalCompleted: iowaTotalCompleted,
       totalRemaining: iowaTotalRemaining,
@@ -370,6 +444,8 @@ export function calculateEmsReadiness(input: {
     nremt: {
       status: nremtStatus,
       expirationDate: input.nremtProfile?.expirationDate ?? null,
+      cycleStartDate: input.nremtProfile?.cycleStartDate ?? null,
+      daysRemaining: nremtPacing?.daysRemaining ?? null,
       totalRequired: nremtTotalRequired,
       totalCompleted: nremtTotalCompleted,
       totalRemaining: nremtTotalRemaining,

@@ -478,12 +478,14 @@ test("EMS certification-status report matches existing readiness engine behavior
     level: "emt" as const,
     status: "active" as const,
     expirationDate: String(profileRows.find((row) => row.id === "p-m1-iowa")?.expiration_date ?? ""),
+    cycleStartDate: String(profileRows.find((row) => row.id === "p-m1-iowa")?.effective_start_date ?? ""),
     maintainTrack: true,
   };
   const profileM1Nremt = {
     level: "emt" as const,
     status: "active" as const,
     expirationDate: String(profileRows.find((row) => row.id === "p-m1-nremt")?.expiration_date ?? ""),
+    cycleStartDate: String(profileRows.find((row) => row.id === "p-m1-nremt")?.effective_start_date ?? ""),
     maintainTrack: true,
   };
 
@@ -587,12 +589,14 @@ test("EMS certification-status report matches existing readiness engine behavior
       level: "emt",
       status: "active",
       expirationDate: String(profileRows.find((row) => row.id === "p-m2-iowa")?.expiration_date ?? ""),
+      cycleStartDate: String(profileRows.find((row) => row.id === "p-m2-iowa")?.effective_start_date ?? ""),
       maintainTrack: true,
     },
     nremtProfile: {
       level: "emt",
       status: "not_maintained",
       expirationDate: String(profileRows.find((row) => row.id === "p-m2-nremt")?.expiration_date ?? ""),
+      cycleStartDate: String(profileRows.find((row) => row.id === "p-m2-nremt")?.effective_start_date ?? ""),
       maintainTrack: false,
     },
     trainingRecords: [

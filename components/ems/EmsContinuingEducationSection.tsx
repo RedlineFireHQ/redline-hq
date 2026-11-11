@@ -32,7 +32,7 @@ function formatEmsProgressStatus(status: string) {
     return "Not Maintained";
   }
 
-  return "Not Configured";
+  return "Not Set Up";
 }
 
 function emsProgressStatusClasses(status: string) {
@@ -97,14 +97,24 @@ export default function EmsContinuingEducationSection({
                  {formatEmsProgressStatus(emsReadiness.iowa.status)}
                </span>
              </div>
-             <p className="mt-2 text-sm text-neutral-300">
-               {emsReadiness.iowa.totalCompleted.toFixed(2)} / {emsReadiness.iowa.totalRequired.toFixed(2)} hours
-             </p>
+             {emsReadiness.iowa.status === "not_configured" ? (
+               <p className="mt-2 text-sm text-neutral-400">
+                 This tracker has not been set up. An authorized member must enter the certification issue/renewal and expiration dates before cycle progress can be tracked.
+               </p>
+             ) : (
+               <p className="mt-2 text-sm text-neutral-300">
+                 {emsReadiness.iowa.totalCompleted.toFixed(2)} / {emsReadiness.iowa.totalRequired.toFixed(2)} hours
+                 {" "}• Remaining: {emsReadiness.iowa.totalRemaining.toFixed(2)} hrs
+               </p>
+             )}
              <p className="mt-1 text-xs text-neutral-400">
                Level: {iowaProfile ? formatEmsLevelLabel(iowaProfile.certification_level) : "-"} • Number: {iowaProfile?.certification_number || "-"}
              </p>
-             <p className="mt-1 text-xs text-neutral-400">Expiration: {iowaProfile?.expiration_date ? formatDateOnly(iowaProfile.expiration_date) : "No expiration"}</p>
-             <p className="mt-1 text-xs text-neutral-400">Remaining: {emsReadiness.iowa.totalRemaining.toFixed(2)} hours</p>
+             <p className="mt-1 text-xs text-neutral-400">
+               Cycle: {emsReadiness.iowa.cycleStartDate ? formatDateOnly(emsReadiness.iowa.cycleStartDate) : "-"} → {iowaProfile?.expiration_date ? formatDateOnly(iowaProfile.expiration_date) : "-"}
+               {emsReadiness.iowa.daysRemaining !== null ? ` • ${emsReadiness.iowa.daysRemaining} days remaining` : ""}
+             </p>
+             {emsReadiness.iowa.status !== "not_configured" ? (
              <div className="mt-3 space-y-2">
                {emsReadiness.iowa.topics.map((topic) => (
                  <div key={topic.topic} className="flex items-center justify-between text-xs text-neutral-300">
@@ -113,6 +123,7 @@ export default function EmsContinuingEducationSection({
                  </div>
                ))}
              </div>
+             ) : null}
            </div>
 
            <div className="rounded-xl border border-white/10 bg-[#141414] p-4">
@@ -122,15 +133,25 @@ export default function EmsContinuingEducationSection({
                  {formatEmsProgressStatus(emsReadiness.nremt.status)}
                </span>
              </div>
-             <p className="mt-2 text-sm text-neutral-300">
-               {emsReadiness.nremt.totalCompleted.toFixed(2)} / {emsReadiness.nremt.totalRequired.toFixed(2)} hours
-             </p>
+             {emsReadiness.nremt.status === "not_configured" ? (
+               <p className="mt-2 text-sm text-neutral-400">
+                 This tracker has not been set up. An authorized member must enter the certification issue/renewal and expiration dates before cycle progress can be tracked.
+               </p>
+             ) : (
+               <p className="mt-2 text-sm text-neutral-300">
+                 {emsReadiness.nremt.totalCompleted.toFixed(2)} / {emsReadiness.nremt.totalRequired.toFixed(2)} hours
+                 {" "}• Remaining: {emsReadiness.nremt.totalRemaining.toFixed(2)} hrs
+               </p>
+             )}
              <p className="mt-1 text-xs text-neutral-400">
                Level: {nremtProfile ? formatEmsLevelLabel(nremtProfile.certification_level) : "-"} • Number: {nremtProfile?.certification_number || "-"}
              </p>
              <p className="mt-1 text-xs text-neutral-400">
-               Maintain Track: {nremtProfile?.maintain_track === true ? "Yes" : "No"} • Expiration: {nremtProfile?.expiration_date ? formatDateOnly(nremtProfile.expiration_date) : "No expiration"}
+               Maintain Track: {nremtProfile?.maintain_track === true ? "Yes" : "No"} • Cycle: {emsReadiness.nremt.cycleStartDate ? formatDateOnly(emsReadiness.nremt.cycleStartDate) : "-"} → {nremtProfile?.expiration_date ? formatDateOnly(nremtProfile.expiration_date) : "-"}
+               {emsReadiness.nremt.daysRemaining !== null ? ` • ${emsReadiness.nremt.daysRemaining} days remaining` : ""}
              </p>
+             {emsReadiness.nremt.status !== "not_configured" ? (
+             <>
              <p className="mt-1 text-xs text-neutral-400">National Component: {emsReadiness.nremt.nationalComponentCompleted.toFixed(2)} / {emsReadiness.nremt.nationalComponentRequired.toFixed(2)} hrs</p>
              <div className="mt-3 space-y-2">
                {emsReadiness.nremt.nationalTopics.map((topic) => (
@@ -140,6 +161,8 @@ export default function EmsContinuingEducationSection({
                  </div>
                ))}
              </div>
+             </>
+             ) : null}
            </div>
          </div>
 

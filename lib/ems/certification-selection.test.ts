@@ -177,8 +177,21 @@ function verifyReadiness(expectedIowa: number, expectedNremt: number) {
   const authoritative = resolveAuthoritativeEmsCertificationsForMember({
     certificationTypeById: metadata, memberCertifications: credentials,
   });
-  const profiles = (["iowa", "nremt"] as const).map((track) =>
-    applyAuthoritativeCertificationToTrackProfile({ track, profile: null, authoritativeCertification: authoritative[track] }));
+  // Manual mode: credentials never synthesize a tracker on their own.
+  for (const track of ["iowa", "nremt"] as const) {
+    assert.equal(applyAuthoritativeCertificationToTrackProfile({ track, profile: null, authoritativeCertification: authoritative[track] }), null);
+  }
+  // An authorized person enters the same details into the manual tracker.
+  const profiles = (["iowa", "nremt"] as const).map((track) => {
+    const cert = authoritative[track];
+    return cert
+      ? {
+          certification_level: cert.level, track_status: "active", maintain_track: true,
+          certification_number: cert.certificationNumber, expiration_date: cert.expirationDate,
+          effective_start_date: cert.issuedAt || "2020-01-01",
+        }
+      : null;
+  });
   const result = buildMemberEmsProgress({
     iowaProfile: profiles[0], nremtProfile: profiles[1], events: [], outsideSubmissions: [],
   });
@@ -404,8 +417,7 @@ test("the new-member wizard saves Iowa CCP metadata and the same CCP level in th
 
 test("the track editor does not offer or save National Registry CCP", async () => {
   render = () => Tracks({
-    departmentId: dept, memberId: member, editorMemberId: editor, trackRows: [],
-    certificationTypes: [], memberCertifications: [],
+    departmentId: dept, memberId: member, editorMemberId: editor, trackRows: [], canManage: true,
   });
   const levels = tree().filter((element) => element.type === "label" && text(element).trim().startsWith("Level"));
   assert.equal(levels.length, 2);
@@ -418,34 +430,33 @@ test("the track editor does not offer or save National Registry CCP", async () =
   assert.ok(tree().some((element) => text(element).includes("Iowa EMS level only")));
 });
 
-test("the track editor rejects a level that would be overridden by an assigned authoritative credential", async () => {
+test("members without the management permission get a read-only summary with no editor", () => {
   render = () => Tracks({
-    departmentId: dept, memberId: member, editorMemberId: editor, trackRows: [],
-    certificationTypes: [{ id: "paramedic", ems_authority: "iowa", ems_certification_level: "paramedic" }],
-    memberCertifications: [{
-      member_id: member, certification_id: "paramedic", certificate_number: "IA-123",
-      issued_at: "2026-01-01", expires_at: "2099-01-01",
-    }],
+    departmentId: dept, memberId: member, editorMemberId: editor, trackRows: [], canManage: false,
   });
-  changeLabel("Level", "ccp");
-  await click("Save Iowa");
-  assert.equal(writes.length, 0);
-  assert.ok(tree().some((element) => text(element).includes("Change the authority and level in Personnel Certifications first")));
+  const buttons = tree().filter((element) => element.type === "button").map((element) => text(element));
+  assert.ok(!buttons.includes("Save Iowa"));
+  assert.ok(!buttons.includes("Save NREMT"));
+  assert.ok(!buttons.some((label) => label.includes("Start New Cycle")));
+  assert.equal(tree().some((element) => element.type === "select"), false);
+  assert.ok(tree().some((element) => text(element).includes("Not Set Up")));
 });
 
 test("without an assigned credential the existing Iowa track can store CCP directly and calculate 46 hours", async () => {
   render = () => Tracks({
-    departmentId: dept, memberId: member, editorMemberId: editor, trackRows: [],
-    certificationTypes: [], memberCertifications: [],
+    departmentId: dept, memberId: member, editorMemberId: editor, trackRows: [], canManage: true,
   });
   changeLabel("Level", "ccp");
+  changeLabel("Issue/renewal date", "2026-01-01");
+  changeLabel("Expiration date", "2028-01-01");
   await click("Save Iowa");
   assert.equal(db.ems_member_track_profiles[0].certification_level, "ccp");
   assert.equal(db.ems_member_track_profiles[0].track, "iowa");
   const result = buildMemberEmsProgress({
     iowaProfile: {
       certification_level: String(db.ems_member_track_profiles[0].certification_level),
-      track_status: "active", maintain_track: true, expiration_date: null,
+      track_status: "active", maintain_track: true,
+      expiration_date: "2028-01-01", effective_start_date: "2026-01-01",
     },
     nremtProfile: null, events: [], outsideSubmissions: [],
   });
