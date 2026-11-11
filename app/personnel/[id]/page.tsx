@@ -1118,19 +1118,23 @@ export default async function PersonnelProfilePage({
       </div>
 
       {!isSelfProfile || canManageOwnCertifications ? (
-        <>
-          <div className="mt-6">
-            <PersonnelCertificationsSection
-              editorMemberId={currentMember.id}
-              departmentId={currentMember.departmentId}
-              memberId={String(member.id)}
-              warningDays={department.settings.certificationWarningDays}
-              certificationTypes={certificationTypes}
-              memberCertifications={canonicalMemberCertificationRows}
-              departmentDocuments={departmentDocuments}
-            />
-          </div>
+        <div className="mt-6">
+          <PersonnelCertificationsSection
+            editorMemberId={currentMember.id}
+            departmentId={currentMember.departmentId}
+            memberId={String(member.id)}
+            warningDays={department.settings.certificationWarningDays}
+            certificationTypes={certificationTypes}
+            memberCertifications={canonicalMemberCertificationRows}
+            departmentDocuments={departmentDocuments}
+          />
+        </div>
+      ) : null}
 
+      {/* Authorized EMS tracking managers can manage their own trackers too:
+          the EMS sections do not require the certification_management permission. */}
+      {!isSelfProfile || canManageOwnCertifications || canManageEmsTracking ? (
+        <>
           <div className="mt-6">
             <PersonnelEmsTracksSection
               departmentId={currentMember.departmentId}

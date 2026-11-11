@@ -404,3 +404,24 @@ test("the section sits directly below EMS Certification Tracks and before Traini
   assert.ok(tracks > 0 && ceSection > tracks && history > ceSection);
   assert.doesNotMatch(source, /recalculateMemberEmsCreditAccounting|\/api\/ems\/allocations\/recalculate|triggerEmsAllocationRecalculation/);
 });
+
+test("authorized EMS tracking managers keep the tracker editor on their own profile", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { resolve } = await import("node:path");
+  const source = readFileSync(resolve(process.cwd(), "app/personnel/[id]/page.tsx"), "utf8");
+
+  // Self profiles must render the EMS sections when the member holds the EMS
+  // tracking permission, even without certification_management.
+  assert.match(source, /\{!isSelfProfile \|\| canManageOwnCertifications \|\| canManageEmsTracking \? \(/);
+
+  // Certification records stay gated by certification management alone on self
+  // profiles: the EMS permission must not unlock PersonnelCertificationsSection.
+  const certGuard = source.indexOf("{!isSelfProfile || canManageOwnCertifications ? (");
+  const certSection = source.indexOf("<PersonnelCertificationsSection");
+  const emsGuard = source.indexOf("{!isSelfProfile || canManageOwnCertifications || canManageEmsTracking ? (");
+  assert.ok(certGuard > 0 && certSection > certGuard && emsGuard > certSection);
+
+  // The manage flag is permission-based and never self-restricted.
+  assert.doesNotMatch(source, /canManageEmsTracking =\s*isSelfProfile/);
+  assert.doesNotMatch(source, /canManage=\{!isSelfProfile && canManageEmsTracking\}/);
+});

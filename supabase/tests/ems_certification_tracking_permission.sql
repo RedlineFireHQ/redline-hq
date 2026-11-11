@@ -174,6 +174,7 @@ begin
   raise notice 'S5 PASS: member can read their own tracker rows';
 end $$;
 
+-- Scenarios S6-S7 follow.
 -- S6: renewal closes the open cycle and starts a fresh one; history is preserved.
 do $$
 declare
@@ -222,6 +223,35 @@ begin
   end if;
 
   raise notice 'S6 PASS: renewal closes the old cycle, starts a fresh one, and preserves history';
+end $$;
+
+-- S7: an authorized manager can also manage THEIR OWN tracker (self-management).
+do $$
+declare
+  v_dept uuid := current_setting('test.dept_a')::uuid;
+  v_id uuid;
+  v_number text;
+begin
+  perform set_config('request.jwt.claim.sub', '22222222-aaaa-4aaa-8aaa-222222222222', true);
+  set local role authenticated;
+
+  insert into public.ems_member_track_profiles
+    (department_id, member_id, track, certification_level, track_status, maintain_track, certification_number, expiration_date, effective_start_date)
+  values
+    (v_dept, 'bbbbbbbb-1111-4111-8111-bbbbbbbbbbbb', 'iowa', 'paramedic', 'active', true, 'IA-SELF-1', '2028-05-01', '2026-05-01')
+  returning id into v_id;
+
+  update public.ems_member_track_profiles
+  set certification_number = 'IA-SELF-2'
+  where id = v_id;
+
+  select certification_number into v_number from public.ems_member_track_profiles where id = v_id;
+  reset role;
+
+  if v_number <> 'IA-SELF-2' then
+    raise exception 'S7 FAILED: authorized manager could not edit their own tracker';
+  end if;
+  raise notice 'S7 PASS: authorized manager can create and edit their own tracker';
 end $$;
 
 rollback;
