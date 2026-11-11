@@ -318,3 +318,71 @@ test("maintenance management stays limited to administrators or an explicit gran
   assert.equal(await hasDepartmentPermission(client, DEPT_A, "firefighter", "maintenance_management"), true);
   assert.equal(await hasDepartmentPermission(client, DEPT_B, "firefighter", "maintenance_management"), false);
 });
+
+test("external provider record saves with completed_by null and stores the provider name", async () => {
+  const response = await post(validPayload({ external_provider_name: "  Jiffy Lube  " }));
+  const body = (await response.json()) as { ok: boolean };
+
+  assert.equal(response.status, 200);
+  assert.equal(body.ok, true);
+  assert.equal(adminLog.maintenanceInserts.length, 1);
+  assert.equal(adminLog.maintenanceInserts[0].completed_by, null);
+  assert.equal(adminLog.maintenanceInserts[0].external_provider_name, "Jiffy Lube");
+});
+
+test("a regular member may record an external provider without any special permission", async () => {
+  // No permission grants: completed_by is normally forced to self, but an
+  // external provider must win and leave completed_by null.
+  const response = await post(validPayload({ external_provider_name: "Local Mechanic" }));
+
+  assert.equal(response.status, 200);
+  assert.equal(adminLog.maintenanceInserts[0].completed_by, null);
+  assert.equal(adminLog.maintenanceInserts[0].external_provider_name, "Local Mechanic");
+});
+
+test("both a member and an external provider on one record is rejected", async () => {
+  const response = await post(validPayload({ completed_by: "m-peer", external_provider_name: "Jiffy Lube" }));
+  const body = (await response.json()) as { ok: boolean; error: string };
+
+  assert.equal(response.status, 400);
+  assert.equal(body.ok, false);
+  assert.match(body.error, /not both/i);
+  assert.equal(adminLog.maintenanceInserts.length, 0);
+});
+
+test("a blank external provider name falls back to the member workflow (self for non-managers)", async () => {
+  const response = await post(validPayload({ external_provider_name: "   " }));
+
+  assert.equal(response.status, 200);
+  assert.equal(adminLog.maintenanceInserts[0].completed_by, "m-firefighter");
+  assert.equal(adminLog.maintenanceInserts[0].external_provider_name, null);
+});
+
+test("an external provider does not let a non-manager attribute work to another member", async () => {
+  // completed_by must still be ignored for non-managers even alongside junk input.
+  const response = await post(validPayload({ completed_by: "m-peer" }));
+
+  assert.equal(response.status, 200);
+  assert.equal(adminLog.maintenanceInserts[0].completed_by, "m-firefighter");
+});
+
+test("external provider records keep photo and attachment uploads", async () => {
+  const photo = new File(["img"], "work-photo.jpg", { type: "image/jpeg" });
+  const invoice = new File(["pdf"], "invoice.pdf", { type: "application/pdf" });
+  const response = await post(validPayload({ external_provider_name: "Jiffy Lube" }), [
+    { field: "photos", file: photo },
+    { field: "attachments", file: invoice },
+  ]);
+
+  assert.equal(response.status, 200);
+  assert.equal(adminLog.uploads.length, 2);
+  assert.ok(adminLog.uploads.some((path) => path.includes("/photos/") && path.includes("work-photo.jpg")));
+  assert.ok(adminLog.uploads.some((path) => path.includes("/attachments/") && path.includes("invoice.pdf")));
+});
+
+test("the external provider name is capped at 200 characters", async () => {
+  const response = await post(validPayload({ external_provider_name: "x".repeat(500) }));
+
+  assert.equal(response.status, 200);
+  assert.equal(String(adminLog.maintenanceInserts[0].external_provider_name).length, 200);
+});

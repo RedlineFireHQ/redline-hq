@@ -15,6 +15,7 @@ type MaintenanceRow = {
   deficiency_id: string | null;
   maintenance_type: string;
   completed_by: string | null;
+  external_provider_name: string | null;
   service_date: string;
   description: string;
   parts_used: string | null;
@@ -56,6 +57,11 @@ function firstRelation<T>(value: T | T[] | null): T | null {
 }
 
 function memberName(row: MaintenanceRow) {
+  const externalProvider = typeof row.external_provider_name === "string" ? row.external_provider_name.trim() : "";
+  if (externalProvider) {
+    return externalProvider;
+  }
+
   const member = firstRelation(row.completed_by_member);
   const fullName = `${member?.first_name ?? ""} ${member?.last_name ?? ""}`.trim();
   return fullName || "Not recorded";
@@ -80,7 +86,7 @@ export default async function MobileMaintenancePage() {
   const [recordsResult, apparatusResult] = await Promise.all([
     supabase
       .from("maintenance_records")
-      .select("id, maintenance_number, apparatus_id, deficiency_id, maintenance_type, completed_by, service_date, description, parts_used, labor_hours, mileage, engine_hours, cost, notes, photos, attachments, apparatus:apparatus_id(name), completed_by_member:completed_by(first_name, last_name), deficiency:deficiency_id(deficiency_number)")
+      .select("id, maintenance_number, apparatus_id, deficiency_id, maintenance_type, completed_by, external_provider_name, service_date, description, parts_used, labor_hours, mileage, engine_hours, cost, notes, photos, attachments, apparatus:apparatus_id(name), completed_by_member:completed_by(first_name, last_name), deficiency:deficiency_id(deficiency_number)")
       .eq("department_id", departmentId)
       .order("service_date", { ascending: false })
       .limit(50),

@@ -17,6 +17,7 @@ type MaintenanceRecordRow = {
   deficiency_id: string | null;
   maintenance_type: string | null;
   completed_by: string | null;
+  external_provider_name: string | null;
   service_date: string | null;
   description: string | null;
   parts_used: string | null;
@@ -135,6 +136,11 @@ export default async function MaintenanceDetailPage({
       : "Unknown";
 
   const completedBy = (() => {
+    const externalProvider = typeof record.external_provider_name === "string" ? record.external_provider_name.trim() : "";
+    if (externalProvider) {
+      return `${externalProvider} (External Provider)`;
+    }
+
     const member = memberResult.data as Record<string, unknown> | null;
 
     if (!member) {

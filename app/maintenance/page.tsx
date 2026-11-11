@@ -16,6 +16,7 @@ type MaintenanceRow = {
   deficiency_id: string | null;
   maintenance_type: string | null;
   completed_by: string | null;
+  external_provider_name: string | null;
   service_date: string | null;
   description: string | null;
   notes: string | null;
@@ -168,7 +169,7 @@ function MaintenancePageContent() {
 
     const recordsResult = await supabase
       .from("maintenance_records")
-      .select("id, maintenance_number, apparatus_id, deficiency_id, maintenance_type, completed_by, service_date, description, notes, cost")
+      .select("id, maintenance_number, apparatus_id, deficiency_id, maintenance_type, completed_by, external_provider_name, service_date, description, notes, cost")
       .order("service_date", { ascending: false });
 
     const normalizedRecords = (recordsResult.data ?? []).map((row) => {
@@ -184,6 +185,8 @@ function MaintenancePageContent() {
           typeof record.maintenance_type === "string" ? record.maintenance_type : null
         ),
         completed_by: typeof record.completed_by === "string" ? record.completed_by : null,
+        external_provider_name:
+          typeof record.external_provider_name === "string" ? record.external_provider_name : null,
         service_date: typeof record.service_date === "string" ? record.service_date : null,
         description: typeof record.description === "string" ? record.description : null,
         notes: typeof record.notes === "string" ? record.notes : null,
@@ -250,7 +253,9 @@ function MaintenancePageContent() {
         const apparatusName = record.apparatus_id
           ? apparatusNameById[record.apparatus_id] ?? ""
           : "";
-        const completedByName = record.completed_by
+        const completedByName = record.external_provider_name
+          ? record.external_provider_name
+          : record.completed_by
           ? memberNameById[record.completed_by] ?? ""
           : "";
 
@@ -436,7 +441,9 @@ function MaintenancePageContent() {
                     const apparatusName =
                       (record.apparatus_id && apparatusNameById[record.apparatus_id]) || "Unknown";
                     const completedBy =
-                      (record.completed_by && memberNameById[record.completed_by]) || "Unknown";
+                      record.external_provider_name ||
+                      (record.completed_by && memberNameById[record.completed_by]) ||
+                      "Unknown";
 
                     return (
                       <tr

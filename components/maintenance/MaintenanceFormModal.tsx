@@ -18,7 +18,9 @@ type MaintenanceFormState = {
   apparatusId: string;
   deficiencyId: string;
   maintenanceType: string;
+  performerType: "member" | "external";
   completedBy: string;
+  externalProviderName: string;
   serviceDate: string;
   description: string;
   partsUsed: string;
@@ -52,6 +54,7 @@ export type MaintenanceRecordEdit = {
   deficiency_id: string | null;
   maintenance_type: string | null;
   completed_by: string | null;
+  external_provider_name?: string | null;
   service_date: string | null;
   description: string | null;
   parts_used: string | null;
@@ -195,7 +198,9 @@ export default function MaintenanceFormModal({
     apparatusId: "",
     deficiencyId: "",
     maintenanceType: "Repair",
+    performerType: "member",
     completedBy: "",
+    externalProviderName: "",
     serviceDate: "",
     description: "",
     partsUsed: "",
@@ -374,7 +379,9 @@ export default function MaintenanceFormModal({
           apparatusId: initialRecord.apparatus_id ?? "",
           deficiencyId: initialRecord.deficiency_id ?? "",
           maintenanceType: initialRecord.maintenance_type ?? "Repair",
+          performerType: initialRecord.external_provider_name ? "external" : "member",
           completedBy: initialRecord.completed_by ?? "",
+          externalProviderName: initialRecord.external_provider_name ?? "",
           serviceDate: toDateTimeLocalValue(initialRecord.service_date) || defaultServiceDate,
           description: initialRecord.description ?? "",
           partsUsed: initialRecord.parts_used ?? "",
@@ -427,7 +434,9 @@ export default function MaintenanceFormModal({
             apparatusId: defaultApparatusId ?? "",
             deficiencyId: "",
             maintenanceType: "Repair",
+            performerType: "member",
             completedBy: "",
+            externalProviderName: "",
             serviceDate: defaultServiceDate,
             description: "",
             partsUsed: "",
@@ -523,6 +532,11 @@ export default function MaintenanceFormModal({
       return;
     }
 
+    if (formState.performerType === "external" && !formState.externalProviderName.trim()) {
+      setErrorMessage("Enter the external provider's name (business or person who performed the work).");
+      return;
+    }
+
     if (mode === "create" && !departmentId) {
       setErrorMessage("Unable to determine your department. Please try again.");
       return;
@@ -548,7 +562,10 @@ export default function MaintenanceFormModal({
         : formState.apparatusId,
       deficiency_id: formState.deficiencyId || null,
       maintenance_type: formState.maintenanceType.trim(),
-      completed_by: formState.completedBy || null,
+      // Exactly one performer type: a department member or an external provider.
+      completed_by: formState.performerType === "member" ? formState.completedBy || null : null,
+      external_provider_name:
+        formState.performerType === "external" ? formState.externalProviderName.trim().slice(0, 200) || null : null,
       service_date: new Date(formState.serviceDate).toISOString(),
       description: formState.description.trim(),
       parts_used: formState.partsUsed.trim() || null,
@@ -799,26 +816,72 @@ export default function MaintenanceFormModal({
               />
             </label>
 
-            <label className="block">
+            <div className="block">
               <span className="mb-2 block text-sm font-semibold text-zinc-200">Completed By</span>
-              <select
-                value={formState.completedBy}
-                onChange={(event) =>
-                  setFormState((current) => ({
-                    ...current,
-                    completedBy: event.target.value,
-                  }))
-                }
-                className="w-full rounded-xl border border-white/10 bg-[#151515] px-4 py-3 text-sm text-white outline-none transition focus:border-red-500/50"
-              >
-                <option value="">Select member</option>
-                {memberOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+              <div className="mb-2 flex gap-2" role="radiogroup" aria-label="Who performed the maintenance">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={formState.performerType === "member"}
+                  onClick={() =>
+                    setFormState((current) => ({ ...current, performerType: "member", externalProviderName: "" }))
+                  }
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+                    formState.performerType === "member"
+                      ? "border-red-500/60 bg-red-500/10 text-red-200"
+                      : "border-white/10 bg-[#151515] text-zinc-300 hover:border-white/30"
+                  }`}
+                >
+                  Department Member
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={formState.performerType === "external"}
+                  onClick={() => setFormState((current) => ({ ...current, performerType: "external", completedBy: "" }))}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+                    formState.performerType === "external"
+                      ? "border-red-500/60 bg-red-500/10 text-red-200"
+                      : "border-white/10 bg-[#151515] text-zinc-300 hover:border-white/30"
+                  }`}
+                >
+                  External Provider
+                </button>
+              </div>
+              {formState.performerType === "member" ? (
+                <select
+                  value={formState.completedBy}
+                  onChange={(event) =>
+                    setFormState((current) => ({
+                      ...current,
+                      completedBy: event.target.value,
+                    }))
+                  }
+                  className="w-full rounded-xl border border-white/10 bg-[#151515] px-4 py-3 text-sm text-white outline-none transition focus:border-red-500/50"
+                >
+                  <option value="">Select member</option>
+                  {memberOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={formState.externalProviderName}
+                  onChange={(event) =>
+                    setFormState((current) => ({
+                      ...current,
+                      externalProviderName: event.target.value,
+                    }))
+                  }
+                  placeholder="Business or person (e.g., Jiffy Lube)"
+                  maxLength={200}
+                  className="w-full rounded-xl border border-white/10 bg-[#151515] px-4 py-3 text-sm text-white outline-none transition focus:border-red-500/50"
+                />
+              )}
+            </div>
 
             <label className="block md:col-span-2">
               <span className="mb-2 block text-sm font-semibold text-zinc-200">Linked Deficiency ID</span>
