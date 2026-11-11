@@ -209,7 +209,7 @@ function getDateKey(value: string) {
 }
 
 function toTrackProfileInput(
-  row: Pick<TrackProfileRow, "track" | "certification_level" | "track_status" | "expiration_date" | "maintain_track"> | null,
+  row: Pick<TrackProfileRow, "track" | "certification_level" | "track_status" | "expiration_date" | "effective_start_date" | "maintain_track"> | null,
 ): EmsTrackProfileInput | null {
   if (!row) {
     return null;
@@ -219,6 +219,7 @@ function toTrackProfileInput(
     level: row.certification_level,
     status: row.track_status,
     expirationDate: row.expiration_date,
+    cycleStartDate: row.effective_start_date ?? null,
     maintainTrack: row.track === "iowa" ? true : row.maintain_track === true,
   };
 }

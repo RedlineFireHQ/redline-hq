@@ -6,7 +6,7 @@ import test from "node:test";
 import { calculateEmsReadiness } from "@/lib/ems/calculation";
 import { buildEmsTrainingRecords, buildMemberEmsProgress } from "@/lib/ems/member-ems-progress";
 
-const activeEmt = { certification_level: "emt", track_status: "active", expiration_date: "2099-01-01", maintain_track: true };
+const activeEmt = { certification_level: "emt", track_status: "active", expiration_date: "2099-01-01", effective_start_date: "2020-01-01", maintain_track: true };
 
 test("only EMS-flagged events and outside submissions become EMS records", () => {
   const records = buildEmsTrainingRecords(
@@ -45,8 +45,8 @@ test("the builder matches the existing calculation fed the same profiles and rec
   const progress = buildMemberEmsProgress({ iowaProfile: activeEmt, nremtProfile: activeEmt, events, outsideSubmissions: [] });
 
   const direct = calculateEmsReadiness({
-    iowaProfile: { level: "emt", status: "active", expirationDate: "2099-01-01", maintainTrack: true },
-    nremtProfile: { level: "emt", status: "active", expirationDate: "2099-01-01", maintainTrack: true },
+    iowaProfile: { level: "emt", status: "active", expirationDate: "2099-01-01", cycleStartDate: "2020-01-01", maintainTrack: true },
+    nremtProfile: { level: "emt", status: "active", expirationDate: "2099-01-01", cycleStartDate: "2020-01-01", maintainTrack: true },
     trainingRecords: buildEmsTrainingRecords(events, []),
   });
 

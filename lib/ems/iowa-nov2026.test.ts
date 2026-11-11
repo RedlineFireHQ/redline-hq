@@ -17,7 +17,7 @@ const levels = [
   { level: "paramedic", hours: [6, 7, 5, 8, 4, 4], total: 34, oldTotal: 30 },
 ] as const;
 const profile: EmsTrackProfileInput = {
-  level: "paramedic", status: "active", expirationDate: "2099-01-01", maintainTrack: true,
+  level: "paramedic", status: "active", expirationDate: "2099-01-01", cycleStartDate: "2020-01-01", maintainTrack: true,
 };
 
 function records(hours: readonly number[]): EmsTrainingRecord[] {
@@ -79,10 +79,10 @@ for (const row of levels) {
     const before = structuredClone(trainingRecords);
     const result = buildMemberEmsProgress({
       iowaProfile: {
-        certification_level: row.level, track_status: "active", expiration_date: "2099-01-01", maintain_track: true,
+        certification_level: row.level, track_status: "active", expiration_date: "2099-01-01", effective_start_date: "2020-01-01", maintain_track: true,
       },
       nremtProfile: {
-        certification_level: "paramedic", track_status: "active", expiration_date: "2099-01-01", maintain_track: true,
+        certification_level: "paramedic", track_status: "active", expiration_date: "2099-01-01", effective_start_date: "2020-01-01", maintain_track: true,
       },
       events: trainingRecords.slice(0, 5).map((record) => ({
         id: record.id, starts_at: record.occurredAt, hours_credit: String(record.hours),
@@ -156,7 +156,9 @@ test("every National Registry calculation is identical before and after the Iowa
     const previous = calculateEmsReadiness(input).nremt;
     mock.timers.setTime(new Date("2026-11-01T12:00:00Z").getTime());
     const current = calculateEmsReadiness(input).nremt;
-    assert.deepEqual(current, previous);
+    // daysRemaining legitimately differs by one day between the two instants.
+    const stripDays = ({ daysRemaining: _ignored, ...rest }: typeof previous) => rest;
+    assert.deepEqual(stripDays(current), stripDays(previous));
     assert.equal(current.totalRequired, { emr: 16, emt: 40, aemt: 50, paramedic: 30 }[row.level]);
     assert.equal(current.nationalTopics.length, 5);
   }

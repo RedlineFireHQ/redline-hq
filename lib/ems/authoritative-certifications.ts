@@ -52,21 +52,6 @@ function normalizeLevel(value: string | null): EmsCertificationLevel | null {
   return null;
 }
 
-function isExpired(dateValue: string | null) {
-  if (!dateValue) {
-    return false;
-  }
-
-  const parsed = new Date(`${dateValue}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) {
-    return false;
-  }
-
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  return parsed.getTime() < today.getTime();
-}
-
 function isLaterDate(left: string, right: string) {
   const leftTs = Date.parse(left);
   const rightTs = Date.parse(right);
@@ -140,50 +125,39 @@ export function resolveAuthoritativeEmsCertificationsForMember(params: {
   };
 }
 
+// EMS trackers are configured manually by authorized personnel (see
+// PersonnelEmsTracksSection): certification number, level, issue/renewal date,
+// and expiration live on the track profile itself. This function no longer
+// overlays data from the general Personnel Certifications list - mixing ACLS,
+// CPR, and other certifications into EMS CE tracking caused incorrect
+// auto-configuration. It now only normalizes the stored profile (for example,
+// marking a track expired once its stored expiration date passes). The
+// authoritativeCertification parameter is retained for call-site compatibility
+// and intentionally ignored.
 export function applyAuthoritativeCertificationToTrackProfile(params: {
   track: EmsAuthority;
   profile: EmsTrackProfileAuthorityRow | null;
   authoritativeCertification: AuthoritativeEmsCertification | null;
 }): EmsTrackProfileAuthorityRow | null {
-  const { track, profile, authoritativeCertification } = params;
+  const { track, profile } = params;
 
-  if (!profile && !authoritativeCertification) {
+  if (!profile) {
     return null;
   }
 
-  const base = profile ?? {
-    track,
-    certification_level: authoritativeCertification?.level ?? "emt",
-    track_status: authoritativeCertification ? "active" : track === "nremt" ? "not_maintained" : "inactive",
-    maintain_track: track === "iowa" || authoritativeCertification !== null,
-    certification_number: null,
-    expiration_date: null,
-    effective_start_date: authoritativeCertification?.issuedAt ?? new Date().toISOString().slice(0, 10),
-    effective_end_date: null,
-  };
+  const maintainTrack = track === "iowa" ? true : profile.maintain_track === true;
 
-  const maintainTrack = track === "iowa" ? true : base.maintain_track === true;
-  const expirationDate = authoritativeCertification?.expirationDate ?? base.expiration_date;
-  const certificationLevel = authoritativeCertification?.level ?? base.certification_level;
-  const certificationNumber = authoritativeCertification?.certificationNumber ?? base.certification_number;
-
-  let trackStatus = base.track_status;
+  // Date-based expiry is handled downstream (calculateEmsReadiness flags the
+  // track and getCertificationStatus reports it); do not rewrite the stored
+  // status here or completed-hour totals would be dropped.
+  let trackStatus = profile.track_status;
   if (track === "nremt" && maintainTrack !== true) {
     trackStatus = "not_maintained";
-  } else if (authoritativeCertification) {
-    if (isExpired(expirationDate)) {
-      trackStatus = "expired";
-    } else if (!profile || trackStatus === "expired") {
-      trackStatus = "active";
-    }
   }
 
   return {
-    ...base,
+    ...profile,
     maintain_track: maintainTrack,
-    certification_level: certificationLevel,
-    certification_number: certificationNumber,
-    expiration_date: expirationDate,
     track_status: trackStatus,
   };
 }

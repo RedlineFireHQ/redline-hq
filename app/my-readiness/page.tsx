@@ -9,7 +9,6 @@ import {
   buildCertificationTypeMetaById,
   findCurrentTrackProfile,
   resolveAuthoritativeEmsCertificationsForMember,
-  resolveCertificationStatusFromTrack,
 } from "@/lib/ems/authoritative-certifications";
 import { getCurrentMember } from "@/lib/current-member";
 import EmsContinuingEducationSection from "@/components/ems/EmsContinuingEducationSection";
@@ -1083,18 +1082,10 @@ export default async function MyReadinessPage() {
 
   const certificationCards = memberCertifications.map((row) => {
     const name = certificationNameById.get(row.certification_id) ?? "Unknown Certification";
-    const genericStatus = getCertificationStatus(row.expires_at, department.settings.certificationWarningDays);
+    // Status comes from the Personnel Certifications record itself; the
+    // supplemental EMS CE tracker never alters certification status.
+    const status = getCertificationStatus(row.expires_at, department.settings.certificationWarningDays);
     const certMeta = certificationTypeById.get(row.certification_id);
-    const sourceTrack = certMeta?.authority === "iowa"
-      ? activeIowaProfile
-      : certMeta?.authority === "nremt"
-        ? activeNremtProfile
-        : null;
-    const status = resolveCertificationStatusFromTrack({
-      track: sourceTrack,
-      warningDays: department.settings.certificationWarningDays,
-      genericStatus,
-    });
 
     return {
       id: row.id,

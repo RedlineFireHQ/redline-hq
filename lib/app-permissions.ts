@@ -19,6 +19,7 @@ export const APP_PERMISSION_KEYS = [
   "pre_plans_management",
   "calendar_management",
   "ems_management",
+  "ems_certification_tracking_management",
   "training_program_management",
   "training_assignment_management",
   "homework_assignment",

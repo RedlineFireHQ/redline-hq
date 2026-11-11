@@ -45,12 +45,14 @@ function baseProfiles() {
       level: "emt" as const,
       status: "active" as const,
       expirationDate: "2027-03-31",
+      cycleStartDate: "2025-03-31",
       maintainTrack: true,
     },
     nremtProfile: {
       level: "emt" as const,
       status: "active" as const,
       expirationDate: "2027-03-31",
+      cycleStartDate: "2025-03-31",
       maintainTrack: true,
     },
   };
@@ -58,7 +60,7 @@ function baseProfiles() {
 
 test("Iowa CCP and NREMT Paramedic persisted allocations exclude Iowa-only topics and suppress individual overflow", () => {
   const refs = buildRefs("2026-ccp-phase1");
-  const profile = { level: "ccp" as const, status: "active" as const, expirationDate: "2099-01-01", maintainTrack: true };
+  const profile = { level: "ccp" as const, status: "active" as const, expirationDate: "2099-01-01", cycleStartDate: "2097-01-01", maintainTrack: true };
   const topics = [
     ["airway_respirations_ventilations", 6], ["cardiology", 7], ["trauma", 5],
     ["medical", 8], ["operations", 4], ["pediatric", 4], ["critical_care_paramedic", 12],

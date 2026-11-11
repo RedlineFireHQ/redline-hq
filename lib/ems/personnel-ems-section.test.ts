@@ -197,8 +197,8 @@ for (const row of [
     const section = await openProfile("m-ff");
     assert.ok(section);
     const readiness = buildMemberEmsProgress({
-      iowaProfile: { certification_level: row.level, track_status: "active", expiration_date: "2099-01-01", maintain_track: true },
-      nremtProfile: { certification_level: "paramedic", track_status: "active", expiration_date: "2099-01-01", maintain_track: true },
+      iowaProfile: { certification_level: row.level, track_status: "active", expiration_date: "2099-01-01", effective_start_date: "2026-01-01", maintain_track: true },
+      nremtProfile: { certification_level: "paramedic", track_status: "active", expiration_date: "2099-01-01", effective_start_date: "2026-01-01", maintain_track: true },
       events: topics.map((topic, index) => ({
         id: topic, starts_at: "2026-09-01", hours_credit: row.hours[index],
         is_ems_training: true, ems_core_topic: topic, ems_needs_review: false,
@@ -257,7 +257,7 @@ test("the Personnel CCP section renders the shared Iowa 46-hour and NREMT 30-hou
   assert.equal(rpcLog.length, 0);
 });
 
-test("a member assigned an explicit Iowa CCP credential gets 46-hour Personnel progress despite an older Paramedic track", async () => {
+test("an explicit Iowa CCP credential does not override the manually configured Paramedic track", async () => {
   db.certifications = [
     { id: "old-paramedic", department_id: DEPT_A, name: "Iowa EMS Paramedic", active: true, ems_authority: "iowa", ems_certification_level: "paramedic" },
     { id: "new-ccp", department_id: DEPT_A, name: "Iowa EMS Critical Care Paramedic", active: true, ems_authority: "iowa", ems_certification_level: "ccp" },
@@ -269,13 +269,13 @@ test("a member assigned an explicit Iowa CCP credential gets 46-hour Personnel p
   db.ems_member_track_profiles[0].certification_level = "paramedic";
   const section = await openProfile("m-ff");
   assert.ok(section);
-  assert.equal(section.iowaProfile?.certification_level, "ccp");
-  assert.equal(section.iowaProfile?.certification_number, "IA-CCP");
-  assert.equal(section.emsReadiness.iowa.totalRequired, 46);
-  assert.deepEqual(section.emsReadiness.iowa.topics.map((row) => row.required), [6, 7, 5, 8, 4, 4, 12]);
+  // Manual tracker setup is authoritative: the Personnel Certifications rows
+  // must not change the tracker's level or number.
+  assert.equal(section.iowaProfile?.certification_level, "paramedic");
+  assert.equal(section.iowaProfile?.certification_number, "IA-1");
+  assert.equal(section.emsReadiness.iowa.totalRequired, 34);
   const html = renderToStaticMarkup(EmsContinuingEducationSection(section));
-  assert.match(html, /Critical Care Paramedic \(CCP\)/);
-  assert.match(html, /46\.00 hours/);
+  assert.match(html, /34\.00 hours/);
   assert.equal(writeLog.length, 0);
   assert.equal(rpcLog.length, 0);
 });
@@ -301,8 +301,8 @@ test("the Personnel numbers equal what My Readiness computes from the same recor
   assert.ok(section);
 
   const sameRecords = buildMemberEmsProgress({
-    iowaProfile: { certification_level: "emt", track_status: "active", expiration_date: "2099-01-01", maintain_track: true },
-    nremtProfile: { certification_level: "emt", track_status: "active", expiration_date: "2099-01-01", maintain_track: true },
+    iowaProfile: { certification_level: "emt", track_status: "active", expiration_date: "2099-01-01", effective_start_date: "2026-01-01", maintain_track: true },
+    nremtProfile: { certification_level: "emt", track_status: "active", expiration_date: "2099-01-01", effective_start_date: "2026-01-01", maintain_track: true },
     events: [{ id: "e-ems", starts_at: "2026-09-01T12:00:00Z", hours_credit: 2, is_ems_training: true, ems_core_topic: "cardiology", ems_needs_review: false }],
     outsideSubmissions: [
       { id: "o-own", training_date: "2026-08-01", hours: 1, is_ems_training: true, ems_core_topic: "trauma", ems_needs_review: false },

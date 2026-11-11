@@ -25,7 +25,7 @@ import {
 import { resolveCertificationStatusFromAuthority } from "@/lib/ems/certification-authority";
 
 const profile: EmsTrackProfileInput = {
-  level: "ccp", status: "active", expirationDate: "2099-01-01", maintainTrack: true,
+  level: "ccp", status: "active", expirationDate: "2099-01-01", cycleStartDate: "2097-01-01", maintainTrack: true,
 };
 const topicCodes = [
   "airway_respirations_ventilations", "cardiology", "trauma", "medical", "operations",
@@ -240,7 +240,7 @@ test("Pediatric is selectable and credited for every Iowa level with its current
 
 test("the Personnel/My Readiness builder preserves CCP levels and both new topics", () => {
   const dbProfile = {
-    certification_level: "ccp", track_status: "active", maintain_track: true, expiration_date: "2099-01-01",
+    certification_level: "ccp", track_status: "active", maintain_track: true, expiration_date: "2099-01-01", effective_start_date: "2020-01-01",
   };
   const result = buildMemberEmsProgress({
     iowaProfile: dbProfile, nremtProfile: { ...dbProfile, certification_level: "paramedic" },
@@ -268,7 +268,7 @@ test("authoritative metadata rejects National Registry CCP instead of projecting
   ]), /Iowa EMS level only/);
 });
 
-test("independent Iowa CCP and NREMT Paramedic metadata survive authoritative profile projection", () => {
+test("independent Iowa CCP and NREMT Paramedic manual trackers survive profile projection untouched", () => {
   const certificationTypeById = buildCertificationTypeMetaById([
     { id: "iowa-ccp", ems_authority: "iowa", ems_certification_level: "ccp" },
     { id: "nremt-ccp", ems_authority: "nremt", ems_certification_level: "paramedic" },
@@ -281,12 +281,22 @@ test("independent Iowa CCP and NREMT Paramedic metadata survive authoritative pr
     })),
   });
   for (const track of ["iowa", "nremt"] as const) {
-    const projected = applyAuthoritativeCertificationToTrackProfile({
+    // Manual mode: a missing tracker is never synthesized from credentials...
+    assert.equal(applyAuthoritativeCertificationToTrackProfile({
       track, profile: null, authoritativeCertification: authoritative[track],
+    }), null);
+    // ...and a manually configured tracker keeps its own independent values.
+    const manualProfile = {
+      track, certification_level: track === "iowa" ? ("ccp" as const) : ("paramedic" as const),
+      track_status: "active" as const, maintain_track: true, certification_number: `${track}-manual`,
+      expiration_date: "2098-06-30", effective_start_date: "2026-07-01", effective_end_date: null,
+    };
+    const projected = applyAuthoritativeCertificationToTrackProfile({
+      track, profile: manualProfile, authoritativeCertification: authoritative[track],
     });
     assert.equal(projected?.certification_level, track === "iowa" ? "ccp" : "paramedic");
-    assert.equal(projected?.certification_number, `${track}-123`);
-    assert.equal(projected?.expiration_date, "2099-01-01");
+    assert.equal(projected?.certification_number, `${track}-manual`);
+    assert.equal(projected?.expiration_date, "2098-06-30");
   }
 });
 

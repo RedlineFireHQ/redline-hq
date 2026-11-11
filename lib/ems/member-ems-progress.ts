@@ -6,6 +6,8 @@ export type EmsProfileForProgress = {
   certification_level: string;
   track_status: string;
   expiration_date: string | null;
+  // Certification issue/renewal date (start of the active CE cycle).
+  effective_start_date?: string | null;
   maintain_track: boolean;
 };
 
@@ -87,6 +89,29 @@ export function buildEmsTrainingRecords(
 }
 
 // Pure and read-only: the one place that turns a member's profiles and EMS records into the displayed progress.
+// Hours only count toward a track when the record falls inside that track's
+// active certification cycle (issue/renewal date through expiration). An
+// unconfigured cycle credits nothing.
+function isWithinCycle(occurredAt: string, cycleStart: string | null | undefined, expiration: string | null | undefined) {
+  return isWithinCertificationCycle(occurredAt, cycleStart, expiration);
+}
+
+// Shared cycle-window rule: a record counts toward a track only when it falls
+// inside that track's active certification cycle (issue/renewal date through
+// expiration). An unconfigured cycle credits nothing.
+export function isWithinCertificationCycle(
+  occurredAt: string,
+  cycleStart: string | null | undefined,
+  expiration: string | null | undefined,
+) {
+  if (!cycleStart || !expiration) {
+    return false;
+  }
+
+  const dateKey = occurredAt.slice(0, 10);
+  return dateKey >= cycleStart.slice(0, 10) && dateKey <= expiration.slice(0, 10);
+}
+
 export function buildMemberEmsProgress(input: {
   iowaProfile: EmsProfileForProgress | null;
   nremtProfile: EmsProfileForProgress | null;
@@ -98,6 +123,7 @@ export function buildMemberEmsProgress(input: {
         level: normalizeEmsLevel(input.iowaProfile.certification_level),
         status: normalizeEmsStatus(input.iowaProfile.track_status),
         expirationDate: input.iowaProfile.expiration_date,
+        cycleStartDate: input.iowaProfile.effective_start_date ?? null,
         maintainTrack: true,
       }
     : null;
@@ -107,11 +133,22 @@ export function buildMemberEmsProgress(input: {
         level: normalizeEmsLevel(input.nremtProfile.certification_level),
         status: normalizeEmsStatus(input.nremtProfile.track_status),
         expirationDate: input.nremtProfile.expiration_date,
+        cycleStartDate: input.nremtProfile.effective_start_date ?? null,
         maintainTrack: input.nremtProfile.maintain_track === true,
       }
     : null;
 
-  const emsTrainingRecords = buildEmsTrainingRecords(input.events, input.outsideSubmissions);
+  // Iowa and National Registry cycles are independent: the same record can be
+  // inside one track's cycle and outside the other's.
+  const emsTrainingRecords = buildEmsTrainingRecords(input.events, input.outsideSubmissions).map((record) => ({
+    ...record,
+    eligibleForIowa:
+      record.eligibleForIowa &&
+      isWithinCycle(record.occurredAt, iowaProfileInput?.cycleStartDate, iowaProfileInput?.expirationDate),
+    eligibleForNremt:
+      record.eligibleForNremt &&
+      isWithinCycle(record.occurredAt, nremtProfileInput?.cycleStartDate, nremtProfileInput?.expirationDate),
+  }));
 
   const emsReadiness = calculateEmsReadiness({
     iowaProfile: iowaProfileInput,
@@ -125,7 +162,7 @@ export function buildMemberEmsProgress(input: {
     visibleWarnings: emsReadiness.warnings.filter((warning) => !warning.includes("NEEDS AUTHORITATIVE VERIFICATION")),
     // Shows truly unclassified topic data, not stale review flags.
     unclassifiedRecordIds: emsTrainingRecords
-      .filter((record) => record.coreTopic === null || record.coreTopic === "other")
+      .filter((record) => (record.eligibleForIowa || record.eligibleForNremt) && (record.coreTopic === null || record.coreTopic === "other"))
       .map((record) => record.id),
   };
 }

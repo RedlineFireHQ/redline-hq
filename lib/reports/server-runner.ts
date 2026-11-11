@@ -15,6 +15,7 @@ import {
 	type MemberCertificationAuthorityRow,
 } from "@/lib/ems/authoritative-certifications";
 import { getCertificationStatus } from "@/lib/readiness/member-readiness";
+import { isWithinCertificationCycle } from "@/lib/ems/member-ems-progress";
 import { parseOutsideSubmissionNotes } from "@/lib/training/outside-submission-notes";
 import { buildDateRangeFromPreset, buildUtcBoundsForDateRange, formatReportPeriodLabel, parseDateOnly } from "@/lib/reports/date-range";
 import { runInventoryReport } from "@/lib/reports/inventory-report";
@@ -1565,6 +1566,7 @@ function toEmsTrackProfileInput(row: EmsTrackProfileStatusInput | null): EmsTrac
 		level,
 		status,
 		expirationDate: normalizeText(row.expiration_date) || null,
+		cycleStartDate: normalizeText(row.effective_start_date) || null,
 		maintainTrack: row.track === "iowa" ? true : row.maintain_track === true,
 	};
 }
@@ -1986,7 +1988,17 @@ async function runEmsReport(
 
 			const iowaInput = toEmsTrackProfileInput(iowaProfile);
 			const nremtInput = toEmsTrackProfileInput(nremtProfile);
-			const trainingRecords = trainingRecordsByMember.get(member.id) ?? [];
+			// Same cycle-window rule as My Readiness and Personnel: records only
+			// count toward a track when inside that track's certification cycle.
+			const trainingRecords = (trainingRecordsByMember.get(member.id) ?? []).map((record) => ({
+				...record,
+				eligibleForIowa:
+					record.eligibleForIowa &&
+					isWithinCertificationCycle(record.occurredAt, iowaInput?.cycleStartDate, iowaInput?.expirationDate),
+				eligibleForNremt:
+					record.eligibleForNremt &&
+					isWithinCertificationCycle(record.occurredAt, nremtInput?.cycleStartDate, nremtInput?.expirationDate),
+			}));
 			const manualAllocations = manualAllocationsByMember.get(member.id) ?? [];
 
 			const readiness = calculateEmsReadiness({
