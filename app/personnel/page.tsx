@@ -1,10 +1,12 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import PageLayout from "@/components/layout/PageLayout";
 import AddMemberButton from "@/components/personnel/AddMemberButton";
 import PersonnelMembersTable from "@/components/personnel/PersonnelMembersTable";
 import type { AppPermissionOption } from "@/lib/app-permissions";
 import { getCurrentMember } from "@/lib/current-member";
 import { canManagePersonnel } from "@/lib/member-permissions";
+import { canViewEmsCeProgress } from "@/lib/ems/department-ems-progress-data";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import {
   buildCanonicalMemberCertificationRows,
@@ -57,6 +59,12 @@ export default async function PersonnelPage() {
   if (!hasPersonnelAccess) {
     redirect("/");
   }
+
+  const canSeeEmsCeProgress = await canViewEmsCeProgress(
+    supabase,
+    currentMember.departmentId,
+    currentMember.role,
+  );
 
   const { data, error } = await supabase
     .from("members")
@@ -241,11 +249,22 @@ export default async function PersonnelPage() {
           </p>
         </div>
 
-        <AddMemberButton
-          permissionOptions={permissionOptions}
-          departmentId={currentMember.departmentId}
-          currentMemberId={currentMember.id}
-        />
+        <div className="flex items-center gap-3">
+          {canSeeEmsCeProgress ? (
+            <Link
+              href="/ems-ce-progress"
+              className="rounded-xl border border-white/15 bg-neutral-900 px-4 py-2 text-sm font-semibold text-neutral-200 hover:border-white/40"
+            >
+              EMS CE Progress
+            </Link>
+          ) : null}
+
+          <AddMemberButton
+            permissionOptions={permissionOptions}
+            departmentId={currentMember.departmentId}
+            currentMemberId={currentMember.id}
+          />
+        </div>
       </div>
 
       <PersonnelMembersTable members={members} />

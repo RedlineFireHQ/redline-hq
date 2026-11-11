@@ -15,7 +15,7 @@ function formatDateOnly(value: string) {
   });
 }
 
-function formatEmsProgressStatus(status: string) {
+export function formatEmsProgressStatus(status: string) {
   if (status === "complete") {
     return "Complete";
   }
@@ -35,7 +35,7 @@ function formatEmsProgressStatus(status: string) {
   return "Not Set Up";
 }
 
-function emsProgressStatusClasses(status: string) {
+export function emsProgressStatusClasses(status: string) {
   if (status === "complete") {
     return "border-emerald-500/30 bg-emerald-500/10 text-emerald-200";
   }
