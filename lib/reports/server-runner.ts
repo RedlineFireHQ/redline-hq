@@ -190,6 +190,7 @@ type MaintenanceRecordRow = {
 	deficiency_id: string | null;
 	maintenance_type: string;
 	completed_by: string | null;
+	external_provider_name: string | null;
 	service_date: string;
 	description: string;
 	parts_used: string | null;
@@ -3597,7 +3598,7 @@ async function runApparatusReport(
 				.order("created_at", { ascending: false }),
 			context.supabase
 				.from("maintenance_records")
-				.select("id, apparatus_id, completed_by, service_date, maintenance_number, maintenance_type, notes, mileage, engine_hours")
+				.select("id, apparatus_id, completed_by, external_provider_name, service_date, maintenance_number, maintenance_type, notes, mileage, engine_hours")
 				.eq("department_id", context.departmentId)
 				.in("apparatus_id", apparatusIds)
 				.order("service_date", { ascending: false }),
@@ -3617,6 +3618,7 @@ async function runApparatusReport(
 			id: string;
 			apparatus_id: string;
 			completed_by: string | null;
+			external_provider_name: string | null;
 			service_date: string;
 			maintenance_number: string | null;
 			maintenance_type: string | null;
@@ -3661,6 +3663,7 @@ async function runApparatusReport(
 			mileage: number | null;
 			engineHours: number | null;
 			recordedBy: string | null;
+			recordedByFallbackName?: string | null;
 			statusOrType: string | null;
 			notes: string | null;
 		};
@@ -3683,6 +3686,7 @@ async function runApparatusReport(
 				mileage: row.mileage,
 				engineHours: parseNullableNumber(row.engine_hours),
 				recordedBy: row.completed_by,
+				recordedByFallbackName: normalizeText(row.external_provider_name) || null,
 				statusOrType: normalizeText(row.maintenance_type) || null,
 				notes: [normalizeText(row.maintenance_number), normalizeText(row.notes)].filter(Boolean).join(" | ") || null,
 			})),
@@ -3711,7 +3715,7 @@ async function runApparatusReport(
 				}
 
 				const apparatus = apparatusById.get(row.apparatusId);
-				const checkedBy = row.recordedBy ? (memberNameById.get(row.recordedBy) ?? row.recordedBy) : "Unknown";
+				const checkedBy = row.recordedBy ? (memberNameById.get(row.recordedBy) ?? row.recordedBy) : row.recordedByFallbackName || "Unknown";
 				const searchable = [
 					row.entrySource,
 					apparatus?.name,
@@ -3793,7 +3797,7 @@ async function runApparatusReport(
 		const offset = (page - 1) * pageSize;
 		const pagedRows = filteredReadings.slice(offset, offset + pageSize).map((row): ReportRow => {
 			const apparatus = apparatusById.get(row.apparatusId);
-			const checkedBy = row.recordedBy ? (memberNameById.get(row.recordedBy) ?? row.recordedBy) : "Unknown";
+			const checkedBy = row.recordedBy ? (memberNameById.get(row.recordedBy) ?? row.recordedBy) : row.recordedByFallbackName || "Unknown";
 			const statusOrType = row.entrySource === "Inspection"
 				? normalizeApparatusStatusLabel(row.statusOrType)
 				: normalizeText(row.statusOrType) || "Maintenance";
@@ -3852,7 +3856,7 @@ async function runApparatusReport(
 			.order("reported_at", { ascending: false }),
 		context.supabase
 			.from("maintenance_records")
-			.select("id, maintenance_number, apparatus_id, deficiency_id, maintenance_type, completed_by, service_date, description, parts_used, labor_hours, mileage, engine_hours, cost, notes, photos, attachments, created_at, updated_at")
+			.select("id, maintenance_number, apparatus_id, deficiency_id, maintenance_type, completed_by, external_provider_name, service_date, description, parts_used, labor_hours, mileage, engine_hours, cost, notes, photos, attachments, created_at, updated_at")
 			.eq("department_id", context.departmentId)
 			.in("apparatus_id", apparatusIds)
 			.order("service_date", { ascending: false }),
@@ -3951,9 +3955,10 @@ async function runApparatusReport(
 			const latestDeficiencyStatus = normalizeText(normalizeRelation<{ name: string | null }>(latestDeficiencyInPeriod?.status_info)?.name) || "-";
 			const latestDeficiencyPriority = normalizeText(normalizeRelation<{ name: string | null }>(latestDeficiencyInPeriod?.priority_info)?.name) || "-";
 
-			const latestMaintenancePerformer = latestMaintenanceInPeriod?.completed_by
-				? (memberNameById.get(latestMaintenanceInPeriod.completed_by) ?? latestMaintenanceInPeriod.completed_by)
-				: "-";
+			const latestMaintenancePerformer = normalizeText(latestMaintenanceInPeriod?.external_provider_name)
+				|| (latestMaintenanceInPeriod?.completed_by
+					? (memberNameById.get(latestMaintenanceInPeriod.completed_by) ?? latestMaintenanceInPeriod.completed_by)
+					: "-");
 
 			const latestCheckPerformer = latestCheckInPeriod?.member_id
 				? (memberNameById.get(latestCheckInPeriod.member_id) ?? latestCheckInPeriod.member_id)
@@ -4162,7 +4167,7 @@ async function runMaintenanceReport(
 	const maintenanceQuery = await context.supabase
 		.from("maintenance_records")
 		.select(
-			"id, maintenance_number, apparatus_id, deficiency_id, maintenance_type, completed_by, service_date, description, parts_used, labor_hours, mileage, engine_hours, cost, notes, photos, attachments, created_at, updated_at",
+			"id, maintenance_number, apparatus_id, deficiency_id, maintenance_type, completed_by, external_provider_name, service_date, description, parts_used, labor_hours, mileage, engine_hours, cost, notes, photos, attachments, created_at, updated_at",
 		)
 		.eq("department_id", context.departmentId)
 		.order("service_date", { ascending: false });
@@ -4249,8 +4254,15 @@ async function runMaintenanceReport(
 				}
 			}
 
-			if (completedByFilter && completedByFilter !== "all" && row.completed_by !== completedByFilter) {
-				return false;
+			if (completedByFilter && completedByFilter !== "all") {
+				if (completedByFilter === "external_provider") {
+					// Dedicated option: records completed by an outside business/person.
+					if (!normalizeText(row.external_provider_name)) {
+						return false;
+					}
+				} else if (row.completed_by !== completedByFilter) {
+					return false;
+				}
 			}
 
 			if (linkedDeficiencyFilter === "linked" && !row.deficiency_id) {
@@ -4270,9 +4282,10 @@ async function runMaintenanceReport(
 			}
 
 			const apparatus = apparatusById.get(row.apparatus_id);
-			const performedBy = row.completed_by
-				? (memberNameById.get(row.completed_by) ?? row.completed_by)
-				: "";
+			const performedBy = normalizeText(row.external_provider_name)
+				|| (row.completed_by
+					? (memberNameById.get(row.completed_by) ?? row.completed_by)
+					: "");
 			const relatedDeficiency = row.deficiency_id
 				? (deficiencyById.get(row.deficiency_id) ?? row.deficiency_id)
 				: "";
@@ -4324,9 +4337,10 @@ async function runMaintenanceReport(
 	const pagedRows = filtered.slice(offset, offset + pageSize).map((row): ReportRow => {
 		const apparatus = apparatusById.get(row.apparatus_id);
 		const relatedDeficiencyNumber = row.deficiency_id ? (deficiencyById.get(row.deficiency_id) ?? row.deficiency_id) : "-";
-		const performedBy = row.completed_by
-			? (memberNameById.get(row.completed_by) ?? row.completed_by)
-			: "-";
+		const performedBy = normalizeText(row.external_provider_name)
+			|| (row.completed_by
+				? (memberNameById.get(row.completed_by) ?? row.completed_by)
+				: "-");
 		const laborHours = parseNullableNumber(row.labor_hours);
 		const engineHours = parseNullableNumber(row.engine_hours);
 		const cost = parseNullableNumber(row.cost);

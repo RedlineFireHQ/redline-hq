@@ -8,6 +8,7 @@ type MaintenancePayload = {
   deficiency_id: string | null;
   maintenance_type: string;
   completed_by: string | null;
+  external_provider_name: string | null;
   service_date: string;
   description: string;
   parts_used: string | null;
@@ -53,7 +54,21 @@ export async function POST(request: Request) {
     if (!activeMember) return jsonResponse({ ok: false, error: "Unauthorized" }, 401);
     const canManageMaintenance = await hasDepartmentPermission(supabase, currentMember.departmentId, currentMember.role, "maintenance_management");
 
-    if (!canManageMaintenance) {
+    // Exactly one performer type per record: a department member OR an
+    // external provider (outside person/business), never both.
+    const externalProviderName =
+      typeof payload.external_provider_name === "string" ? payload.external_provider_name.trim().slice(0, 200) : "";
+    payload.external_provider_name = externalProviderName || null;
+
+    if (payload.external_provider_name && payload.completed_by) {
+      return jsonResponse({ ok: false, error: "Choose either a department member or an external provider, not both." }, 400);
+    }
+
+    if (payload.external_provider_name) {
+      // Any department member may record work performed by an outside
+      // provider. This grants no ability to attribute work to another member.
+      payload.completed_by = null;
+    } else if (!canManageMaintenance) {
       payload.completed_by = currentMember.id;
     }
 
@@ -107,6 +122,7 @@ export async function POST(request: Request) {
       deficiency_id: payload.deficiency_id ?? null,
       maintenance_type: payload.maintenance_type,
       completed_by: payload.completed_by ?? null,
+      external_provider_name: payload.external_provider_name ?? null,
       service_date: payload.service_date,
       description: payload.description,
       parts_used: payload.parts_used ?? null,

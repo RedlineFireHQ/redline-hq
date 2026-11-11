@@ -27,6 +27,7 @@ type MaintenanceHistoryRow = {
   deficiency_id: string | null;
   maintenance_type: string | null;
   completed_by: string | null;
+  external_provider_name?: string | null;
   service_date: string | null;
   description: string | null;
 };
@@ -314,9 +315,11 @@ export default function ApparatusHistoryCards({
 
     return maintenanceHistory.filter((maintenance) => {
       const serviceDate = formatInspectionDateTime(maintenance.service_date);
-      const completedBy = maintenance.completed_by
-        ? maintenanceMemberNameById[maintenance.completed_by] ?? "Unknown"
-        : "Unknown";
+      const completedBy =
+        maintenance.external_provider_name ||
+        (maintenance.completed_by
+          ? maintenanceMemberNameById[maintenance.completed_by] ?? "Unknown"
+          : "Unknown");
       const linkedDeficiency = maintenance.deficiency_id
         ? maintenanceDeficiencyNumberById[maintenance.deficiency_id] ?? maintenance.deficiency_id
         : "-";
@@ -731,9 +734,11 @@ export default function ApparatusHistoryCards({
               <tbody className="divide-y divide-white/5 text-neutral-300">
                 {filteredMaintenanceHistory.map((maintenance) => {
                   const serviceDate = formatInspectionDateTime(maintenance.service_date);
-                  const completedBy = maintenance.completed_by
-                    ? maintenanceMemberNameById[maintenance.completed_by] ?? "Unknown"
-                    : "Unknown";
+                  const completedBy =
+                    maintenance.external_provider_name ||
+                    (maintenance.completed_by
+                      ? maintenanceMemberNameById[maintenance.completed_by] ?? "Unknown"
+                      : "Unknown");
                   const linkedDeficiency = maintenance.deficiency_id
                     ? maintenanceDeficiencyNumberById[maintenance.deficiency_id] ?? maintenance.deficiency_id
                     : "-";

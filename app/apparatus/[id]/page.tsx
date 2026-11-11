@@ -43,6 +43,7 @@ type MaintenanceHistoryRow = {
   deficiency_id: string | null;
   maintenance_type: string | null;
   completed_by: string | null;
+  external_provider_name: string | null;
   service_date: string | null;
   description: string | null;
 };
@@ -290,7 +291,7 @@ export default async function ApparatusDetailPage({
   const { data: maintenanceHistoryData } = await supabase
     .from("maintenance_records")
     .select(
-      "id, maintenance_number, deficiency_id, maintenance_type, completed_by, service_date, description"
+      "id, maintenance_number, deficiency_id, maintenance_type, completed_by, external_provider_name, service_date, description"
     )
     .eq("apparatus_id", truck.id)
     .order("service_date", { ascending: false })

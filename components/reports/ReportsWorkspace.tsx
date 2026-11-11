@@ -792,7 +792,11 @@ export default function ReportsWorkspace({
 					if (source.key === "maintenance" && filter.key === "completed_by") {
 						return {
 							...filter,
-							options: memberOptions,
+							options: [
+								memberOptions[0],
+								{ value: "external_provider", label: "External Provider" },
+								...memberOptions.slice(1),
+							],
 						};
 					}
 

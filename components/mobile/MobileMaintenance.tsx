@@ -156,6 +156,8 @@ export default function MobileMaintenance({
   const [engineHours, setEngineHours] = useState("");
   const [cost, setCost] = useState("");
   const [notes, setNotes] = useState("");
+  const [performerType, setPerformerType] = useState<"member" | "external">("member");
+  const [externalProviderName, setExternalProviderName] = useState("");
   const [photoFiles, setPhotoFiles] = useState<File[]>([]);
   const [attachmentFiles, setAttachmentFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(initialError);
@@ -190,6 +192,8 @@ export default function MobileMaintenance({
     setEngineHours("");
     setCost("");
     setNotes("");
+    setPerformerType("member");
+    setExternalProviderName("");
     setPhotoFiles([]);
     setAttachmentFiles([]);
     setError(null);
@@ -217,6 +221,10 @@ export default function MobileMaintenance({
       setError("Describe the work performed.");
       return;
     }
+    if (performerType === "external" && !externalProviderName.trim()) {
+      setError("Enter the external provider's name (business or person who performed the work).");
+      return;
+    }
 
     setSaving(true);
     setError(null);
@@ -225,7 +233,9 @@ export default function MobileMaintenance({
       apparatus_id: apparatusId,
       deficiency_id: null,
       maintenance_type: maintenanceType.trim(),
-      completed_by: memberId,
+      // Exactly one performer type: the submitting member or an external provider.
+      completed_by: performerType === "member" ? memberId : null,
+      external_provider_name: performerType === "external" ? externalProviderName.trim().slice(0, 200) : null,
       service_date: new Date(serviceDate).toISOString(),
       description: description.trim(),
       parts_used: partsUsed.trim() || null,
@@ -256,7 +266,7 @@ export default function MobileMaintenance({
         apparatusName,
         linkedDeficiencyNumber: null,
         maintenanceType,
-        completedBy: memberName,
+        completedBy: performerType === "external" ? externalProviderName.trim() : memberName,
         serviceDate: payload.service_date,
         description: payload.description,
         partsUsed: payload.parts_used,
@@ -408,6 +418,40 @@ export default function MobileMaintenance({
                 Service Date <span className="text-[#ef2b2d]">Required</span>
                 <input type="datetime-local" value={serviceDate} onChange={(event) => setServiceDate(event.target.value)} className="mt-2 min-h-14 w-full rounded-2xl border border-white/15 bg-[#080808] px-4 text-base text-white outline-none focus:border-[#ef2b2d]" />
               </label>
+
+              <div className="block text-sm font-black text-white/80">
+                Completed By
+                <div className="mt-2 grid grid-cols-2 gap-2" role="radiogroup" aria-label="Who performed the maintenance">
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={performerType === "member"}
+                    onClick={() => { setPerformerType("member"); setExternalProviderName(""); }}
+                    className={`min-h-12 rounded-2xl border px-3 text-sm font-black ${performerType === "member" ? "border-[#ef2b2d] bg-[#ef2b2d]/15 text-white" : "border-white/15 bg-[#080808] text-white/70"}`}
+                  >
+                    Me ({memberName})
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={performerType === "external"}
+                    onClick={() => setPerformerType("external")}
+                    className={`min-h-12 rounded-2xl border px-3 text-sm font-black ${performerType === "external" ? "border-[#ef2b2d] bg-[#ef2b2d]/15 text-white" : "border-white/15 bg-[#080808] text-white/70"}`}
+                  >
+                    External Provider
+                  </button>
+                </div>
+                {performerType === "external" ? (
+                  <input
+                    type="text"
+                    value={externalProviderName}
+                    onChange={(event) => setExternalProviderName(event.target.value)}
+                    placeholder="Business or person (e.g., Jiffy Lube)"
+                    maxLength={200}
+                    className="mt-2 min-h-14 w-full rounded-2xl border border-white/15 bg-[#080808] px-4 text-base text-white outline-none focus:border-[#ef2b2d]"
+                  />
+                ) : null}
+              </div>
 
               <label className="block text-sm font-black text-white/80">
                 Work Performed <span className="text-[#ef2b2d]">Required</span>

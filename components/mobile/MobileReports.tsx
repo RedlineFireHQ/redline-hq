@@ -248,7 +248,7 @@ export default function MobileReports({ members, trainingCategories, apparatus, 
     if (!selectedQuestion || !selectedSource) return [] as ReportFilterDefinition[];
     return selectedSource.filters.filter((filter) => selectedQuestion.filterKeys.includes(filter.key)).map((filter) => {
       if (filter.key === "apparatus_id") return { ...filter, options: [{ value: "all", label: "All Apparatus" }, ...apparatus.map((item) => ({ value: item.id, label: item.name }))] };
-      if (["completed_by", "member_id", "inspected_by"].includes(filter.key)) return { ...filter, options: [{ value: "all", label: "All Members" }, ...members.map((item) => ({ value: item.id, label: item.name }))] };
+      if (["completed_by", "member_id", "inspected_by"].includes(filter.key)) return { ...filter, options: [{ value: "all", label: "All Members" }, ...(filter.key === "completed_by" ? [{ value: "external_provider", label: "External Provider" }] : []), ...members.map((item) => ({ value: item.id, label: item.name }))] };
       if (filter.key === "category_id" || filter.key === "training_category_id") return { ...filter, options: [{ value: "all", label: "All Categories" }, ...trainingCategories.map((item) => ({ value: item.id, label: item.name }))] };
       if (filter.key === "fire_hose_id") return { ...filter, options: [{ value: "all", label: "All Fire Hose" }, ...fireHose.map((item) => ({ value: item.id, label: item.name }))] };
       if (filter.key === "scba_cylinder_id") return { ...filter, options: [{ value: "all", label: "All SCBA Cylinders" }, ...scbaCylinders.map((item) => ({ value: item.id, label: item.name }))] };
