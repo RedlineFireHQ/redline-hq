@@ -19,6 +19,7 @@ import { isWithinCertificationCycle } from "@/lib/ems/member-ems-progress";
 import { parseOutsideSubmissionNotes } from "@/lib/training/outside-submission-notes";
 import { buildDateRangeFromPreset, buildUtcBoundsForDateRange, formatReportPeriodLabel, parseDateOnly } from "@/lib/reports/date-range";
 import { runInventoryReport } from "@/lib/reports/inventory-report";
+import { runScbaMaskFitReport } from "@/lib/reports/scba-mask-fit-report";
 import { hydrostaticDueDate } from "@/lib/scba-hydro/date";
 import { getReportSourceConfig } from "@/lib/reports/registry";
 import type {
@@ -5666,6 +5667,10 @@ export async function runReport(
 			utcBounds.fromIso,
 			utcBounds.toExclusiveIso,
 		);
+	}
+
+	if (source.key === "scba-mask-fit") {
+		return runScbaMaskFitReport(request, context, source, dateRange.from, dateRange.to);
 	}
 
 	if (source.key === "personnel") {

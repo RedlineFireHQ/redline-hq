@@ -603,7 +603,7 @@ export default function ReportsWorkspace({
 		];
 
 		return REPORT_SOURCES.map((source) => {
-			if (source.key !== "training" && source.key !== "certifications" && source.key !== "maintenance" && source.key !== "apparatus" && source.key !== "personnel" && source.key !== "ems" && source.key !== "inspections" && source.key !== "activity") {
+			if (source.key !== "scba-mask-fit" && source.key !== "training" && source.key !== "certifications" && source.key !== "maintenance" && source.key !== "apparatus" && source.key !== "personnel" && source.key !== "ems" && source.key !== "inspections" && source.key !== "activity") {
 				return source;
 			}
 
@@ -887,7 +887,7 @@ export default function ReportsWorkspace({
 		setSelectedCategory(categoryKey);
 		const source = reportSources.find((item) => item.key === categoryKey) ?? null;
 		setFilters(resolveInitialFilterState(source));
-		if (categoryKey === "personnel") {
+		if (categoryKey === "personnel" || categoryKey === "scba-mask-fit") {
 			setDateRange({ preset: "all-time", from: "2000-01-01", to: "2100-12-31" });
 		}
 		setResult(null);
@@ -1015,6 +1015,7 @@ export default function ReportsWorkspace({
 
 	const canPrint = Boolean(result && !result.comingSoon && result.rows.length > 0);
 	const canExportPpe = Boolean(result && !result.comingSoon && result.columns.some((column) => column.key === "expiration_date") && result.rows.length > 0);
+	const canExportMaskFit = Boolean(result && !result.comingSoon && result.source.key === "scba-mask-fit" && result.rows.length > 0);
 	const isEmsCertificationStatusResult = Boolean(
 		result &&
 		result.source.key === "ems" &&
@@ -1210,14 +1211,14 @@ export default function ReportsWorkspace({
 					>
 						Print Report
 					</button>
-					{canExportPpe && result ? (
+					{(canExportPpe || canExportMaskFit) && result ? (
 						<button
 							type="button"
 							onClick={() => {
 								const url = URL.createObjectURL(new Blob([reportToCsv(result.columns, sortedRows)], { type: "text/csv;charset=utf-8" }));
 								const link = document.createElement("a");
 								link.href = url;
-								link.download = "ppe-inventory-report.csv";
+								link.download = canExportMaskFit ? "scba-mask-fit-report.csv" : "ppe-inventory-report.csv";
 								document.body.appendChild(link);
 								link.click();
 								link.remove();
@@ -1324,7 +1325,7 @@ export default function ReportsWorkspace({
 
 			{result && !result.comingSoon && result.rows.length > 0 ? (
 				<section className="hidden print:block">
-					<h1 className="text-2xl font-bold text-black">{result.source.name} Report</h1>
+					<h1 className="text-2xl font-bold text-black">{result.source.name}{result.source.key === "scba-mask-fit" ? "" : " Report"}</h1>
 					<p className="mt-1 text-sm text-black">Department: {result.departmentName ?? "Unknown Department"}</p>
 					<p className="text-sm text-black">Reporting Period: {result.period.label}</p>
 					<p className="text-sm text-black">Period Basis: {result.period.basisLabel}</p>
@@ -1340,6 +1341,7 @@ export default function ReportsWorkspace({
 						</p>
 					) : null}
 					<p className="mt-2 text-sm text-black">Records: {result.totalRows}</p>
+					{result.source.key === "scba-mask-fit" && result.message ? <p className="text-sm text-black">{result.message}</p> : null}
 
 					<PrintableReportTable columns={result.columns} rows={result.rows} />
 				</section>

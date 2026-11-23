@@ -3,6 +3,29 @@ import { MAINTENANCE_TYPE_OPTIONS } from "@/lib/maintenance";
 
 export const REPORT_SOURCES: ReportSourceConfig[] = [
 	{
+		key: "scba-mask-fit",
+		name: "SCBA Mask Fit Test Report",
+		description: "Latest annual fit tests or historical results by firefighter.",
+		availability: "available",
+		filters: [
+			{ key: "member_id", label: "Member", type: "select", options: [{ value: "all", label: "All Members" }] },
+			{ key: "view", label: "Report View", type: "select", options: [
+				{ value: "latest", label: "Latest Test per Member" },
+				{ value: "history", label: "Historical Test Records" },
+			] },
+		],
+		columns: [
+			{ key: "member_name", label: "Firefighter" },
+			{ key: "test_date", label: "Test Date" },
+			{ key: "result", label: "Result" },
+			{ key: "mask_size", label: "Mask Size" },
+			{ key: "tester", label: "Tester" },
+			{ key: "session", label: "Session" },
+			{ key: "due_date", label: "Annual Due Date" },
+			{ key: "status", label: "Status" },
+		],
+	},
+	{
 		key: "deficiencies",
 		name: "Deficiencies",
 		description: "Status, priority, and apparatus-linked deficiency records.",
