@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { formatReportPeriodLabel } from "@/lib/reports/date-range";
+import { hydrostaticDueDate } from "@/lib/scba-hydro/date";
 import type {
 	AppliedReportFilter,
 	ReportRow,
@@ -776,19 +777,23 @@ export async function runInventoryReport(
 
 	if (mode.reportTypeKey === "scba-cylinder-hydrostatic-testing") {
 		const { data, error } = await context.supabase
-			.from("scba_cylinders")
-			.select("id, cylinder_number, cylinder_type, last_hydrostatic_test_date, next_hydrostatic_test_due_date, serial_number, manufacturer, model, status")
+			.from("scba_hydro_results")
+			.select("id, result, scba_hydro_sessions!inner(test_date, tester_name, company_name, notes), scba_cylinders!inner(cylinder_number, serial_number)")
 			.eq("department_id", context.departmentId)
-			.order("last_hydrostatic_test_date", { ascending: false });
-		if (error) return buildError(error.message || "Unable to load SCBA cylinder hydrostatic dates.");
+			.order("created_at", { ascending: false });
+		if (error) return buildError(error.message || "Unable to load SCBA cylinder hydrostatic tests.");
 		const rows = ((data ?? []) as Array<Record<string, unknown>>)
 			.filter((row) => categoryKey === "all" || categoryKey === "scba-cylinders")
-			.filter((row) => isWithinUtcRange(normalizeText(row.last_hydrostatic_test_date), fromIso, toExclusiveIso))
+			.map((row) => {
+				const session = (Array.isArray(row.scba_hydro_sessions) ? row.scba_hydro_sessions[0] : row.scba_hydro_sessions) as Record<string, unknown>;
+				const cylinder = (Array.isArray(row.scba_cylinders) ? row.scba_cylinders[0] : row.scba_cylinders) as Record<string, unknown>;
+				return { id: row.id, result: row.result, session, cylinder, date: normalizeText(session?.test_date) };
+			})
+			.filter((row) => isWithinUtcRange(row.date, fromIso, toExclusiveIso))
 			.filter((row) => {
 				if (!searchTerm) return true;
-				return buildInventorySearchText([row.cylinder_number, row.serial_number, row.manufacturer, row.model, row.last_hydrostatic_test_date, row.next_hydrostatic_test_due_date]).includes(searchTerm);
+				return buildInventorySearchText([row.cylinder?.cylinder_number, row.cylinder?.serial_number, row.date, row.result, row.session?.tester_name, row.session?.company_name]).includes(searchTerm);
 			});
-		const dueSoon = rows.filter((row) => normalizeText(row.next_hydrostatic_test_due_date).length > 0).length;
 		return {
 			ok: true,
 			comingSoon: false,
@@ -797,9 +802,9 @@ export async function runInventoryReport(
 			generatedAt: new Date().toISOString(),
 			period: { from: request.dateRange.from, to: request.dateRange.to, label: formatReportPeriodLabel(request.dateRange.from, request.dateRange.to), basisLabel: "Hydrostatic Test Date" },
 			filtersApplied: buildAppliedFilters(source, request.filters, request.searchTerm),
-			summary: [{ label: "Hydro Tests", value: toSummaryValue(rows.length) }, { label: "Cylinders With Due Date", value: toSummaryValue(dueSoon) }],
-			columns: [{ key: "last_hydrostatic_test_date", label: "Last Hydro Test" }, { key: "cylinder_number", label: "Cylinder" }, { key: "serial_number", label: "Serial #" }, { key: "next_hydrostatic_test_due_date", label: "Next Due" }],
-			rows: rows.map((row) => ({ id: normalizeText(row.id) || null, last_hydrostatic_test_date: formatDate(normalizeText(row.last_hydrostatic_test_date) || null), cylinder_number: displayText(row.cylinder_number), serial_number: displayText(row.serial_number), next_hydrostatic_test_due_date: formatDate(normalizeText(row.next_hydrostatic_test_due_date) || null) })),
+			summary: [{ label: "Hydro Tests", value: toSummaryValue(rows.length) }, { label: "Passed", value: toSummaryValue(rows.filter((row) => row.result === "Pass").length) }, { label: "Failed", value: toSummaryValue(rows.filter((row) => row.result === "Fail").length) }],
+			columns: [{ key: "test_date", label: "Test Date" }, { key: "cylinder_number", label: "Cylinder" }, { key: "serial_number", label: "Serial #" }, { key: "result", label: "Result" }, { key: "tester", label: "Tester" }, { key: "company", label: "Company" }, { key: "next_due", label: "Retest Due" }],
+			rows: rows.map((row) => ({ id: normalizeText(row.id) || null, test_date: formatDate(row.date || null), cylinder_number: displayText(row.cylinder?.cylinder_number), serial_number: displayText(row.cylinder?.serial_number), result: displayText(row.result), tester: displayText(row.session?.tester_name), company: displayText(row.session?.company_name), next_due: row.date ? formatDate(hydrostaticDueDate(row.date)) : "-" })),
 			totalRows: rows.length,
 			page: Number(request.page) || 1,
 			pageSize: Number(request.pageSize) || 50,

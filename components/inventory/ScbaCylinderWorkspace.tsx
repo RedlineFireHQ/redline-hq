@@ -557,6 +557,13 @@ export default function ScbaCylinderWorkspace({
 							</button>
 							<button
 								type="button"
+								onClick={() => router.push("/inventory/scba-cylinders/hydrostatic-testing")}
+								className="inline-flex rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+							>
+								Hydrostatic Testing Session & History
+							</button>
+							<button
+								type="button"
 								onClick={() => {
 									if (reportDeficiencyTarget) {
 										reportDeficiencyForRow(reportDeficiencyTarget);
@@ -741,6 +748,10 @@ export default function ScbaCylinderWorkspace({
 																									className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
 																								>
 																									Edit
+																								</button>
+																								<button type="button" className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800"
+																									onClick={(event) => { event.stopPropagation(); router.push(`/inventory/scba-cylinders/hydrostatic-testing?cylinderId=${encodeURIComponent(row.id)}`); }}>
+																									Hydro History
 																								</button>
 
 																								<button

@@ -19,6 +19,7 @@ import { isWithinCertificationCycle } from "@/lib/ems/member-ems-progress";
 import { parseOutsideSubmissionNotes } from "@/lib/training/outside-submission-notes";
 import { buildDateRangeFromPreset, buildUtcBoundsForDateRange, formatReportPeriodLabel, parseDateOnly } from "@/lib/reports/date-range";
 import { runInventoryReport } from "@/lib/reports/inventory-report";
+import { hydrostaticDueDate } from "@/lib/scba-hydro/date";
 import { getReportSourceConfig } from "@/lib/reports/registry";
 import type {
 	AppliedReportFilter,
@@ -2743,6 +2744,7 @@ async function runInspectionsReport(
 		fireHoseQuery,
 		fireHoseTestsQuery,
 		scbaCylindersQuery,
+		scbaHydroResultsQuery,
 		scbaPacksQuery,
 		scbaPackTestsQuery,
 		gasMonitorsQuery,
@@ -2778,6 +2780,9 @@ async function runInspectionsReport(
 				data: [] as Array<{ id: string; cylinder_number: string | null; status: string | null; last_hydrostatic_test_date: string | null; next_hydrostatic_test_due_date: string | null }>,
 				error: null,
 			}),
+		includeScbaCylinderHydro
+			? context.supabase.from("scba_hydro_results").select("id, cylinder_id, result, scba_hydro_sessions!inner(test_date, tester_name, company_name, notes)").eq("department_id", context.departmentId)
+			: Promise.resolve({ data: [], error: null }),
 		includeScbaPackFlow
 			? context.supabase.from("scba_packs").select("id, pack_number, status, next_flow_test_due_date").eq("department_id", context.departmentId)
 			: Promise.resolve({
@@ -2863,6 +2868,7 @@ async function runInspectionsReport(
 		fireHoseQuery.error,
 		fireHoseTestsQuery.error,
 		scbaCylindersQuery.error,
+		scbaHydroResultsQuery.error,
 		scbaPacksQuery.error,
 		scbaPackTestsQuery.error,
 		gasMonitorsQuery.error,
@@ -2944,27 +2950,26 @@ async function runInspectionsReport(
 		});
 	}
 
-	for (const row of (scbaCylindersQuery.data ?? []) as Array<{
-		id: string;
-		cylinder_number: string | null;
-		status: string | null;
-		last_hydrostatic_test_date: string | null;
-		next_hydrostatic_test_due_date: string | null;
+	for (const row of (scbaHydroResultsQuery.data ?? []) as Array<{
+		id: string; cylinder_id: string; result: string;
+		scba_hydro_sessions: { test_date: string; tester_name: string; company_name: string; notes: string | null } | Array<{ test_date: string; tester_name: string; company_name: string; notes: string | null }>;
 	}>) {
-		if (!normalizeText(row.id)) continue;
+		const session = Array.isArray(row.scba_hydro_sessions) ? row.scba_hydro_sessions[0] : row.scba_hydro_sessions;
+		const cylinder = scbaCylinderById.get(row.cylinder_id);
+		if (!session || !cylinder) continue;
 		rows.push({
-			inspectionDateRaw: normalizeText(row.last_hydrostatic_test_date) || null,
+			inspectionDateRaw: normalizeText(session.test_date) || null,
 			inspectionTypeKey: "scba-cylinder-hydrostatic-testing",
 			inspectionTypeLabel: "SCBA Cylinder Hydrostatic Testing",
-			itemId: row.id,
-			itemName: normalizeText(row.cylinder_number) || row.id,
-			itemIdentifier: normalizeText(row.cylinder_number) || "-",
-			result: "-",
-			inspectedBy: "-",
-			itemStatus: normalizeText(row.status) || "-",
-			nextDueDateRaw: normalizeText(row.next_hydrostatic_test_due_date) || null,
-			openDeficiencies: scbaCylinderOpenCounts.get(row.id) ?? 0,
-			notes: "-",
+			itemId: row.cylinder_id,
+			itemName: normalizeText(cylinder.cylinder_number) || row.cylinder_id,
+			itemIdentifier: normalizeText(cylinder.cylinder_number) || "-",
+			result: row.result,
+			inspectedBy: `${session.tester_name} (${session.company_name})`,
+			itemStatus: normalizeText(cylinder.status) || "-",
+			nextDueDateRaw: hydrostaticDueDate(session.test_date),
+			openDeficiencies: scbaCylinderOpenCounts.get(row.cylinder_id) ?? 0,
+			notes: normalizeText(session.notes) || "-",
 		});
 	}
 

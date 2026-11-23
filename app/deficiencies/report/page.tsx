@@ -521,6 +521,7 @@ function ReportDeficiencyPageContent() {
   const inventoryItemId = typeof inventoryItemIdParam === "string" ? inventoryItemIdParam : "";
   const inventoryItemLabel = typeof inventoryItemLabelParam === "string" ? inventoryItemLabelParam : "";
   const normalizedInventoryCategory = inventoryCategory.trim().toLowerCase() as string;
+  const isHydrostaticDeficiency = normalizedInventoryCategory === "scba-cylinders" && searchParams.get("hydrostatic") === "1";
   const isPagerDeficiencyLaunch = normalizedInventoryCategory === "pagers";
   const inventoryEquipmentTypeLabel = getInventoryEquipmentTypeLabel(normalizedInventoryCategory);
   const isInventoryDeficiencyLaunch =
@@ -566,6 +567,7 @@ function ReportDeficiencyPageContent() {
   const [openStatusId, setOpenStatusId] = useState("");
   const [isLoadingOptions, setIsLoadingOptions] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hydroOutOfService, setHydroOutOfService] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [resolvedInventoryItemLabel, setResolvedInventoryItemLabel] = useState(inventoryItemLabel);
 
@@ -1206,7 +1208,8 @@ function ReportDeficiencyPageContent() {
       member_id: reporter.memberId,
     });
 
-    if ((isFireHoseDeficiency || isScbaCylinderDeficiency || isScbaPackDeficiency || isPieDeficiency || isGasMonitorDeficiency || isBatteryDeficiency || isThermalImagingCameraDeficiency || isGroundLadderDeficiency) && inventoryItemId) {
+    const shouldUpdateScbaCylinderDeficiency = isScbaCylinderDeficiency && (!isHydrostaticDeficiency || hydroOutOfService);
+    if ((isFireHoseDeficiency || shouldUpdateScbaCylinderDeficiency || isScbaPackDeficiency || isPieDeficiency || isGasMonitorDeficiency || isBatteryDeficiency || isThermalImagingCameraDeficiency || isGroundLadderDeficiency) && inventoryItemId) {
       let inventoryTable = "fire_hose";
 
       if (isScbaCylinderDeficiency) {
@@ -1417,6 +1420,10 @@ function ReportDeficiencyPageContent() {
               </div>
             </div>
 
+            {isHydrostaticDeficiency && <label className="flex items-center gap-2 text-sm text-zinc-200">
+              <input type="checkbox" checked={hydroOutOfService} onChange={(event) => setHydroOutOfService(event.target.checked)} />
+              Mark this cylinder Out of Service when the deficiency is submitted
+            </label>}
             <div className="flex justify-end gap-3 border-t border-white/10 pt-6">
               <Link
                 href={backHref}
