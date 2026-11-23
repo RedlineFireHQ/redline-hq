@@ -1162,10 +1162,13 @@ export default async function PersonnelProfilePage({
       <div className="mt-6 rounded-xl border border-neutral-800 bg-neutral-900 p-6">
         <div className="flex flex-col gap-3 border-b border-neutral-800 pb-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <h2 className="text-2xl font-semibold text-white">Training History</h2>
+            <h2 id="training-history-heading" className="text-2xl font-semibold text-white">Training History</h2>
             <p className="mt-2 text-sm text-neutral-400">
               Completed training records for this member.
             </p>
+            {trainingHistory.length > 6 ? (
+              <p className="mt-1 text-xs text-neutral-400">Scroll within the history list to view older records.</p>
+            ) : null}
           </div>
 
           <div className="rounded-lg border border-white/10 bg-neutral-950 px-4 py-3">
@@ -1179,10 +1182,15 @@ export default async function PersonnelProfilePage({
             No training completed yet.
           </div>
         ) : (
-          <div className="mt-5 overflow-hidden rounded-xl border border-neutral-800 bg-[#111111]">
-            <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[980px]">
-                <thead className="border-b border-neutral-800 bg-neutral-950">
+          <div
+            className="mt-5 max-h-[60vh] overflow-auto rounded-xl border border-neutral-800 bg-[#111111] md:max-h-[336px]"
+            role="region"
+            aria-labelledby="training-history-heading"
+            tabIndex={0}
+          >
+            <div className="hidden md:block">
+              <table className="w-full min-w-[980px] whitespace-nowrap">
+                <thead className="sticky top-0 z-10 border-b border-neutral-800 bg-neutral-950">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs uppercase tracking-[0.16em] text-neutral-500">Training</th>
                     <th className="px-4 py-3 text-left text-xs uppercase tracking-[0.16em] text-neutral-500">Source</th>

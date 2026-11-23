@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import TrainingWorkspace from "@/components/training/TrainingWorkspace";
-import TrainingDepartmentOverview from "@/components/training/TrainingDepartmentOverview";
+import TrainingDepartmentOverview, { TrainingDepartmentMetrics } from "@/components/training/TrainingDepartmentOverview";
 import { getCurrentMember } from "@/lib/current-member";
 import { hasAssignedDepartmentPermission } from "@/lib/member-permissions";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
@@ -532,14 +532,24 @@ export default async function TrainingPage() {
 
     return (
       <div className="space-y-6 pb-6">
-        <TrainingDepartmentOverview
-          departmentTrainingHoursThisYear={departmentTrainingHoursThisYear}
-          pendingReviews={pendingReviews}
-          events={departmentOverviewEvents}
-          membersTrainedCount={membersTrainedCount}
-          selfReported={departmentSelfReported}
-        />
         <TrainingWorkspace
+        departmentSummary={
+          <TrainingDepartmentMetrics
+            departmentTrainingHoursThisYear={departmentTrainingHoursThisYear}
+            pendingReviews={pendingReviews}
+            events={departmentOverviewEvents}
+            membersTrainedCount={membersTrainedCount}
+          />
+        }
+        departmentHistory={
+          <TrainingDepartmentOverview
+            departmentTrainingHoursThisYear={departmentTrainingHoursThisYear}
+            pendingReviews={pendingReviews}
+            events={departmentOverviewEvents}
+            membersTrainedCount={membersTrainedCount}
+            selfReported={departmentSelfReported}
+          />
+        }
         departmentId={currentMember.departmentId}
         currentMemberId={currentMember.id}
         currentMemberRole={currentMember.role}

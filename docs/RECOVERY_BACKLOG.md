@@ -1,5 +1,25 @@
 # SCBA Hydrostatic Production Preflight
 
+## Personnel history and training layout follow-up
+
+- The personnel member profile is a full page, not a modal. Its Training
+  History now has an independently scrollable, keyboard-focusable region,
+  sized for six desktop rows and limited to 60vh on mobile. Records remain
+  newest-first and all records and details remain available. No modal was
+  introduced or resized; the profile page continues to scroll normally.
+- Both member and management training views place the existing department
+  summary immediately before My Assigned Training. The management view now
+  shows its existing empty assignment state when no assignments exist. The
+  existing second metric is **Training Events** (event count), not Training
+  Event Hours; its label and calculation were intentionally preserved.
+- Local validation: 81 training tests passed, including layout regression
+  checks; TypeScript and an isolated webpack Production build passed. Lint
+  had no errors and three pre-existing warnings. A read-only aggregate found
+  Cedar Bluff members with more than six event attendance records, but this
+  does not verify their rendered profile or scrolling.
+- Deployment and authenticated Cedar Bluff visual and scrolling verification
+  are pending.
+
 ## PPE expiration reporting follow-up
 
 - The PPE inventory report displays the existing stored expiration date beside

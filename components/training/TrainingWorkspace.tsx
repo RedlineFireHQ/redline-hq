@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CalendarDays, Clock3, MapPin, Plus, UserRound, Users } from "lucide-react";
@@ -177,6 +177,8 @@ interface TrainingWorkspaceProps {
   departmentTrainingHoursThisYear: number;
   initialAddTrainingEventOpen?: boolean;
   approvedSelfReported?: SelfReportedTraining[];
+  departmentSummary?: ReactNode;
+  departmentHistory?: ReactNode;
 }
 
 type TrainingEventFormState = {
@@ -489,6 +491,8 @@ export default function TrainingWorkspace({
   emsCourseDefinitions,
   departmentTrainingHoursThisYear,
   approvedSelfReported = [],
+  departmentSummary,
+  departmentHistory,
 }: TrainingWorkspaceProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -2597,7 +2601,9 @@ export default function TrainingWorkspace({
           </p>
         </div>
 
+        {departmentSummary}
         {myAssignedTrainingSection}
+        {departmentHistory}
 
         {activeCategories.length === 0 ? (
           <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-5 py-4 text-sm text-amber-100">
@@ -2725,8 +2731,6 @@ export default function TrainingWorkspace({
         </div>
       ) : null}
 
-      {myHomeworkRows.length > 0 ? myAssignedTrainingSection : null}
-
       {homeworkSaveError ? (
         <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
           {homeworkSaveError}
@@ -2764,6 +2768,8 @@ export default function TrainingWorkspace({
           <p className="mt-1 text-xs text-neutral-500">Outside + assignments + attendance</p>
         </div>
       </div>
+
+      {myAssignedTrainingSection}
 
       {canReviewTraining ? (
         <section className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">

@@ -36,6 +36,38 @@ interface TrainingDepartmentOverviewProps {
   selfReported?: SelfReportedTraining[];
 }
 
+export function TrainingDepartmentMetrics({
+  departmentTrainingHoursThisYear,
+  pendingReviews,
+  events,
+  membersTrainedCount,
+}: TrainingDepartmentOverviewProps) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="rounded-xl border border-white/10 bg-neutral-900 px-4 py-4">
+        <p className="text-xs uppercase tracking-[0.18em] text-neutral-400">Department Training Hours</p>
+        <p className="mt-2 text-3xl font-black text-white">{departmentTrainingHoursThisYear.toFixed(2)}</p>
+        <p className="mt-1 text-xs text-neutral-500">Calendar Year</p>
+      </div>
+      <div className="rounded-xl border border-white/10 bg-neutral-900 px-4 py-4">
+        <p className="text-xs uppercase tracking-[0.18em] text-neutral-400">Training Events</p>
+        <p className="mt-2 text-3xl font-black text-white">{events.length}</p>
+        <p className="mt-1 text-xs text-neutral-500">Department Total</p>
+      </div>
+      <div className="rounded-xl border border-white/10 bg-neutral-900 px-4 py-4">
+        <p className="text-xs uppercase tracking-[0.18em] text-neutral-400">Members Trained</p>
+        <p className="mt-2 text-3xl font-black text-white">{membersTrainedCount}</p>
+        <p className="mt-1 text-xs text-neutral-500">Department Total</p>
+      </div>
+      <div className="rounded-xl border border-white/10 bg-neutral-900 px-4 py-4">
+        <p className="text-xs uppercase tracking-[0.18em] text-neutral-400">Pending Reviews</p>
+        <p className="mt-2 text-3xl font-black text-white">{pendingReviews}</p>
+        <p className="mt-1 text-xs text-neutral-500">Outside + assignments + attendance</p>
+      </div>
+    </div>
+  );
+}
+
 function formatDateTime(value: string) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {
@@ -72,10 +104,7 @@ function formatDateOnly(value: string) {
 }
 
 export default function TrainingDepartmentOverview({
-  departmentTrainingHoursThisYear,
-  pendingReviews,
   events,
-  membersTrainedCount,
   selfReported = [],
 }: TrainingDepartmentOverviewProps) {
   // Unified department training history: department-created events plus approved
@@ -112,29 +141,6 @@ export default function TrainingDepartmentOverview({
 
   return (
     <>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-xl border border-white/10 bg-neutral-900 px-4 py-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-neutral-400">Department Training Hours</p>
-          <p className="mt-2 text-3xl font-black text-white">{departmentTrainingHoursThisYear.toFixed(2)}</p>
-          <p className="mt-1 text-xs text-neutral-500">Calendar Year</p>
-        </div>
-        <div className="rounded-xl border border-white/10 bg-neutral-900 px-4 py-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-neutral-400">Training Events</p>
-          <p className="mt-2 text-3xl font-black text-white">{events.length}</p>
-          <p className="mt-1 text-xs text-neutral-500">Department Total</p>
-        </div>
-        <div className="rounded-xl border border-white/10 bg-neutral-900 px-4 py-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-neutral-400">Members Trained</p>
-          <p className="mt-2 text-3xl font-black text-white">{membersTrainedCount}</p>
-          <p className="mt-1 text-xs text-neutral-500">Department Total</p>
-        </div>
-        <div className="rounded-xl border border-white/10 bg-neutral-900 px-4 py-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-neutral-400">Pending Reviews</p>
-          <p className="mt-2 text-3xl font-black text-white">{pendingReviews}</p>
-          <p className="mt-1 text-xs text-neutral-500">Outside + assignments + attendance</p>
-        </div>
-      </div>
-
       <section className="overflow-hidden rounded-2xl border border-neutral-800 bg-neutral-900">
         <div className="border-b border-neutral-800 px-5 py-4">
           <h2 className="text-xl font-semibold text-white">Training Events</h2>
