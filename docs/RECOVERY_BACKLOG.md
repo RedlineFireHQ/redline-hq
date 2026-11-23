@@ -2,6 +2,17 @@
 
 ## Status — 2026-11-22
 
+- SCBA application commit `2d4a1b8d69f52b4959e3263416dbfb27a980c2f9`
+  was pushed to `main`. Vercel Production deployment
+  `dpl_JAYGaLgJCCgMQpxoCipyjQNXYmad` reached READY and was assigned
+  `https://redlinefirehq.com`. The unauthenticated hydro route redirected to
+  login as expected. The VS Code integrated browser failed to connect
+  (`browserType.connectOverCDP: Timeout 30000ms exceeded`); Safari's window
+  did not expose a verified URL or accessible content. Therefore Cedar Bluff
+  access and end-to-end sessions, corrections, deficiency creation, live
+  attachment workflows and cross-department isolation were not verified in
+  Production. Next action: use an authorized Cedar Bluff session and test
+  those workflows and permission boundaries without altering unrelated data.
 - Production migration `20261122190000_scba_hydrostatic_testing` was applied
   with its migration ledger entry in one transaction on project
   `dkyjtocanutceafywdcd`. Post-apply checks confirmed all five tables have
