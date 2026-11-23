@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import PageLayout from "@/components/layout/PageLayout";
 import { getActiveApparatusOptions } from "@/lib/database";
+import { shouldMarkCylinderOutOfService } from "@/lib/scba-hydro/deficiency";
 import { supabase } from "@/lib/supabase";
 
 type SelectOption = {
@@ -522,6 +523,7 @@ function ReportDeficiencyPageContent() {
   const inventoryItemLabel = typeof inventoryItemLabelParam === "string" ? inventoryItemLabelParam : "";
   const normalizedInventoryCategory = inventoryCategory.trim().toLowerCase() as string;
   const isHydrostaticDeficiency = normalizedInventoryCategory === "scba-cylinders" && searchParams.get("hydrostatic") === "1";
+  const hydroResultId = searchParams.get("hydroResultId") ?? "";
   const isPagerDeficiencyLaunch = normalizedInventoryCategory === "pagers";
   const inventoryEquipmentTypeLabel = getInventoryEquipmentTypeLabel(normalizedInventoryCategory);
   const isInventoryDeficiencyLaunch =
@@ -568,6 +570,7 @@ function ReportDeficiencyPageContent() {
   const [isLoadingOptions, setIsLoadingOptions] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hydroOutOfService, setHydroOutOfService] = useState(false);
+  const [submittedHydroDeficiencyId, setSubmittedHydroDeficiencyId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [resolvedInventoryItemLabel, setResolvedInventoryItemLabel] = useState(inventoryItemLabel);
 
@@ -970,6 +973,11 @@ function ReportDeficiencyPageContent() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    if (submittedHydroDeficiencyId) {
+      setErrorMessage("This deficiency was already saved. Open it using the link below.");
+      return;
+    }
+
     const reporter = await resolveCurrentReporter();
     if (!reporter) {
       setErrorMessage("Unable to determine your Redline HQ member identity.");
@@ -978,6 +986,10 @@ function ReportDeficiencyPageContent() {
 
     if (!canSubmit) {
       setErrorMessage("Complete all required fields before submitting.");
+      return;
+    }
+    if (isHydrostaticDeficiency && !UUID_REGEX.test(hydroResultId)) {
+      setErrorMessage("The hydrostatic test result is missing or invalid. Return to the test history and select Report Deficiency again.");
       return;
     }
 
@@ -1175,6 +1187,7 @@ function ReportDeficiencyPageContent() {
       check_session_id: activeCheckSessionId || null,
       fire_hose_id: isFireHoseDeficiency && inventoryItemId ? inventoryItemId : null,
       scba_cylinder_id: isScbaCylinderDeficiency && inventoryItemId ? inventoryItemId : null,
+      ...(isHydrostaticDeficiency ? { scba_hydro_result_id: hydroResultId } : {}),
       scba_pack_id: isScbaPackDeficiency && inventoryItemId ? inventoryItemId : null,
       pie_equipment_id: isPieDeficiency && inventoryItemId ? inventoryItemId : null,
       gas_monitor_id: isGasMonitorDeficiency && inventoryItemId ? inventoryItemId : null,
@@ -1208,7 +1221,7 @@ function ReportDeficiencyPageContent() {
       member_id: reporter.memberId,
     });
 
-    const shouldUpdateScbaCylinderDeficiency = isScbaCylinderDeficiency && (!isHydrostaticDeficiency || hydroOutOfService);
+    const shouldUpdateScbaCylinderDeficiency = isScbaCylinderDeficiency && shouldMarkCylinderOutOfService(isHydrostaticDeficiency, hydroOutOfService);
     if ((isFireHoseDeficiency || shouldUpdateScbaCylinderDeficiency || isScbaPackDeficiency || isPieDeficiency || isGasMonitorDeficiency || isBatteryDeficiency || isThermalImagingCameraDeficiency || isGroundLadderDeficiency) && inventoryItemId) {
       let inventoryTable = "fire_hose";
 
@@ -1255,7 +1268,12 @@ function ReportDeficiencyPageContent() {
           error: rowUpdateError ?? null,
           inventoryTable,
         });
-        setErrorMessage(message);
+        if (isHydrostaticDeficiency) {
+          setSubmittedHydroDeficiencyId(insertedDeficiencyId);
+          setErrorMessage(`The deficiency was saved, but the cylinder could not be marked Out of Service: ${message}`);
+        } else {
+          setErrorMessage(message);
+        }
         setIsSubmitting(false);
         return;
       }
@@ -1284,6 +1302,11 @@ function ReportDeficiencyPageContent() {
           <form onSubmit={handleSubmit} className="mt-8 space-y-6">
             {errorMessage ? (
               <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{errorMessage}</div>
+            ) : null}
+            {submittedHydroDeficiencyId ? (
+              <Link href={`/operations/deficiencies/${submittedHydroDeficiencyId}`} className="inline-flex text-sm font-semibold text-red-300 underline">
+                View the saved deficiency
+              </Link>
             ) : null}
 
             {isLoadingOptions ? (
@@ -1433,7 +1456,7 @@ function ReportDeficiencyPageContent() {
               </Link>
               <button
                 type="submit"
-                disabled={!canSubmit || isSubmitting || isLoadingOptions}
+                disabled={!canSubmit || isSubmitting || isLoadingOptions || Boolean(submittedHydroDeficiencyId)}
                 className="rounded-xl border border-red-500/30 bg-red-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isSubmitting ? "Submitting..." : "Submit Deficiency"}

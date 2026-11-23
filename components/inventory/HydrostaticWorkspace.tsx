@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { hydrostaticDueDate } from "@/lib/scba-hydro/date";
 import { setAllHydroResults, setHydroResult } from "@/lib/scba-hydro/results";
+import { hydroDeficiencyHref, hydroResultButtonClass } from "@/lib/scba-hydro/deficiency";
 
 type Cylinder = { id: string; cylinder_number: string; status: string };
 type Result = { id: string; cylinder_id: string; result: "Pass" | "Fail" };
@@ -27,7 +28,7 @@ function emptyForm(): Form {
 const fieldClass = "w-full rounded-lg border border-white/10 bg-[#141414] px-3 py-2 text-sm text-white";
 const buttonClass = "rounded-lg border border-white/20 bg-neutral-900 px-3 py-2 text-sm text-white hover:bg-neutral-800";
 
-export default function HydrostaticWorkspace({ departmentId, cylinderId }: { departmentId: string | null; cylinderId: string | null }) {
+export default function HydrostaticWorkspace({ departmentId, cylinderId, resultId }: { departmentId: string | null; cylinderId: string | null; resultId: string | null }) {
   const [cylinders, setCylinders] = useState<Cylinder[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [form, setForm] = useState<Form>(emptyForm);
@@ -117,6 +118,9 @@ export default function HydrostaticWorkspace({ departmentId, cylinderId }: { dep
   }
 
   const selectable = editing ? cylinders.filter((c) => c.id in form.results) : cylinders.filter((c) => c.status !== "Retired");
+  const displayedSessions = sessions.filter((s) =>
+    (!cylinderId || s.scba_hydro_results.some((r) => r.cylinder_id === cylinderId)) &&
+    (!resultId || s.scba_hydro_results.some((r) => r.id === resultId && (!cylinderId || r.cylinder_id === cylinderId))));
   return <div className="mx-auto max-w-6xl space-y-5 p-5 text-white">
     <Link href="/inventory/scba-cylinders" className="text-sm text-red-300">Back to SCBA Cylinders</Link>
     <h1 className="text-3xl font-bold">Hydrostatic Testing</h1>
@@ -133,32 +137,31 @@ export default function HydrostaticWorkspace({ departmentId, cylinderId }: { dep
       </div>
       <label className="block">Session notes<textarea className={fieldClass} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></label>
       {!editing && <div className="flex gap-2">
-        {(["Pass", "Fail", ""] as const).map((value) => <button key={value || "clear"} className={buttonClass} onClick={() => setForm({ ...form, results: setAllHydroResults(selectable.map((c) => c.id), value) })}>{value ? `Select All ${value}` : "Clear All"}</button>)}
+        {(["Pass", "Fail", ""] as const).map((value) => <button key={value || "clear"} className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${value === "Pass" ? "border-emerald-500/30 bg-emerald-900/20 text-emerald-100 hover:bg-emerald-900/30" : value === "Fail" ? "border-red-500/30 bg-red-900/20 text-red-100 hover:bg-red-900/30" : "border-white/15 bg-neutral-900 text-white hover:bg-neutral-800"}`} onClick={() => setForm({ ...form, results: setAllHydroResults(selectable.map((c) => c.id), value) })}>{value ? `Select All ${value}` : "Clear All"}</button>)}
       </div>}
       <div className="max-h-80 overflow-auto">{selectable.map((cylinder) => <div key={cylinder.id} className="flex items-center justify-between gap-3 border-b border-white/10 py-2">
         <span>{cylinder.cylinder_number} <span className="text-neutral-400">({cylinder.status})</span></span>
         <div className="flex gap-2">{(["Pass", "Fail"] as const).map((result) => <button key={result}
           aria-pressed={form.results[cylinder.id] === result}
-          className={`${buttonClass} ${form.results[cylinder.id] === result ? "border-red-400 bg-red-900" : ""}`}
+          className={hydroResultButtonClass(result, form.results[cylinder.id] === result)}
           onClick={() => setForm({ ...form, results: setHydroResult(form.results, cylinder.id, result, !editing) })}>{result}</button>)}</div>
       </div>)}</div>
       <div className="flex gap-2"><button disabled={busy} className={buttonClass} onClick={() => void save()}>Save Session</button>
         <button disabled={busy} className={buttonClass} onClick={() => setShowForm(false)}>Cancel</button></div>
     </section>}
     <h2 className="text-xl font-bold">{cylinderId ? `History: ${cylinders.find((c) => c.id === cylinderId)?.cylinder_number ?? "Cylinder"}` : "Completed sessions and cylinder history"}</h2>
-    {cylinderId && <Link className="text-blue-300 underline" href="/inventory/scba-cylinders/hydrostatic-testing">Show all sessions</Link>}
-    {sessions.filter((s) => !cylinderId || s.scba_hydro_results.some((r) => r.cylinder_id === cylinderId)).length === 0 && <p className="text-neutral-400">No recorded hydrostatic sessions.</p>}
-    {sessions.filter((s) => !cylinderId || s.scba_hydro_results.some((r) => r.cylinder_id === cylinderId)).map((session) => <section key={session.id} className="space-y-3 rounded-xl border border-neutral-700 bg-[#2E2E2E] p-5">
+    {(cylinderId || resultId) && <Link className="text-blue-300 underline" href="/inventory/scba-cylinders/hydrostatic-testing">Show all sessions</Link>}
+    {displayedSessions.length === 0 && <p className="text-neutral-400">No recorded hydrostatic sessions.</p>}
+    {displayedSessions.map((session) => <section key={session.id} className="space-y-3 rounded-xl border border-neutral-700 bg-[#2E2E2E] p-5">
       <div className="flex flex-wrap justify-between gap-2"><h3 className="font-bold">{session.test_date} — {session.tester_name}, {session.company_name}</h3>
         <button className={buttonClass} disabled={busy} onClick={() => editSession(session)}>Correct Session</button></div>
       {session.notes && <p className="text-sm">{session.notes}</p>}
       {session.scba_hydro_results.map((result) => {
         const cylinder = cylinders.find((c) => c.id === result.cylinder_id);
-        const params = new URLSearchParams({ returnTo: "/inventory/scba-cylinders/hydrostatic-testing", inventoryCategory: "scba-cylinders", inventoryItemId: result.cylinder_id, inventoryItemLabel: cylinder?.cylinder_number ?? "Cylinder", apparatusId: "station-supply", hydrostatic: "1" });
         return <div key={result.id} className="flex flex-wrap items-center gap-3 border-t border-white/10 py-2">
           <strong>{cylinder?.cylinder_number ?? result.cylinder_id}</strong><span>{result.result}</span>
           <span className="text-neutral-400">Test: {session.test_date} · Retest due: {hydrostaticDueDate(session.test_date)}</span>
-          {result.result === "Fail" && <Link className="text-red-300 underline" href={`/deficiencies/report?${params}`}>Report Deficiency</Link>}
+          {result.result === "Fail" && <Link className="text-red-300 underline" href={hydroDeficiencyHref(result.id, result.cylinder_id, cylinder?.cylinder_number ?? "Cylinder")}>Report Deficiency</Link>}
         </div>;
       })}
       <div className="space-y-2 border-t border-white/10 pt-3">

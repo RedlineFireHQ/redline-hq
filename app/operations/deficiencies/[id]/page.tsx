@@ -25,6 +25,7 @@ type DeficiencyDetail = {
 	apparatus_id: string | null;
 	fire_hose_id: string | null;
 	scba_cylinder_id: string | null;
+	scba_hydro_result_id: string | null;
 	scba_pack_id: string | null;
 	pie_equipment_id: string | null;
 	ems_equipment_id: string | null;
@@ -131,6 +132,7 @@ function normalizeDeficiencyDetail(data: unknown): DeficiencyDetail {
 		apparatus_id: typeof apparatusIdValue === "string" ? apparatusIdValue : null,
 		fire_hose_id: typeof fireHoseIdValue === "string" ? fireHoseIdValue : null,
 		scba_cylinder_id: typeof scbaCylinderIdValue === "string" ? scbaCylinderIdValue : null,
+		scba_hydro_result_id: typeof row.scba_hydro_result_id === "string" ? row.scba_hydro_result_id : null,
 		scba_pack_id: typeof scbaPackIdValue === "string" ? scbaPackIdValue : null,
 		pager_id: typeof row.pager_id === "string" ? row.pager_id : null,
 		pie_equipment_id: typeof pieEquipmentIdValue === "string" ? pieEquipmentIdValue : null,
@@ -648,6 +650,15 @@ export default async function DeficiencyDetailPage({
 								{formatDateTime(deficiency.updated_at)}
 							</p>
 						</div>
+
+						{deficiency.scba_hydro_result_id && deficiency.scba_cylinder_id ? (
+							<div className="rounded-xl border border-white/10 bg-[#0d0d0d] p-4">
+								<p className="text-xs uppercase tracking-[0.2em] text-zinc-500">Hydrostatic Test</p>
+								<Link href={`/inventory/scba-cylinders/hydrostatic-testing?cylinderId=${encodeURIComponent(deficiency.scba_cylinder_id)}&resultId=${encodeURIComponent(deficiency.scba_hydro_result_id)}`} className="mt-2 inline-flex text-sm font-semibold text-red-300 transition hover:text-red-200">
+									View linked test
+								</Link>
+							</div>
+						) : null}
 
 						{deficiency.ppe_item_id ? (
 							<div className="rounded-xl border border-white/10 bg-[#0d0d0d] p-4">

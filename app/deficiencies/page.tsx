@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getActiveApparatusOptions } from "@/lib/database";
+import { deficiencyReportedOrder } from "@/lib/deficiencies/list-order";
 import { supabase } from "@/lib/supabase";
 import PageLayout from "@/components/layout/PageLayout";
 
@@ -588,7 +589,7 @@ async function fetchDeficiencies() {
 		.select(
 			"id, deficiency_number, description, reported_at, fire_hose_id, scba_cylinder_id, scba_pack_id, pager_id, pie_equipment_id, ems_equipment_id, ppe_item_id, rope_item_id, fire_extinguisher_id, misc_fire_equipment_id, fire_hose:fire_hose_id(inventory_number), scba_cylinder:scba_cylinder_id(cylinder_number), scba_pack:scba_pack_id(pack_number), pager:pager_id(pager_number), pie_equipment:pie_equipment_id(equipment_number), ems_equipment:ems_equipment_id(equipment_name), ppe_item:ppe_item_id(item_name), rope_item:rope_item_id(rope_name, rope_identifier), fire_extinguisher:fire_extinguisher_id(extinguisher_number, extinguisher_type), misc_fire_equipment:misc_fire_equipment_id(equipment_name, asset_number), category:deficiency_categories!fk_deficiencies_category(name), priority:deficiency_priorities!fk_deficiencies_priority(name), status:deficiency_statuses!fk_deficiencies_status(name), apparatus:apparatus!fk_deficiencies_apparatus(name)"
 		)
-		.order("reported_at", { ascending: false });
+		.order("reported_at", deficiencyReportedOrder);
 
 	if (result.error) {
 		console.error("fetchDeficiencies error message:", result.error.message);

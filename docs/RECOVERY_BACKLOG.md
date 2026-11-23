@@ -2,6 +2,35 @@
 
 ## Status — 2026-11-22
 
+- Hydrostatic follow-up: Production deficiency `DEF-2026-0243` exists,
+  belongs to Cedar Bluff, and is linked to cylinder `CB-CYL-005`; it has
+  category SCBA, Open status, Critical priority and history. The reporting
+  member can read it under Production RLS. Six undated deficiencies sorted
+  ahead of it, placing it seventh in the scrolling list; sorting null report
+  dates last places it first in a read-only test. This is a demonstrated
+  visibility problem, not proof of exactly what the browser displayed.
+  The existing record has no direct hydro-result reference because the
+  original feature did not persist one.
+- Follow-up changes match flow-test result colors, sort undated deficiency
+  records last, and add an optional, department/cylinder-checked FK linking
+  future hydro deficiencies to the failed result. The ordinary deficiency
+  workflow remains in use; the cylinder is marked Out of Service only if
+  selected. If that optional update fails after insertion, the UI links to
+  the saved deficiency and prevents resubmission. Existing records are not
+  automatically backfilled or duplicated. Migration
+  `20261122210000_scba_hydro_deficiency_link` is additive.
+- The follow-up migration and its ledger entry were applied atomically to
+  Production. The composite FK, context check and validation trigger were
+  verified; the original deficiency remains present and unchanged, with a
+  null new result link. Linking that existing record to its identified test
+  remains outstanding; no duplicate deficiency was created.
+- Validation: 73 focused tests, TypeScript, PostgreSQL 17 synthetic hydro and
+  deficiency tests, and an isolated webpack production build passed. Full
+  changed-file lint reported four errors and three warnings, all independently
+  reproduced against the unchanged baseline in the two deficiency pages;
+  remaining changed files lint clean. The VS Code browser connection timed
+  out, so live list appearance, visual styling, and a real authenticated
+  Cedar Bluff end-to-end run remain unverified.
 - SCBA application commit `2d4a1b8d69f52b4959e3263416dbfb27a980c2f9`
   was pushed to `main`. Vercel Production deployment
   `dpl_JAYGaLgJCCgMQpxoCipyjQNXYmad` reached READY and was assigned
