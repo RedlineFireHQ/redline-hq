@@ -135,12 +135,25 @@
   values supplied to the build process from the main worktree's existing
   `.env.local`; the URL was verified to match the Production project. No
   environment file was added to this worktree. No synthetic Production
-  mask-fit records were created. Post-deployment checks remain outstanding.
+  mask-fit records were created.
+- Production deployment (2026-11-23): feature commit
+  `dc11275aa3f32839f9b6027cf9c03999014348f9` was pushed to
+  `feature/scba-mask-fit-testing`. An exact clean snapshot of that commit was
+  deployed to the existing Vercel Production project as
+  `dpl_DK2hnnUWHCmiT83MeczCjGnoC8dL`; Vercel reports READY and the
+  `redlinefirehq.com` alias. The homepage returned HTTP 200 and the mask-fit
+  workspace redirected an unauthenticated request to login. Authenticated
+  Production workflow, history, reporting, and isolation checks remain
+  unverified; no fake Production records were created.
+- The feature is deployed from its branch snapshot but is not yet in GitHub
+  `main`. A subsequent automatic Production deployment from the older `main`
+  can replace this feature; integrate the reviewed feature branch into `main`
+  through the approved release workflow before the next such deployment.
 - Outstanding: actual print output is intentionally deferred. Verify the
   Central Time limitation is acceptable for departments outside that zone.
   Separate browser tabs create independent session identifiers; idempotency
   protects repeated submissions of the same session, not two independently
-  created sessions. No commit, push, or deployment has been made.
+  created sessions.
 
 ## Department training assignments label release
 
