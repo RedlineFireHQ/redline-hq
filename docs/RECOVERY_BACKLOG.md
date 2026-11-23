@@ -24,6 +24,12 @@
   verified; the original deficiency remains present and unchanged, with a
   null new result link. Linking that existing record to its identified test
   remains outstanding; no duplicate deficiency was created.
+- Follow-up application commit `7647a4ebfaa464c843f31635b4557c1a421e1af4`
+  reached READY as Vercel deployment `dpl_FnzqtgGp2PPKUqG3qzhPM1rtM6Mc` and
+  was assigned `https://redlinefirehq.com`. A fresh integrated browser page
+  also timed out, so actual list appearance and the end-to-end Cedar Bluff
+  workflow still require verification. The database ordering test alone does
+  not establish what the user sees.
 - Validation: 73 focused tests, TypeScript, PostgreSQL 17 synthetic hydro and
   deficiency tests, and an isolated webpack production build passed. Full
   changed-file lint reported four errors and three warnings, all independently
