@@ -2,6 +2,11 @@
 
 ## Status — 2026-11-22
 
+- After the nulls-last ordering fix was deployed, the user refreshed the
+  authenticated Production Deficiencies page and confirmed
+  `DEF-2026-0243` appears under All. This confirms visibility of the existing
+  record; it does not verify a new end-to-end deficiency submission or
+  backfill the new hydro-result link.
 - Follow-up screenshots show the desktop All and Open filters on the same
   Deficiencies page. All displays six undated, unknown-status records first;
   Open excludes them and displays `DEF-2026-0243` first. Both filters operate
