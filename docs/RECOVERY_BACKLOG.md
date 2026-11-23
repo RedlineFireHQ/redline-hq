@@ -1,5 +1,16 @@
 # SCBA Hydrostatic Production Preflight
 
+## Department training assignments label release
+
+- Renamed the department-wide overview heading from **Assigned Training** to
+  **Department Training Assignments**. **My Assigned Training** and the
+  existing training review sections and behavior remain unchanged. No
+  permissions or database migrations are included.
+- Final validation: 81 training tests, TypeScript, and an isolated webpack
+  Production build passed. Changed-file lint reported no errors and two
+  existing unused-variable warnings. Production deployment verification is
+  pending.
+
 ## Personnel history and training layout follow-up
 
 - The personnel member profile is a full page, not a modal. Its Training

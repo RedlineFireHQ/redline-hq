@@ -2902,7 +2902,7 @@ export default function TrainingWorkspace({
         <section className="rounded-2xl border border-neutral-800 bg-neutral-900 p-5">
           <div className="flex flex-wrap items-end justify-between gap-3 border-b border-neutral-800 pb-4">
             <div>
-              <h2 className="text-xl font-semibold text-white">Assigned Training</h2>
+              <h2 className="text-xl font-semibold text-white">Department Training Assignments</h2>
             <p className="mt-1 text-sm text-neutral-400">
               Assigned training lives in assignment records and contributes training credit after approval.
             </p>
