@@ -8,8 +8,12 @@
   permissions or database migrations are included.
 - Final validation: 81 training tests, TypeScript, and an isolated webpack
   Production build passed. Changed-file lint reported no errors and two
-  existing unused-variable warnings. Production deployment verification is
-  pending.
+  existing unused-variable warnings.
+- Application commit `d20ca0cd6adb1c198ed4d5d26145c6172c104c81` reached READY
+  as deployment `dpl_3yYcGHPrPP5beeK2QRXX2Y1fnW9v`, aliased to
+  `https://redlinefirehq.com`. The unauthenticated Training route redirects to
+  login. A fresh VS Code integrated-browser connection timed out, so the
+  heading has not been visually verified in an authenticated session.
 
 ## Personnel history and training layout follow-up
 
