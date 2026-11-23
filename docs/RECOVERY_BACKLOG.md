@@ -17,8 +17,14 @@
   had no errors and three pre-existing warnings. A read-only aggregate found
   Cedar Bluff members with more than six event attendance records, but this
   does not verify their rendered profile or scrolling.
-- Deployment and authenticated Cedar Bluff visual and scrolling verification
-  are pending.
+- Application commit `db021bc091c068221c5fd7ae8ebff4d23da92cce` was deployed
+  as `dpl_7qWqyUaVjo2uUSpAKh3ihS21jJrf` (READY, aliased to
+  `https://redlinefirehq.com`). The unauthenticated Personnel and Training
+  routes redirect to login. A fresh VS Code integrated browser connection
+  timed out, so authenticated Cedar Bluff visual verification and actual
+  scrolling through more than six records remain outstanding. Next: use a
+  Cedar Bluff member with more than six completed records to verify the
+  history scroll, and confirm the Training page order.
 
 ## PPE expiration reporting follow-up
 
