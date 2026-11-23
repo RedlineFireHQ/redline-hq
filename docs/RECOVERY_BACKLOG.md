@@ -2,6 +2,16 @@
 
 ## Status — 2026-11-22
 
+- Follow-up screenshots show the desktop All and Open filters on the same
+  Deficiencies page. All displays six undated, unknown-status records first;
+  Open excludes them and displays `DEF-2026-0243` first. Both filters operate
+  on the same fetched rows; All does not exclude the deficiency. A read-only
+  check under the reporter's RLS context reproduces its positions: seventh
+  under the original All ordering, first under Open, and first under the
+  deployed nulls-last All ordering. The screenshot showing old ordering was
+  taken after deployment; an already-loaded page may retain the prior client
+  bundle, but this was not verified. Refreshing and visually confirming All
+  remains necessary. The existing deficiency was not modified.
 - Hydrostatic follow-up: Production deficiency `DEF-2026-0243` exists,
   belongs to Cedar Bluff, and is linked to cylinder `CB-CYL-005`; it has
   category SCBA, Open status, Critical priority and history. The reporting
