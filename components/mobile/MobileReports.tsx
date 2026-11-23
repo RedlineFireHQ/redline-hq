@@ -511,11 +511,15 @@ function pickFields(sourceKey: string, row: Record<string, string | number | nul
     apparatus: ["apparatus_name", "apparatus_status", "latest_check_status", "latest_check_at", "open_deficiencies", "latest_maintenance_date"],
     maintenance: ["maintenance_number", "apparatus_name", "maintenance_type", "service_date", "description", "performed_by"],
     inspections: ["item_name", "inspection_type", "result", "inspection_date", "item_status", "next_due_date"],
-    inventory: ["item_name", "inventory_type", "identifier", "status", "due_date", "open_deficiencies"],
+    inventory: "expiration_date" in row
+      ? ["item_name", "expiration_date", "location_or_apparatus", "identifier", "status"]
+      : ["item_name", "inventory_type", "identifier", "status", "due_date", "open_deficiencies"],
     ems: ["item_name", "category_name", "status", "location", "hours", "date"],
     "pre-plans": ["business_name", "address", "city", "last_verified_at", "hydrant_count", "hazard_count"],
   };
   const labels: Record<string, string> = { training_date: "Date", training_name: "Training", source_type: "Source", member_name: "Member", category_name: "Category", hours: "Hours", activity_date: "Date", module: "Module", action: "Action", description: "Description", related_item: "Related", deficiency_number: "Deficiency", status_name: "Status", priority_name: "Priority", reported_at: "Reported", apparatus_name: "Apparatus", apparatus_status: "Status", latest_check_status: "Latest Check", latest_check_at: "Latest Check", open_deficiencies: "Open Deficiencies", latest_maintenance_date: "Latest Maintenance", maintenance_number: "Record", maintenance_type: "Type", service_date: "Date", performed_by: "Performed By", item_name: "Item", inspection_type: "Inspection", result: "Result", inspection_date: "Date", item_status: "Status", next_due_date: "Next Due", inventory_type: "Type", identifier: "Identifier", due_date: "Due", status: "Status", location: "Location", date: "Date", business_name: "Business", address: "Address", city: "City", last_verified_at: "Last Verified", hydrant_count: "Hydrants", hazard_count: "Hazards", role_name: "Role", station: "Station", shift: "Shift", email: "Email", certification_name: "Certification", expires_at: "Expires", days_until_expiration: "Days Until Expiration" };
+  labels.expiration_date = "Expiration Date";
+  labels.location_or_apparatus = "Assigned To / Location";
   const keys = fieldMap[sourceKey] ?? Object.keys(row).slice(0, 6);
   return keys
     .map((key) => ({ key, label: labels[key] ?? key, value: text(row[key]) }))

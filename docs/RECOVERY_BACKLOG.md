@@ -1,5 +1,24 @@
 # SCBA Hydrostatic Production Preflight
 
+## PPE expiration reporting follow-up
+
+- The PPE inventory report displays the existing stored expiration date beside
+  the item and assigned member/location. Missing dates show `N/A`; no dates,
+  expiration classifications, inventory records, or schema were changed.
+  The same columns and rows are used for printing and the new desktop CSV
+  export. Mobile cards also show the date and assignment.
+- Existing report period filtering remains in effect: items with activity
+  outside the selected period can be excluded. A read-only Production aggregate
+  found one dated Cedar Bluff PPE item, with activity within the last 30 days.
+- Validation: 29 focused report tests passed, including print rendering, CSV,
+  missing dates, member associations and department isolation; TypeScript and
+  an isolated webpack Production build passed. Changed-file lint passed with
+  nine existing warnings and no errors. The broader report suite had 13
+  drug-box/pediatric-bag failures; the same 13 fail on the unchanged `4370ecb`
+  baseline (47/60 passed with this change; 44/57 on baseline).
+- Deployment and authenticated Cedar Bluff screen, print and download
+  verification remain pending.
+
 ## Status — 2026-11-22
 
 - After the nulls-last ordering fix was deployed, the user refreshed the

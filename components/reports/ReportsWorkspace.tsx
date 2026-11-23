@@ -5,6 +5,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { buildDateRangeFromPreset, REPORT_DATE_PRESETS } from "@/lib/reports/date-range";
 import { REPORT_SOURCES } from "@/lib/reports/registry";
 import { getInventoryReportTypeOptions } from "@/lib/reports/inventory-report";
+import { reportToCsv } from "@/lib/reports/csv";
+import { PrintableReportTable } from "./PrintableReportTable";
 import type {
 	ReportColumn,
 	ReportDatePresetKey,
@@ -1012,6 +1014,7 @@ export default function ReportsWorkspace({
 	};
 
 	const canPrint = Boolean(result && !result.comingSoon && result.rows.length > 0);
+	const canExportPpe = Boolean(result && !result.comingSoon && result.columns.some((column) => column.key === "expiration_date") && result.rows.length > 0);
 	const isEmsCertificationStatusResult = Boolean(
 		result &&
 		result.source.key === "ems" &&
@@ -1207,6 +1210,24 @@ export default function ReportsWorkspace({
 					>
 						Print Report
 					</button>
+					{canExportPpe && result ? (
+						<button
+							type="button"
+							onClick={() => {
+								const url = URL.createObjectURL(new Blob([reportToCsv(result.columns, sortedRows)], { type: "text/csv;charset=utf-8" }));
+								const link = document.createElement("a");
+								link.href = url;
+								link.download = "ppe-inventory-report.csv";
+								document.body.appendChild(link);
+								link.click();
+								link.remove();
+								window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+							}}
+							className="rounded-xl border border-white/20 bg-[#151515] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1c1c1c]"
+						>
+							Export CSV
+						</button>
+					) : null}
 				</div>
 			</section>
 
@@ -1320,28 +1341,7 @@ export default function ReportsWorkspace({
 					) : null}
 					<p className="mt-2 text-sm text-black">Records: {result.totalRows}</p>
 
-					<table className="mt-4 w-full border-collapse text-left text-xs text-black">
-						<thead>
-							<tr>
-								{result.columns.map((column) => (
-									<th key={column.key} className="border border-black px-2 py-1 font-bold">
-										{column.label}
-									</th>
-								))}
-							</tr>
-						</thead>
-						<tbody>
-							{result.rows.map((row, index) => (
-								<tr key={`${index}-${asText(row.id)}`}>
-									{result.columns.map((column) => (
-										<td key={column.key} className="border border-black px-2 py-1">
-											{asText(row[column.key])}
-										</td>
-									))}
-								</tr>
-							))}
-						</tbody>
-					</table>
+					<PrintableReportTable columns={result.columns} rows={result.rows} />
 				</section>
 			) : null}
 		</div>

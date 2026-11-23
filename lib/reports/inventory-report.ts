@@ -1427,7 +1427,18 @@ export async function runInventoryReport(
 	const pageSize = request.pageSize === 0 ? Number.MAX_SAFE_INTEGER : Math.max(1, Math.min(Number(request.pageSize) || 50, 200));
 	const page = Math.max(1, Number(request.page) || 1);
 	const offset = (page - 1) * pageSize;
-	const pagedRows = toReportRows(filteredRows.slice(offset, offset + pageSize));
+	const isPpeInventoryReport = categoryFilter === "ppe";
+	const pagedRows = toReportRows(filteredRows.slice(offset, offset + pageSize)).map((row) =>
+		isPpeInventoryReport ? { ...row, expiration_date: row.due_date === "-" ? "N/A" : row.due_date } : row,
+	);
+	const columns = isPpeInventoryReport
+		? [
+			{ key: "item_name", label: "Item" },
+			{ key: "expiration_date", label: "Expiration Date" },
+			{ key: "location_or_apparatus", label: "Assigned To / Location" },
+			...source.columns.filter((column) => !["item_name", "location_or_apparatus", "due_date"].includes(column.key)),
+		]
+		: source.columns;
 
 	return {
 		ok: true,
@@ -1452,7 +1463,7 @@ export async function runInventoryReport(
 			{ label: "Open Deficiencies", value: String(filteredRows.reduce((total, row) => total + row.openDeficiencies, 0)) },
 			{ label: "With Activity In Period", value: String(filteredRows.filter((row) => Boolean(row.activitySortDate)).length) },
 		],
-		columns: source.columns,
+		columns,
 		rows: pagedRows,
 		totalRows: filteredRows.length,
 		page,
