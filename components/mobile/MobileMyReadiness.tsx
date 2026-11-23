@@ -22,6 +22,7 @@ export default function MobileMyReadiness({
   certifications,
   history,
   fireTrainingHours,
+  otherTrainingHours,
   emsTracks,
 }: {
   readiness: ReadinessScoreState;
@@ -29,6 +30,7 @@ export default function MobileMyReadiness({
   certifications: Certification[];
   history: HistoryItem[];
   fireTrainingHours: number;
+  otherTrainingHours: number;
   emsTracks: EmsTrack[];
 }) {
   const currentCertifications = certifications.filter((item) => item.status === "current").length;
@@ -63,7 +65,7 @@ export default function MobileMyReadiness({
 
     <section className="mt-5 rounded-2xl border border-white/10 bg-[#17181b] p-5 sm:p-6"><h2 className="text-xl font-black">Certifications</h2><div className="mt-4 grid grid-cols-3 gap-2"><div className="rounded-xl border border-emerald-400/20 bg-emerald-500/10 p-3 text-center"><p className="text-2xl font-black text-emerald-200">{currentCertifications}</p><p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-white/60">Current</p></div><div className="rounded-xl border border-amber-400/20 bg-amber-500/10 p-3 text-center"><p className="text-2xl font-black text-amber-200">{expiringCertifications}</p><p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-white/60">Expiring</p></div><div className="rounded-xl border border-red-400/20 bg-red-500/10 p-3 text-center"><p className="text-2xl font-black text-red-200">{expiredCertifications}</p><p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-white/60">Expired</p></div></div>{certifications.length > 0 ? <div className="mt-4 space-y-2">{certifications.map((cert) => <div key={cert.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-[#121315] p-3"><span className="font-semibold">{cert.name}</span><span className={`rounded-lg border px-2 py-1 text-xs font-bold ${statusTone(cert.status)}`}>{cert.status.replaceAll("_", " ")}</span></div>)}</div> : <p className="mt-4 text-white/60">No certifications recorded.</p>}</section>
 
-    <section className="mt-5 rounded-2xl border border-white/10 bg-[#17181b] p-5 sm:p-6"><h2 className="text-xl font-black">Training</h2><p className="mt-2 text-white/65">Approved fire training this year</p><p className="mt-1 text-3xl font-black text-white">{fireTrainingHours.toFixed(2)} hrs</p>{readiness.factors.filter((factor) => factor.category === "training").length > 0 ? <div className="mt-4 space-y-3">{readiness.factors.filter((factor) => factor.category === "training").map((factor) => <FactorCard key={factor.id} factor={factor} />)}</div> : <p className="mt-4 text-white/60">No training requirements configured.</p>}</section>
+    <section className="mt-5 rounded-2xl border border-white/10 bg-[#17181b] p-5 sm:p-6"><h2 className="text-xl font-black">Training</h2><p className="mt-2 text-white/65">Approved fire training this year</p><p className="mt-1 text-3xl font-black text-white">{fireTrainingHours.toFixed(2)} hrs</p><p className="mt-3 text-white/65">Approved other training this year</p><p className="mt-1 text-2xl font-black text-white">{otherTrainingHours.toFixed(2)} hrs</p>{readiness.factors.filter((factor) => factor.category === "training").length > 0 ? <div className="mt-4 space-y-3">{readiness.factors.filter((factor) => factor.category === "training").map((factor) => <FactorCard key={factor.id} factor={factor} />)}</div> : <p className="mt-4 text-white/60">No training requirements configured.</p>}</section>
 
     {readiness.deficiencyImpactingCount > 0 ? <section className="mt-5 rounded-2xl border border-white/10 bg-[#17181b] p-5 sm:p-6"><h2 className="text-xl font-black">Deficiencies</h2><p className="mt-3 text-sm leading-6 text-amber-200">{readiness.deficiencyImpactingCount} active issue(s) assigned to you are affecting readiness.</p><p className="mt-3 text-sm text-white/60">Penalty: {readiness.deficiencyPenaltyPercent.toFixed(1)}%</p></section> : null}
 

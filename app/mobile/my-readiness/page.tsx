@@ -4,6 +4,8 @@ import { getCurrentMember } from "@/lib/current-member";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { buildCertificationTypeMetaById } from "@/lib/ems/authoritative-certifications";
 import { computeAuthoritativeMemberReadiness } from "@/lib/readiness/authoritative-member-readiness";
+import { getAnnualAssignmentCredits, isInUtcCalendarYear, type LedgerAssignmentMemberRow, type LedgerAssignmentRow } from "@/lib/training/training-hours";
+import { getTrainingComplianceBucketByCategoryId } from "@/lib/training/compliance-buckets";
 import type { EmsTrackProfileAuthorityRow } from "@/lib/ems/authoritative-certifications";
 import { buildCanonicalMemberCertificationRows, type CatalogRow, type RoleRequiredCertificationRow, type RoleRequiredQualificationRow } from "@/lib/role-requirements";
 import type { RequirementInput, TrainingAssignmentInput, TrainingAssignmentMemberInput } from "@/lib/readiness/member-readiness";
@@ -43,25 +45,45 @@ export default async function MobileMyReadinessPage() {
     supabase.from("ems_member_track_profiles").select("id, track, certification_level, track_status, maintain_track, certification_number, expiration_date, effective_start_date, effective_end_date").eq("department_id", departmentId).eq("member_id", currentMember.id),
   ]);
 
+  if (attendanceResult.error) throw new Error(attendanceResult.error.message || "Unable to load training attendance.");
+  if (outsideResult.error) throw new Error(outsideResult.error.message || "Unable to load self-reported training.");
+  if (assignmentMemberResult.error) throw new Error(assignmentMemberResult.error.message || "Unable to load assigned training.");
+  const assignmentMembers = (assignmentMemberResult.data ?? []) as LedgerAssignmentMemberRow[];
+  const assignmentIds = Array.from(new Set(assignmentMembers.map((row) => row.training_assignment_id)));
+  const { data: assignmentRows, error: assignmentError } = assignmentIds.length > 0
+    ? await supabase.from("training_assignments").select("id, category_id, hours_credit, status").eq("department_id", departmentId).in("id", assignmentIds)
+    : { data: [], error: null };
+  if (assignmentError) throw new Error(assignmentError.message || "Unable to load assigned training details.");
+  const assignments = (assignmentRows ?? []) as LedgerAssignmentRow[];
   const attendanceIds = ((attendanceResult.data ?? []) as Array<{ training_event_id: string }>).map((row) => row.training_event_id);
-  const { data: eventRows } = attendanceIds.length > 0 ? await supabase.from("training_events").select("id, title, category_id, starts_at, hours_credit, is_ems_training, ems_core_topic, ems_needs_review").eq("department_id", departmentId).in("id", attendanceIds) : { data: [] };
+  const { data: eventRows, error: eventError } = attendanceIds.length > 0 ? await supabase.from("training_events").select("id, title, category_id, starts_at, hours_credit, is_ems_training, ems_core_topic, ems_needs_review").eq("department_id", departmentId).in("id", attendanceIds) : { data: [], error: null };
+  if (eventError) throw new Error(eventError.message || "Unable to load attended training events.");
   const events = (eventRows ?? []) as Row[];
   const outside = (outsideResult.data ?? []) as Row[];
-  const categoryIds = Array.from(new Set([...events.map((row) => stringValue(row.category_id)), ...outside.map((row) => stringValue(row.category_id))].filter((value): value is string => Boolean(value))));
-  const { data: categoryRows } = categoryIds.length > 0 ? await supabase.from("training_categories").select("id, name, active, compliance_bucket").eq("department_id", departmentId).in("id", categoryIds) : { data: [] };
+  const categoryIds = Array.from(new Set([...events.map((row) => stringValue(row.category_id)), ...outside.map((row) => stringValue(row.category_id)), ...assignments.map((row) => row.category_id)].filter((value): value is string => Boolean(value))));
+  const { data: categoryRows, error: categoryError } = categoryIds.length > 0 ? await supabase.from("training_categories").select("id, name, active, compliance_bucket").eq("department_id", departmentId).in("id", categoryIds) : { data: [], error: null };
+  if (categoryError) throw new Error(categoryError.message || "Unable to load training categories.");
   const categoryNameById = new Map(((categoryRows ?? []) as Row[]).map((row) => [String(row.id), String(row.name ?? "Uncategorized")]));
   const categoryBucketById = new Map(((categoryRows ?? []) as Row[]).map((row) => [String(row.id), (row.compliance_bucket as string | null) ?? null]));
-  // Calendar-year boundary shared by every surface labeled annual/"This Year".
-  const currentCalendarYearPrefix = `${new Date().getUTCFullYear()}-`;
-  const inCurrentYear = (value: unknown) => typeof value === "string" && value.startsWith(currentCalendarYearPrefix);
-  const eventsThisYear = events.filter((row) => inCurrentYear(row.starts_at));
-  const approvedOutsideThisYear = outside.filter((item) => item.status === "approved" && inCurrentYear(item.training_date));
+  const currentCalendarYear = new Date().getUTCFullYear();
+  const eventsThisYear = events.filter((row) => isInUtcCalendarYear(stringValue(row.starts_at), currentCalendarYear));
+  const approvedOutsideThisYear = outside.filter((item) => item.status === "approved" && isInUtcCalendarYear(stringValue(item.training_date), currentCalendarYear));
+  const annualAssignmentCredits = getAnnualAssignmentCredits(assignmentMembers, assignments, currentCalendarYear);
   const categoryHoursMap = new Map<string, { categoryId: string | null; categoryName: string; hours: number }>();
   for (const row of [...eventsThisYear, ...approvedOutsideThisYear]) {
     const categoryId = stringValue(row.category_id); const key = categoryId ?? "uncategorized";
     const current = categoryHoursMap.get(key) ?? { categoryId, categoryName: categoryId ? categoryNameById.get(categoryId) ?? "Uncategorized" : "Uncategorized", hours: 0 };
     current.hours += numberValue(row.hours_credit ?? row.hours); categoryHoursMap.set(key, current);
   }
+  for (const { assignment, hours } of annualAssignmentCredits) {
+    if (!assignment) continue;
+    const categoryId = assignment.category_id; const key = categoryId ?? "uncategorized";
+    const current = categoryHoursMap.get(key) ?? { categoryId, categoryName: categoryId ? categoryNameById.get(categoryId) ?? "Uncategorized" : "Uncategorized", hours: 0 };
+    current.hours += hours; categoryHoursMap.set(key, current);
+  }
+  const otherTrainingHours = Array.from(categoryHoursMap.values())
+    .filter(({ categoryId }) => getTrainingComplianceBucketByCategoryId(categoryId, categoryNameById, categoryBucketById) === "other")
+    .reduce((total, { hours }) => total + hours, 0);
   const categories = ((categoryRows ?? []) as Row[]).map((row) => ({ id: String(row.id), name: String(row.name ?? ""), active: row.active !== false } satisfies CatalogRow));
   const certTypes = (certTypeResult.data ?? []) as Row[];
   const canonicalCertifications = buildCanonicalMemberCertificationRows({ certificationTypes: certTypes.map((row) => ({ id: String(row.id), name: String(row.name ?? ""), active: true })), qualificationTypes: ((qualificationResult.data ?? []) as Row[]).map((row) => ({ id: String(row.id), name: String(row.name ?? ""), active: true })), memberCertifications: (certResult.data ?? []) as never[], memberQualifications: (memberQualificationResult.data ?? []) as Array<{ qualification_id: string }> }).map((row) => ({ certification_id: row.certification_id, certificate_number: row.certificate_number ?? null, issued_at: row.issued_at ?? "", expires_at: row.expires_at, id: row.id }));
@@ -83,7 +105,10 @@ export default async function MobileMyReadinessPage() {
     requirements: (requirementResult.data ?? []) as RequirementInput[],
     categoryNameById,
     categoryBucketById,
-    fireAnnualComplianceRows: [...eventsThisYear, ...approvedOutsideThisYear].map((row) => ({ categoryId: stringValue(row.category_id), hours: (row.hours_credit ?? row.hours) as number | string | null })),
+    fireAnnualComplianceRows: [
+      ...[...eventsThisYear, ...approvedOutsideThisYear].map((row) => ({ categoryId: stringValue(row.category_id), hours: (row.hours_credit ?? row.hours) as number | string | null })),
+      ...annualAssignmentCredits.map(({ assignment, hours }) => ({ categoryId: assignment?.category_id ?? null, hours })),
+    ],
     categoryHours: Array.from(categoryHoursMap.values()),
     trainingAssignments: [] as TrainingAssignmentInput[],
     assignmentMembers: (assignmentMemberResult.data ?? []) as TrainingAssignmentMemberInput[],
@@ -94,5 +119,5 @@ export default async function MobileMyReadinessPage() {
   const history = [...outside.map((row) => ({ id: `training-${row.id}`, title: String(row.title), detail: `${String(row.status).replaceAll("_", " ")} • ${numberValue(row.hours).toFixed(2)} hrs`, occurredAt: String(row.created_at) }))];
   const tracks = (emsProfileResult.data ?? []).map((row) => ({ track: String(row.track), level: String(row.certification_level), expiration: stringValue(row.expiration_date) }));
 
-  return <MobileMyReadiness readiness={readiness.readiness} coachItems={readiness.readiness.coachItems} certifications={certifications} history={history} fireTrainingHours={readiness.fireAnnualTrainingHours} emsTracks={tracks} />;
+  return <MobileMyReadiness readiness={readiness.readiness} coachItems={readiness.readiness.coachItems} certifications={certifications} history={history} fireTrainingHours={readiness.fireAnnualTrainingHours} otherTrainingHours={otherTrainingHours} emsTracks={tracks} />;
 }

@@ -64,6 +64,49 @@ export type LedgerAssignmentMemberRow = {
   hours_earned: number | string | null;
 };
 
+export function isInUtcCalendarYear(value: string | null | undefined, year: number): boolean {
+  if (!value) return false;
+  const parsed = new Date(value);
+  return !Number.isNaN(parsed.getTime()) && parsed.getUTCFullYear() === year;
+}
+
+export function getAnnualAssignmentCredits(
+  assignmentMembers: LedgerAssignmentMemberRow[],
+  assignments: LedgerAssignmentRow[],
+  year: number,
+) {
+  const assignmentById = new Map(assignments.map((assignment) => [assignment.id, assignment]));
+  const seenHoursByAssignment = new Map<string, number>();
+  return assignmentMembers.flatMap((member) => {
+    const date = member.completed_at ?? member.updated_at ?? member.created_at;
+    if (member.completion_status !== "approved" || !date) {
+      return [];
+    }
+    if (!isInUtcCalendarYear(date, year)) {
+      return [];
+    }
+    const assignment = assignmentById.get(member.training_assignment_id);
+    if (!assignment) {
+      throw new Error("Unable to load details for an approved training assignment.");
+    }
+    const earnedHours = parseHours(member.hours_earned);
+    const hours = earnedHours > 0 ? earnedHours : parseHours(assignment.hours_credit);
+    const previousHours = seenHoursByAssignment.get(assignment.id);
+    if (previousHours !== undefined) {
+      if (previousHours !== hours) {
+        throw new Error("Conflicting approved training assignment credits.");
+      }
+      return [];
+    }
+    seenHoursByAssignment.set(assignment.id, hours);
+    return [{
+      member,
+      assignment,
+      hours,
+    }];
+  });
+}
+
 export type TrainingHoursRecord = {
   id: string;
   source: "event" | "outside" | "assignment";

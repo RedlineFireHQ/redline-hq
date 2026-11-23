@@ -30,6 +30,7 @@ import {
 } from "@/lib/readiness/authoritative-member-readiness";
 import { buildScoredCertificationStatuses } from "@/lib/readiness/scored-certifications";
 import { calculateComplianceBucketHours, getTrainingComplianceBucketByCategoryId } from "@/lib/training/compliance-buckets";
+import { getAnnualAssignmentCredits, isInUtcCalendarYear } from "@/lib/training/training-hours";
 import {
   buildCanonicalMemberCertificationRows,
   buildQualificationReadinessAdapter,
@@ -286,19 +287,6 @@ function toDisplayBucket(bucket: "fire_annual" | "ems_ce" | "other"): "fire" | "
   }
 
   return bucket === "ems_ce" ? "ems" : "other";
-}
-
-function isInCalendarYear(value: string | null | undefined, year: number) {
-  if (!value) {
-    return false;
-  }
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return false;
-  }
-
-  return parsed.getUTCFullYear() === year;
 }
 
 function coachUrgencyScore(factor: ReadinessFactor) {
@@ -832,7 +820,6 @@ export default async function MyReadinessPage() {
     memberQualifications,
   });
   const assignmentById = new Map(assignments.map((row) => [row.id, row]));
-  const approvedHomeworkMembers = assignmentMembers.filter((row) => row.completion_status === "approved");
   const requiredOutstandingHomework = assignmentMembers
     .map((row) => ({
       row,
@@ -863,13 +850,9 @@ export default async function MyReadinessPage() {
 
   const currentCalendarYear = new Date().getUTCFullYear();
 
-  // Calendar-year inputs so readiness scoring and displayed annual hours share
-  // the same boundaries on every surface.
-  const attendedEventsThisYear = attendedEvents.filter((event) => isInCalendarYear(event.starts_at, currentCalendarYear));
-  const approvedOutsideThisYear = approvedOutside.filter((submission) => isInCalendarYear(submission.training_date, currentCalendarYear));
-  const approvedHomeworkMembersThisYear = approvedHomeworkMembers.filter((approvedHomework) =>
-    isInCalendarYear(approvedHomework.completed_at ?? approvedHomework.updated_at ?? approvedHomework.created_at, currentCalendarYear),
-  );
+  const attendedEventsThisYear = attendedEvents.filter((event) => isInUtcCalendarYear(event.starts_at, currentCalendarYear));
+  const approvedOutsideThisYear = approvedOutside.filter((submission) => isInUtcCalendarYear(submission.training_date, currentCalendarYear));
+  const annualAssignmentCredits = getAnnualAssignmentCredits(assignmentMembers, assignments, currentCalendarYear);
 
   const fireAnnualComplianceRows = [
     ...attendedEventsThisYear.map((event) => ({
@@ -880,15 +863,10 @@ export default async function MyReadinessPage() {
       categoryId: submission.category_id,
       hours: submission.hours,
     })),
-    ...approvedHomeworkMembersThisYear.map((approvedHomework) => {
-      const assignment = assignmentById.get(approvedHomework.training_assignment_id);
-      const assignmentHours = assignment ? parseHours(assignment.hours_credit) : 0;
-      const rowHours = parseHours(approvedHomework.hours_earned);
-      return {
-        categoryId: assignment?.category_id ?? null,
-        hours: rowHours > 0 ? rowHours : assignmentHours,
-      };
-    }),
+    ...annualAssignmentCredits.map(({ assignment, hours }) => ({
+      categoryId: assignment?.category_id ?? null,
+      hours,
+    })),
   ];
 
   const categoryHoursMap = new Map<string, { categoryId: string | null; name: string; hours: number }>();
@@ -911,8 +889,7 @@ export default async function MyReadinessPage() {
      categoryHoursMap.set(key, current);
    }
 
-   for (const approvedHomework of approvedHomeworkMembersThisYear) {
-    const assignment = assignmentById.get(approvedHomework.training_assignment_id);
+   for (const { assignment, hours } of annualAssignmentCredits) {
     if (!assignment) {
       continue;
     }
@@ -922,9 +899,7 @@ export default async function MyReadinessPage() {
       : "Uncategorized";
     const key = assignment.category_id || "uncategorized";
     const current = categoryHoursMap.get(key) ?? { categoryId: assignment.category_id, name: categoryName, hours: 0 };
-    const assignmentHours = parseHours(assignment.hours_credit);
-    const rowHours = parseHours(approvedHomework.hours_earned);
-    current.hours += rowHours > 0 ? rowHours : assignmentHours;
+    current.hours += hours;
     categoryHoursMap.set(key, current);
    }
 
@@ -932,7 +907,7 @@ export default async function MyReadinessPage() {
 
   const calendarYearRecords = [
     ...attendedEvents
-      .filter((event) => isInCalendarYear(event.starts_at, currentCalendarYear))
+      .filter((event) => isInUtcCalendarYear(event.starts_at, currentCalendarYear))
       .map((event) => ({
         id: `event-${event.id}`,
         bucket: toDisplayBucket(getTrainingComplianceBucketByCategoryId(event.category_id, categoryNameById, categoryBucketById)),
@@ -941,7 +916,7 @@ export default async function MyReadinessPage() {
         hours: parseHours(event.hours_credit),
       })),
     ...approvedOutside
-      .filter((submission) => isInCalendarYear(submission.training_date, currentCalendarYear))
+      .filter((submission) => isInUtcCalendarYear(submission.training_date, currentCalendarYear))
       .map((submission) => ({
         id: `outside-${submission.id}`,
         bucket: toDisplayBucket(getTrainingComplianceBucketByCategoryId(submission.category_id, categoryNameById, categoryBucketById)),
@@ -949,31 +924,23 @@ export default async function MyReadinessPage() {
         categoryName: submission.category_id ? categoryNameById.get(submission.category_id) ?? "Uncategorized" : "Uncategorized",
         hours: parseHours(submission.hours),
       })),
-    ...approvedHomeworkMembers
-      .map((approvedHomework) => {
-        const assignment = assignmentById.get(approvedHomework.training_assignment_id);
+    ...annualAssignmentCredits
+      .map(({ member, assignment, hours }) => {
         if (!assignment) {
           return null;
         }
 
-        const completionDate = approvedHomework.completed_at ?? approvedHomework.updated_at ?? approvedHomework.created_at;
-        if (!isInCalendarYear(completionDate, currentCalendarYear)) {
-          return null;
-        }
-
-        const assignmentHours = parseHours(assignment.hours_credit);
-        const rowHours = parseHours(approvedHomework.hours_earned);
         const categoryName = assignment.category_id
           ? categoryNameById.get(assignment.category_id) ?? "Uncategorized"
           : "Uncategorized";
         const classificationBucket = getTrainingComplianceBucketByCategoryId(assignment.category_id, categoryNameById, categoryBucketById);
 
         return {
-          id: `homework-${approvedHomework.id}`,
+          id: `homework-${member.id}`,
           bucket: toDisplayBucket(classificationBucket),
           categoryId: assignment.category_id,
           categoryName,
-          hours: rowHours > 0 ? rowHours : assignmentHours,
+          hours,
         };
       })
       .filter((row): row is { id: string; bucket: "fire" | "ems" | "other"; categoryId: string | null; categoryName: string; hours: number } => row !== null),
