@@ -16,8 +16,14 @@
   nine existing warnings and no errors. The broader report suite had 13
   drug-box/pediatric-bag failures; the same 13 fail on the unchanged `4370ecb`
   baseline (47/60 passed with this change; 44/57 on baseline).
-- Deployment and authenticated Cedar Bluff screen, print and download
-  verification remain pending.
+- Application commit `b23b63aa6db05d1404b61b8dd1639b784c70fe20` was
+  deployed to Production as `dpl_74Es5gfUik4HEJ3UNgfBHqy4nfKF` (READY,
+  aliased to `https://redlinefirehq.com`). The unauthenticated reports
+  route redirects to login. A fresh VS Code integrated browser connection
+  timed out, so authenticated Cedar Bluff screen, print and download
+  verification remains outstanding. Next: in an authorized Cedar Bluff
+  session, run the PPE report with a suitable date range and verify the
+  displayed, printed and exported item, assignee and expiration date.
 
 ## Status — 2026-11-22
 
