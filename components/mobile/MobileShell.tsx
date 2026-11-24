@@ -14,7 +14,7 @@ const focusedRoutePatterns = [
   /^\/mobile\/gas-monitor-calibration$/,
   /^\/mobile\/ladder-inspections$/,
   /^\/mobile\/rope-inspections$/,
-  /^\/mobile\/hose-testing$/,
+  /^\/mobile\/hose-testing$/,\n  /^\/mobile\/scba-inspections$/,
   /^\/mobile\/pre-plans\/new$/,
 ];
 
