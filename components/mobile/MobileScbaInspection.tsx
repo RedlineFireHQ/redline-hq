@@ -56,7 +56,7 @@ export default function MobileScbaInspection({ departmentId, memberId, memberNam
     }));
     const { error: resultError } = await supabase.from("scba_inspection_results").insert(payload);
     if (resultError) {
-      
+      await supabase.from("scba_inspection_sessions").delete().eq("id", session.id).eq("department_id", departmentId);
       setError(resultError.message || "Unable to save pack inspection records."); setSaving(false); return;
     }
     setCompletedSession(session.id);
