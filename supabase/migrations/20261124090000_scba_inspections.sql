@@ -26,6 +26,7 @@ create policy scba_inspection_sessions_select_department on public.scba_inspecti
 create policy scba_inspection_sessions_insert_department on public.scba_inspection_sessions for insert with check (
  department_id in (select audm.department_id from public.auth_user_department_memberships audm where audm.auth_user_id = auth.uid())
  and inspected_by in (select m.id from public.members m where m.department_id = scba_inspection_sessions.department_id and m.auth_user_id = auth.uid())
+ and not exists (select 1 from public.scba_inspection_results r where r.session_id = scba_inspection_sessions.id)
 );
 create policy scba_inspection_sessions_delete_own on public.scba_inspection_sessions for delete using (
  department_id in (select audm.department_id from public.auth_user_department_memberships audm where audm.auth_user_id = auth.uid())
