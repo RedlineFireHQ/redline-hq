@@ -632,8 +632,10 @@ export async function runInventoryReport(
 			.eq("department_id", context.departmentId)
 			.order("created_at", { ascending: false });
 		if (error) return buildError(error.message || "Unable to load SCBA inspection records.");
+		const selectedPackId = normalizeText(request.filters.scba_pack_id);
 		const rows = ((data ?? []) as Array<Record<string, unknown>>)
 			.filter((row) => categoryKey === "all" || categoryKey === "scba-packs")
+			.filter((row) => !selectedPackId || selectedPackId === "all" || normalizeText(row.scba_pack_id) === selectedPackId)
 			.filter((row) => {
 				const session = Array.isArray(row.session) ? row.session[0] : row.session;
 				const selectedType = normalizeText(request.filters.scba_inspection_type);
