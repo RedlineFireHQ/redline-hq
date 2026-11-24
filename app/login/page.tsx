@@ -78,7 +78,7 @@ export default function LoginPage() {
 		}
 
 		setIsSendingReset(true);
-		const redirectTo = `${window.location.origin}/auth/recovery`;
+		const redirectTo = "https://redline-hq-red-oak-preview-git-preview-redline-fire-hq.vercel.app/auth/recovery";
 		const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
 			redirectTo,
 		});
