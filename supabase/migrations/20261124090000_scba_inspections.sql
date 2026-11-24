@@ -12,7 +12,7 @@ create table if not exists public.scba_inspection_results (
   session_id uuid not null references public.scba_inspection_sessions(id) on delete cascade,
   department_id uuid not null references public.departments(id) on delete cascade,
   scba_pack_id uuid not null references public.scba_packs(id) on delete restrict,
-  result text not null check (result in ('Pass', 'Needs Attention')),
+  result text not null check (result in ('Completed')),
   checklist jsonb not null default '{}'::jsonb,
   notes text,
   created_at timestamptz not null default now(),
