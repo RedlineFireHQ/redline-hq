@@ -1,0 +1,1 @@
+alter table public.certification_mapping_guards enable row level security;
