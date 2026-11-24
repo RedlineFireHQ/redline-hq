@@ -328,6 +328,12 @@ export const REPORT_SOURCES: ReportSourceConfig[] = [
 				],
 			},
 			{
+				key: "scba_pack_id",
+				label: "SCBA Pack",
+				type: "select",
+				options: [{ value: "all", label: "All SCBA Packs" }],
+			},
+			{
 				key: "scba_inspection_type",
 				label: "SCBA Inspection Type",
 				type: "select",
