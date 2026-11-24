@@ -603,7 +603,7 @@ export default function ReportsWorkspace({
 		];
 
 		return REPORT_SOURCES.map((source) => {
-			if (source.key !== "training" && source.key !== "certifications" && source.key !== "maintenance" && source.key !== "apparatus" && source.key !== "personnel" && source.key !== "ems" && source.key !== "inspections" && source.key !== "activity") {
+			if (source.key !== "training" && source.key !== "certifications" && source.key !== "maintenance" && source.key !== "apparatus" && source.key !== "personnel" && source.key !== "ems" && source.key !== "inspections" && source.key !== "activity" && source.key !== "inventory") {
 				return source;
 			}
 
@@ -664,6 +664,10 @@ export default function ReportsWorkspace({
 							...filter,
 							options: scbaCylinderInspectionOptions,
 						};
+					}
+
+					if (source.key === "inventory" && filter.key === "scba_pack_id") {
+						return { ...filter, options: scbaPackInspectionOptions };
 					}
 
 					if (source.key === "inspections" && filter.key === "scba_pack_id") {

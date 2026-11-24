@@ -257,6 +257,7 @@ export function getInventoryReportTypeOptions(categoryKey: string): InventoryRep
 		return [
 			{ value: "inventory", label: "Inventory" },
 			{ value: "scba-pack-flow-testing", label: "Flow Testing" },
+			{ value: "scba-pack-inspections", label: "SCBA Inspections" },
 			{ value: "deficiencies", label: "Deficiencies" },
 		];
 	}
@@ -387,6 +388,9 @@ function getModeDisplayName(categoryKey: string, reportTypeKey: string) {
 	}
 	if (reportTypeKey === "scba-pack-flow-testing") {
 		return "SCBA Pack Flow Testing Report";
+	}
+	if (reportTypeKey === "scba-pack-inspections") {
+		return "SCBA Inspection Report";
 	}
 	if (reportTypeKey === "gas-monitor-calibration") {
 		return "Gas Monitor Calibration Report";
@@ -615,6 +619,75 @@ export async function runInventoryReport(
 				tester_name: displayText(row.tester_mode === "Name/Company" ? [row.external_tester_name, row.external_tester_company].filter(Boolean).join(" / ") : row.external_tester_name || row.external_tester_company || row.tester_member_id),
 				result: displayText(row.result),
 			})),
+			totalRows: rows.length,
+			page: Number(request.page) || 1,
+			pageSize: Number(request.pageSize) || 50,
+		};
+	}
+
+	if (mode.reportTypeKey === "scba-pack-inspections") {
+		const { data, error } = await context.supabase
+			.from("scba_inspection_results")
+			.select("id, session_id, scba_pack_id, result, notes, created_at, scba_pack:scba_pack_id(pack_number), session:session_id(inspection_type, inspected_at, inspected_by, notes, inspector:inspected_by(first_name,last_name))")
+			.eq("department_id", context.departmentId)
+			.order("created_at", { ascending: false });
+		if (error) return buildError(error.message || "Unable to load SCBA inspection records.");
+		const selectedPackId = normalizeText(request.filters.scba_pack_id);
+		const rows = ((data ?? []) as Array<Record<string, unknown>>)
+			.filter((row) => categoryKey === "all" || categoryKey === "scba-packs")
+			.filter((row) => !selectedPackId || selectedPackId === "all" || normalizeText(row.scba_pack_id) === selectedPackId)
+			.filter((row) => {
+				const session = Array.isArray(row.session) ? row.session[0] : row.session;
+				const selectedType = normalizeText(request.filters.scba_inspection_type);
+				if (selectedType && selectedType.toLowerCase() !== "all" && normalizeText((session as { inspection_type?: unknown } | null | undefined)?.inspection_type) !== selectedType) return false;
+				const dateValue = normalizeText((session as { inspected_at?: unknown } | null | undefined)?.inspected_at);
+				return isWithinUtcRange(dateValue, fromIso, toExclusiveIso);
+			})
+			.filter((row) => {
+				if (!searchTerm) return true;
+				const pack = Array.isArray(row.scba_pack) ? row.scba_pack[0] : row.scba_pack;
+				const session = Array.isArray(row.session) ? row.session[0] : row.session;
+				return buildInventorySearchText([
+					(pack as { pack_number?: unknown } | null | undefined)?.pack_number,
+					(session as { inspection_type?: unknown; inspected_by?: unknown } | null | undefined)?.inspection_type,
+					(session as { inspected_by?: unknown } | null | undefined)?.inspected_by,
+					row.result,
+					row.notes,
+				]).includes(searchTerm);
+			});
+		return {
+			ok: true,
+			comingSoon: false,
+			source: { key: source.key, name: "SCBA Inspection Report", description: source.description },
+			departmentName: context.departmentName,
+			generatedAt: new Date().toISOString(),
+			period: { from: request.dateRange.from, to: request.dateRange.to, label: formatReportPeriodLabel(request.dateRange.from, request.dateRange.to), basisLabel: "Inspection Date" },
+			filtersApplied: buildAppliedFilters(source, request.filters, request.searchTerm),
+			summary: [
+				{ label: "Pack Inspections", value: toSummaryValue(rows.length) },
+				{ label: "Completed", value: toSummaryValue(rows.filter(row => normalizeText(row.result) === "Completed").length) },
+			],
+			columns: [
+				{ key: "inspection_date", label: "Inspection Date" },
+				{ key: "pack_number", label: "Pack" },
+				{ key: "inspection_type", label: "Inspection Type" },
+				{ key: "inspected_by", label: "Inspected By" },
+				{ key: "result", label: "Result" },
+				{ key: "notes", label: "Notes" },
+			],
+			rows: rows.map((row) => {
+				const pack = Array.isArray(row.scba_pack) ? row.scba_pack[0] : row.scba_pack;
+				const session = Array.isArray(row.session) ? row.session[0] : row.session;
+				return {
+					id: normalizeText(row.id) || null,
+					inspection_date: displayText((session as { inspected_at?: unknown } | null | undefined)?.inspected_at),
+					pack_number: displayText((pack as { pack_number?: unknown } | null | undefined)?.pack_number),
+					inspection_type: displayText((session as { inspection_type?: unknown } | null | undefined)?.inspection_type),
+					inspected_by: (() => { const inspector = (session as { inspector?: unknown } | null | undefined)?.inspector; const person = Array.isArray(inspector) ? inspector[0] : inspector; const name = [(person as { first_name?: unknown } | null | undefined)?.first_name, (person as { last_name?: unknown } | null | undefined)?.last_name].map(normalizeText).filter(Boolean).join(" "); return name || displayText((session as { inspected_by?: unknown } | null | undefined)?.inspected_by); })(),
+					result: displayText(row.result),
+					notes: displayText(row.notes ?? (session as { notes?: unknown } | null | undefined)?.notes),
+				};
+			}),
 			totalRows: rows.length,
 			page: Number(request.page) || 1,
 			pageSize: Number(request.pageSize) || 50,

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import {
 	Activity,
+	ShieldCheck,
 	BookOpen,
 	AlertTriangle,
 	Bell,
@@ -175,6 +176,7 @@ function normalizeDeficiencyPriority(relation: DeficiencyPriorityRelation | Defi
 const quickActions: CardItem[] = [
 	{ label: "Apparatus Checks", icon: ClipboardCheck },
 	{ label: "Log Training", icon: GraduationCap },
+	{ label: "SCBA Inspection", icon: ShieldCheck },
 	{ label: "Pre-Plans", icon: MapIcon },
 	{ label: "EMS Supplies", icon: HeartPulse },
 	{ label: "Gas Monitor Calibration", icon: Gauge },
@@ -805,7 +807,7 @@ export default async function MobilePage() {
 								key={item.label}
 								label={item.label}
 								Icon={item.icon}
-								href={item.label === "Daily Log" ? "/mobile/daily-log" : item.label === "Apparatus Checks" ? "/mobile/apparatus-checks" : item.label === "Pre-Plans" ? "/mobile/pre-plans" : item.label === "Log Training" ? "/mobile/training/new" : item.label === "EMS Supplies" ? "/mobile/ems-supplies" : item.label === "Gas Monitor Calibration" ? "/mobile/gas-monitor-calibration" : item.label === "Ladder Inspections" ? "/mobile/ladder-inspections" : item.label === "Rope Inspections" ? "/mobile/rope-inspections" : item.label === "Hose Testing" ? "/mobile/hose-testing" : item.label === "Inventory" ? "/mobile/inventory" : item.label === "Department Readiness" ? "/mobile/department-readiness" : item.label === "Deficiencies" ? "/mobile/deficiencies" : item.label === "Maintenance" ? "/mobile/maintenance" : item.label === "Documents" ? "/mobile/documents" : item.label === "Reports" ? "/mobile/reports" : undefined}
+								href={item.label === "Daily Log" ? "/mobile/daily-log" : item.label === "Apparatus Checks" ? "/mobile/apparatus-checks" : item.label === "Pre-Plans" ? "/mobile/pre-plans" : item.label === "Log Training" ? "/mobile/training/new" : item.label === "SCBA Inspection" ? "/mobile/scba-inspections" : item.label === "EMS Supplies" ? "/mobile/ems-supplies" : item.label === "Gas Monitor Calibration" ? "/mobile/gas-monitor-calibration" : item.label === "Ladder Inspections" ? "/mobile/ladder-inspections" : item.label === "Rope Inspections" ? "/mobile/rope-inspections" : item.label === "Hose Testing" ? "/mobile/hose-testing" : item.label === "Inventory" ? "/mobile/inventory" : item.label === "Department Readiness" ? "/mobile/department-readiness" : item.label === "Deficiencies" ? "/mobile/deficiencies" : item.label === "Maintenance" ? "/mobile/maintenance" : item.label === "Documents" ? "/mobile/documents" : item.label === "Reports" ? "/mobile/reports" : undefined}
 							/>
 						))}
 					</div>

@@ -15,6 +15,7 @@ const focusedRoutePatterns = [
   /^\/mobile\/ladder-inspections$/,
   /^\/mobile\/rope-inspections$/,
   /^\/mobile\/hose-testing$/,
+  /^\/mobile\/scba-inspections$/,
   /^\/mobile\/pre-plans\/new$/,
 ];
 
