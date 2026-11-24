@@ -585,6 +585,10 @@ export default function ScbaPackWorkspace({
 		router.push(`/deficiencies/report?${params.toString()}`);
 	};
 
+	const viewInspectionHistoryForRow = (row: ScbaPackRecord) => {
+		router.push(`/inventory/scba-packs/inspection-history?packId=${encodeURIComponent(row.id)}`);
+	};
+
 	const viewFlowTestHistoryForRow = (row: ScbaPackRecord) => {
 		router.push(`/inventory/scba-packs/flow-test-history?packId=${encodeURIComponent(row.id)}`);
 	};
@@ -1146,6 +1150,17 @@ export default function ScbaPackWorkspace({
 																		className="rounded-lg border border-emerald-500/30 bg-emerald-900/20 px-3 py-1.5 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-900/30 whitespace-nowrap"
 																	>
 																		Flow Test
+																	</button>
+
+																	<button
+																		type="button"
+																		onClick={(event) => {
+																			event.stopPropagation();
+																			viewInspectionHistoryForRow(row);
+																		}}
+																		className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800 whitespace-nowrap"
+																	>
+																		Inspection History
 																	</button>
 
 																	<button
