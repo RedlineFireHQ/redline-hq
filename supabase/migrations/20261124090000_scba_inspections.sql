@@ -22,10 +22,10 @@ create index if not exists scba_inspection_sessions_department_date_idx on publi
 create index if not exists scba_inspection_results_pack_date_idx on public.scba_inspection_results(scba_pack_id, created_at desc);
 alter table public.scba_inspection_sessions enable row level security;
 alter table public.scba_inspection_results enable row level security;
-create policy scba_inspection_sessions_select_department on public.scba_inspection_sessions for select using (department_id in (select m.department_id from public.members m where lower(m.email) = lower(coalesce(auth.email(), ''))));
+create policy scba_inspection_sessions_select_department on public.scba_inspection_sessions for select using (department_id in (select audm.department_id from public.auth_user_department_memberships audm where audm.auth_user_id = auth.uid()));
 create policy scba_inspection_sessions_insert_department on public.scba_inspection_sessions for insert with check (
- department_id in (select m.department_id from public.members m where lower(m.email) = lower(coalesce(auth.email(), '')))
- and inspected_by in (select m.id from public.members m where m.department_id = scba_inspection_sessions.department_id and lower(m.email) = lower(coalesce(auth.email(), '')))
+ department_id in (select audm.department_id from public.auth_user_department_memberships audm where audm.auth_user_id = auth.uid())
+ and inspected_by in (select m.id from public.members m where m.department_id = scba_inspection_sessions.department_id and m.auth_user_id = auth.uid())
 );
 create policy scba_inspection_sessions_delete_own on public.scba_inspection_sessions for delete using (
  department_id in (select m.department_id from public.members m where lower(m.email) = lower(coalesce(auth.email(), '')))
