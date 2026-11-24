@@ -1,10 +1,7 @@
-import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { promisify } from "node:util";
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 
 export const runtime = "nodejs";
-
-const execFileAsync = promisify(execFile);
 
 type ExtractedPdfMetadata = {
   title: string;
@@ -18,61 +15,70 @@ type ExtractedPdfMetadata = {
 type PdfRouteDiagnostics = {
   fileName: string;
   fileSize: number;
-  arrayBufferByteLength: number;
-  bufferByteLength: number;
-  first16Hex: string;
   sha256: string;
   parserMode: string;
+  extractedCharacters: number;
 };
-
-type ChildParsePayload = {
-  ok: boolean;
-  text?: string;
-  error?: string;
-};
-
-function firstBytesHex(bytes: Uint8Array, count = 16): string {
-  return Array.from(bytes.slice(0, count))
-    .map((value) => value.toString(16).padStart(2, "0"))
-    .join("");
-}
 
 function jsonResponse(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: {
-      "content-type": "application/json",
-    },
+    headers: { "content-type": "application/json" },
   });
 }
 
-async function parsePdfInIsolatedNodeProcess(pdfBuffer: Buffer): Promise<string> {
-  const script = [
-    "const inputBase64 = process.argv[1] || '';",
-    "const inputBuffer = Buffer.from(inputBase64, 'base64');",
-    "(async () => {",
-    "  try {",
-    "    const pdfParse = require('pdf-parse');",
-    "    const parsed = await pdfParse(inputBuffer);",
-    "    process.stdout.write(JSON.stringify({ ok: true, text: parsed.text || '' }));",
-    "  } catch (error) {",
-    "    const message = error instanceof Error ? error.message : String(error);",
-    "    process.stdout.write(JSON.stringify({ ok: false, error: message }));",
-    "    process.exitCode = 1;",
-    "  }",
-    "})();",
-  ].join("\n");
-
-  const { stdout, stderr } = await execFileAsync(process.execPath, ["-e", script, pdfBuffer.toString("base64")], {
-    maxBuffer: 20 * 1024 * 1024,
+/**
+ * Extract text directly with PDF.js. This avoids spawning a child process,
+ * which is unreliable in some serverless deployments, and provides a second
+ * parser path when the legacy pdf-parse wrapper returns no usable text.
+ */
+async function extractPdfJsText(pdfBytes: Uint8Array): Promise<string> {
+  const loadingTask = getDocument({
+    data: pdfBytes,
+    useSystemFonts: true,
+    isEvalSupported: false,
   });
 
-  const payload = JSON.parse(stdout || "{}") as ChildParsePayload;
-  if (!payload.ok) {
-    throw new Error(payload.error || stderr || "Unable to extract text from PDF.");
+  const pdf = await loadingTask.promise;
+  const pageTexts: string[] = [];
+
+  try {
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      const page = await pdf.getPage(pageNumber);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items
+        .map((item) => ("str" in item && typeof item.str === "string" ? item.str : ""))
+        .filter(Boolean)
+        .join(" ");
+      if (pageText.trim()) pageTexts.push(pageText);
+      page.cleanup();
+    }
+  } finally {
+    await pdf.destroy();
   }
 
-  return (payload.text || "").replace(/\s+/g, " ").trim();
+  return pageTexts.join("\n").replace(/[\t\r ]+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+async function extractPdfText(pdfBuffer: Buffer): Promise<{ text: string; parserMode: string }> {
+  // Keep the existing parser as the first pass for compatibility.
+  try {
+    const pdfParseModule = await import("pdf-parse");
+    const pdfParse = pdfParseModule.default;
+    const parsed = await pdfParse(pdfBuffer);
+    const text = (parsed.text || "").replace(/\s+/g, " ").trim();
+    if (text.length >= 20) return { text, parserMode: "pdf-parse" };
+  } catch {
+    // Fall through to PDF.js rather than failing the upload-time extraction.
+  }
+
+  const text = await extractPdfJsText(new Uint8Array(pdfBuffer));
+  if (text.length < 20) {
+    throw new Error(
+      "No selectable text was found in this PDF. It may be a scanned/image-only document; OCR is required before its contents can be searched.",
+    );
+  }
+  return { text, parserMode: "pdfjs-fallback" };
 }
 
 function extractMetadataFromText(textForSearch: string, fileName: string): ExtractedPdfMetadata {
@@ -83,24 +89,16 @@ function extractMetadataFromText(textForSearch: string, fileName: string): Extra
 
   const revisionMatch = textForSearch.match(/(?:revision|rev\.)\s*[:#-]?\s*(\d+)/i);
   const dateMatch = textForSearch.match(/\b(\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/\d{4}|\d{1,2}\/\d{1,2}\/\d{2})\b/);
-
   const fallbackTitle = fileName.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim();
-  const title = fallbackTitle || "Untitled document";
-
-  const documentNumber = documentNumberMatch
-    ? documentNumberMatch[0]
-        .replace(/^.*?(SOP|OPS|POLICY|PROTOCOL|EMS|Document\s*Number)/i, "$1")
-        .trim()
-    : "";
-  const effectiveDate = dateMatch ? dateMatch[1] : "";
-  const revisionNumber = revisionMatch ? revisionMatch[1] : "";
 
   return {
-    title,
-    documentNumber,
-    effectiveDate,
-    revisionNumber,
-    revisionDate: effectiveDate || "",
+    title: fallbackTitle || "Untitled document",
+    documentNumber: documentNumberMatch
+      ? documentNumberMatch[0].replace(/^.*?(SOP|OPS|POLICY|PROTOCOL|EMS|Document\s*Number)/i, "$1").trim()
+      : "",
+    effectiveDate: dateMatch ? dateMatch[1] : "",
+    revisionNumber: revisionMatch ? revisionMatch[1] : "",
+    revisionDate: dateMatch ? dateMatch[1] : "",
     contentText: textForSearch,
   };
 }
@@ -114,24 +112,24 @@ export async function POST(request: Request) {
       return jsonResponse({ ok: false, error: "A PDF file is required." }, 400);
     }
 
-    const fileArrayBuffer = await file.arrayBuffer();
-    const pdfBuffer = Buffer.from(fileArrayBuffer);
+    if (file.size === 0 || file.size > 50 * 1024 * 1024) {
+      return jsonResponse({ ok: false, error: "The PDF must be between 1 byte and 50 MB." }, 400);
+    }
+
+    const pdfBuffer = Buffer.from(await file.arrayBuffer());
+    const extracted = await extractPdfText(pdfBuffer);
+    const metadata = extractMetadataFromText(extracted.text, file.name);
     const diagnostics: PdfRouteDiagnostics = {
       fileName: file.name,
       fileSize: file.size,
-      arrayBufferByteLength: fileArrayBuffer.byteLength,
-      bufferByteLength: pdfBuffer.byteLength,
-      first16Hex: firstBytesHex(pdfBuffer),
       sha256: createHash("sha256").update(pdfBuffer).digest("hex"),
-      parserMode: "isolated-node-pdf-parse",
+      parserMode: extracted.parserMode,
+      extractedCharacters: extracted.text.length,
     };
 
     if (process.env.PDF_EXTRACT_DEBUG === "1") {
       console.info("[extract-pdf] diagnostics", diagnostics);
     }
-
-    const contentText = await parsePdfInIsolatedNodeProcess(pdfBuffer);
-    const metadata = extractMetadataFromText(contentText || "", file.name);
 
     return jsonResponse(
       process.env.PDF_EXTRACT_DEBUG === "1"
