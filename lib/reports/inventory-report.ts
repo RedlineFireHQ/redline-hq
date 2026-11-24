@@ -628,7 +628,7 @@ export async function runInventoryReport(
 	if (mode.reportTypeKey === "scba-pack-inspections") {
 		const { data, error } = await context.supabase
 			.from("scba_inspection_results")
-			.select("id, session_id, scba_pack_id, result, notes, created_at, scba_pack:scba_pack_id(pack_number), session:session_id(inspection_type, inspected_at, inspected_by, notes)")
+			.select("id, session_id, scba_pack_id, result, notes, created_at, scba_pack:scba_pack_id(pack_number), session:session_id(inspection_type, inspected_at, inspected_by, notes, inspector:inspected_by(first_name,last_name))")
 			.eq("department_id", context.departmentId)
 			.order("created_at", { ascending: false });
 		if (error) return buildError(error.message || "Unable to load SCBA inspection records.");
@@ -683,7 +683,7 @@ export async function runInventoryReport(
 					inspection_date: displayText((session as { inspected_at?: unknown } | null | undefined)?.inspected_at),
 					pack_number: displayText((pack as { pack_number?: unknown } | null | undefined)?.pack_number),
 					inspection_type: displayText((session as { inspection_type?: unknown } | null | undefined)?.inspection_type),
-					inspected_by: displayText((session as { inspected_by?: unknown } | null | undefined)?.inspected_by),
+					inspected_by: (() => { const inspector = (session as { inspector?: unknown } | null | undefined)?.inspector; const person = Array.isArray(inspector) ? inspector[0] : inspector; const name = [(person as { first_name?: unknown } | null | undefined)?.first_name, (person as { last_name?: unknown } | null | undefined)?.last_name].map(normalizeText).filter(Boolean).join(" "); return name || displayText((session as { inspected_by?: unknown } | null | undefined)?.inspected_by); })(),
 					result: displayText(row.result),
 					notes: displayText(row.notes ?? (session as { notes?: unknown } | null | undefined)?.notes),
 				};
