@@ -328,6 +328,18 @@ export const REPORT_SOURCES: ReportSourceConfig[] = [
 				],
 			},
 			{
+				key: "scba_inspection_type",
+				label: "SCBA Inspection Type",
+				type: "select",
+				options: [
+					{ value: "all", label: "All Inspection Types" },
+					{ value: "Daily Inspection", label: "Daily Inspection" },
+					{ value: "Post-Fire Inspection", label: "Post-Fire Inspection" },
+					{ value: "Post-Training Inspection", label: "Post-Training Inspection" },
+					{ value: "Miscellaneous Use Inspection", label: "Miscellaneous Use Inspection" },
+				],
+			},
+			{
 				key: "inventory_report_type",
 				label: "Report Type",
 				type: "select",
