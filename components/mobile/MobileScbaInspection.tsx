@@ -32,7 +32,6 @@ export default function MobileScbaInspection({ departmentId, memberId, memberNam
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(initialError);
   const [success, setSuccess] = useState<string | null>(null);
-  const [completedSession, setCompletedSession] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const filtered = useMemo(() => packs.filter(p => [p.pack_number,p.manufacturer,p.model,p.serial_number].filter(Boolean).join(" ").toLowerCase().includes(search.toLowerCase())), [packs,search]);
 
@@ -59,7 +58,6 @@ export default function MobileScbaInspection({ departmentId, memberId, memberNam
       await supabase.from("scba_inspection_sessions").delete().eq("id", session.id).eq("department_id", departmentId);
       setError(resultError.message || "Unable to save pack inspection records."); setSaving(false); return;
     }
-    setCompletedSession(session.id);
     setSuccess(`Inspection saved for ${selected.length} SCBA pack${selected.length === 1 ? "" : "s"}.`);
     setSaving(false); router.refresh();
   }
@@ -79,7 +77,6 @@ export default function MobileScbaInspection({ departmentId, memberId, memberNam
             {selected.length ? <section className="mt-4 rounded-2xl border border-amber-400/25 bg-amber-500/5 p-4"><h2 className="font-black text-amber-100">Report a Deficiency</h2><p className="mt-1 text-sm text-white/55">Found a problem with one of these packs? Report it directly against that pack.</p><div className="mt-3 flex flex-wrap gap-2">{packs.filter(p=>selected.includes(p.id)).map(pack=><Link key={pack.id} href={deficiencyHref(pack)} className="inline-flex min-h-11 items-center rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 text-sm font-bold text-amber-100">Report · {pack.pack_number}</Link>)}</div></section> : null}
 <section className="mt-4 rounded-2xl border border-white/10 bg-[#17181b] p-4"><h2 className="text-xl font-black">Inspection Steps</h2><ol className="mt-4 list-decimal space-y-3 pl-5 text-sm leading-6 text-white/85">{INSPECTION_STEPS.map((step,index)=><li key={index} className="pl-1">{step}</li>)}</ol><button type="button" onClick={()=>setShowConfirmation(true)} disabled={!selected.length} className="mt-5 min-h-14 w-full rounded-xl bg-[#ef2b2d] px-4 font-black uppercase tracking-wide disabled:opacity-40">Check Complete</button></section>
       <section className="mt-4 rounded-2xl border border-white/10 bg-[#17181b] p-4"><label className="block text-sm font-bold">Inspection Notes (Optional)<textarea rows={3} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Additional observations..." className="mt-2 w-full rounded-xl border border-white/15 bg-[#101010] p-3 text-base"/></label><p className="mt-3 text-xs text-white/45">Inspected by {memberName}. Date and time are recorded automatically.</p></section>
-      {completedSession ? <section className="mt-4 rounded-2xl border border-white/10 bg-[#17181b] p-4"><h2 className="font-black">Report a Deficiency</h2><p className="mt-1 text-sm text-white/55">If any pack needs repair or follow-up, report it against that specific pack.</p><div className="mt-3 space-y-2">{packs.filter(p=>selected.includes(p.id)).map(pack=><Link key={pack.id} href={deficiencyHref(pack)} className="flex min-h-12 items-center justify-between rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 font-bold text-amber-100">Report Deficiency · {pack.pack_number}<span>›</span></Link>)}</div></section> : null}
       {showConfirmation ? <div role="dialog" aria-modal="true" aria-labelledby="scba-confirm-title" className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"><section className="w-full max-w-lg rounded-2xl border border-white/15 bg-[#17181b] p-5 shadow-2xl"><h2 id="scba-confirm-title" className="text-xl font-black">Confirm SCBA Inspection</h2><p className="mt-3 text-sm leading-6 text-white/75">Per department SOPs/policies, I followed all the inspection steps.</p><div className="mt-5 grid grid-cols-2 gap-3"><button type="button" onClick={()=>setShowConfirmation(false)} className="min-h-12 rounded-xl border border-white/15 font-bold">Go Back</button><button type="button" disabled={saving} onClick={()=>{setConfirmed(true);setShowConfirmation(false);void saveInspection(true);}} className="min-h-12 rounded-xl bg-[#ef2b2d] font-black">{saving?"Saving...":"Yes — Check Complete"}</button></div></section></div> : null}
     </div>
   </main>;
