@@ -962,7 +962,7 @@ export default function ScbaPackWorkspace({
 							</button>
 							<button
 								type="button"
-								onClick={() => router.push("/mobile/scba-inspections")}
+								onClick={() => router.push("/mobile/scba-inspections?returnTo=%2Finventory%2Fscba-packs")}
 								className="inline-flex rounded-lg border border-red-500/30 bg-red-900/20 px-3 py-2 text-xs font-semibold text-red-100 transition hover:bg-red-900/30"
 							>
 								SCBA Inspection
