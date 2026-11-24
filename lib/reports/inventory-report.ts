@@ -636,6 +636,8 @@ export async function runInventoryReport(
 			.filter((row) => categoryKey === "all" || categoryKey === "scba-packs")
 			.filter((row) => {
 				const session = Array.isArray(row.session) ? row.session[0] : row.session;
+				const selectedType = normalizeText(request.filters.scba_inspection_type);
+				if (selectedType && selectedType.toLowerCase() !== "all" && normalizeText((session as { inspection_type?: unknown } | null | undefined)?.inspection_type) !== selectedType) return false;
 				const dateValue = normalizeText((session as { inspected_at?: unknown } | null | undefined)?.inspected_at);
 				return isWithinUtcRange(dateValue, fromIso, toExclusiveIso);
 			})
