@@ -20,8 +20,8 @@ const INSPECTION_STEPS = [
 ] as const;
 const INSPECTION_TYPES = ["Daily Inspection", "Post-Fire Inspection", "Post-Training Inspection", "Miscellaneous Use Inspection"] as const;
 
-export default function MobileScbaInspection({ departmentId, memberId, memberName, departmentName, packs, initialError }: {
-  departmentId: string; memberId: string; memberName: string; departmentName: string; packs: Pack[]; initialError: string | null;
+export default function MobileScbaInspection({ departmentId, memberId, memberName, departmentName, packs, initialError, returnTo }: {
+  departmentId: string; memberId: string; memberName: string; departmentName: string; packs: Pack[]; initialError: string | null; returnTo: string;
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<string[]>([]);
@@ -58,8 +58,9 @@ export default function MobileScbaInspection({ departmentId, memberId, memberNam
       await supabase.from("scba_inspection_sessions").delete().eq("id", session.id).eq("department_id", departmentId);
       setError(resultError.message || "Unable to save pack inspection records."); setSaving(false); return;
     }
-    setSuccess(`Inspection saved for ${selected.length} SCBA pack${selected.length === 1 ? "" : "s"}.`);
-    setSaving(false); router.refresh();
+    setSaving(false);
+    router.replace(returnTo);
+    router.refresh();
   }
 
   return <main className="min-h-screen bg-[#0b0c0e] px-4 pb-12 pt-4 text-white sm:px-6">
