@@ -665,7 +665,7 @@ export async function runInventoryReport(
 			filtersApplied: buildAppliedFilters(source, request.filters, request.searchTerm),
 			summary: [
 				{ label: "Pack Inspections", value: toSummaryValue(rows.length) },
-				{ label: "Passed", value: toSummaryValue(rows.filter(row => normalizeText(row.result) === "Pass").length) },
+				{ label: "Completed", value: toSummaryValue(rows.filter(row => normalizeText(row.result) === "Completed").length) },
 			],
 			columns: [
 				{ key: "inspection_date", label: "Inspection Date" },
