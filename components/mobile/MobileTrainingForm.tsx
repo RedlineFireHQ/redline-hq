@@ -8,7 +8,7 @@ import { triggerEmsAllocationRecalculationForMembers } from "@/lib/ems/recalcula
 import { supabase } from "@/lib/supabase";
 import { buildOutsideSubmissionNotes } from "@/lib/training/outside-submission-notes";
 
-type Category = { id: string; name: string; active: boolean };
+type Category = { id: string; name: string; active: boolean; system_key: string | null; compliance_bucket: string | null };
 type EmsCourse = { id: string; course_name: string; active: boolean };
 type Member = {
   id: string;
@@ -91,11 +91,8 @@ export default function MobileTrainingForm({
     () => categories.filter((category) => category.active),
     [categories],
   );
-  const isEms =
-    activeCategories
-      .find((category) => category.id === categoryId)
-      ?.name.trim()
-      .toLowerCase() === "ems";
+  const selectedCategory = activeCategories.find((category) => category.id === categoryId);
+  const isEms = selectedCategory?.system_key === "ems_continuing_education" || selectedCategory?.compliance_bucket === "ems_ce" || selectedCategory?.name.trim().toLowerCase() === "ems";
   const visibleMembers = members.filter((member) =>
     `${member.first_name ?? ""} ${member.last_name ?? ""}`
       .toLowerCase()
