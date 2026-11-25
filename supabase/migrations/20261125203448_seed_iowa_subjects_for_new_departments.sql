@@ -19,7 +19,7 @@ insert into public.training_categories(department_id,name,description,active,com
 (new.id,'Ventilation','Ventilation.',true,'fire_annual','iowa_ventilation','05'),
 (new.id,'Forcible Entry','Forcible entry.',true,'fire_annual','iowa_forcible_entry','06'),
 (new.id,'Search & Rescue','Search and rescue techniques.',true,'fire_annual','iowa_search_rescue','07'),
-(new.id,'Additional SOP / SOG Training','Additional SOP/SOG training.',true,'fire_annual','iowa_additional_sop_sog','13'),
+(new.id,'Other Department SOPs / SOGs','Other department SOP/SOG training.',true,'fire_annual','iowa_additional_sop_sog','13'),
 (new.id,'OSHA-Related / Bloodborne Pathogens','OSHA-related training, including bloodborne pathogens.',true,'fire_annual','iowa_osha_safety','14'),
 (new.id,'Specialty Training','Confined space, extrication, rescue, wildland, or agricultural firefighting.',true,'fire_annual','iowa_specialty_training','15'),
 (new.id,'Emergency Response to Terrorism','Emergency response to terrorism.',true,'fire_annual','iowa_terrorism_response','16')
