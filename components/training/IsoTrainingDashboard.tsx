@@ -113,7 +113,8 @@ export default function IsoTrainingDashboard({ events, attendanceRows, members, 
     const officer = rows.find((row) => row.code === "officer_training");
     const recruitMemberHours = recruitMembers.reduce((sum, member) => sum + (memberHours.get(member.id)?.recruit ?? 0), 0);
     const recruitAverageHours = recruitMembers.length ? recruitMemberHours / recruitMembers.length : 0;
-    const companyAverageMonthlyHours = (company?.averagePerPerson ?? 0) / 12;
+    const elapsedMonths = year === now.getFullYear() ? now.getMonth() + 1 : 12;
+    const companyAverageMonthlyHours = (company?.averagePerPerson ?? 0) / Math.max(1, elapsedMonths);
     const preplanCoverage = activePlans.length ? Math.round((plansMeetingVisitTarget / activePlans.length) * 100) : 0;
     return { rows, facility, company, hazmat, officer, recruitAverageHours, recruitCount: recruitMembers.length, companyAverageMonthlyHours, fullFacilityHours, partialFacilityHours, initialDriverHours, refresherDriverHours, activePlans: activePlans.length, plansMeetingVisitTarget, preplanCoverage, totalActiveMembers };
   }, [events, attendanceRows, members, prePlans, year]);
