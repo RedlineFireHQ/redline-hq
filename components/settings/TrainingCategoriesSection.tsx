@@ -24,7 +24,6 @@ type TrainingCategoryFormState = {
 
 const COMPLIANCE_BUCKET_OPTIONS: Array<{ value: TrainingComplianceBucket; label: string; description: string }> = [
   { value: "fire_annual", label: "Fire Training", description: "Counts toward annual/ISO Fire Training hours." },
-  { value: "ems_ce", label: "EMS Training", description: "Counts toward EMS continuing education hours." },
   { value: "other", label: "Other Training", description: "Counts toward total training hours only." },
 ];
 
