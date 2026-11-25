@@ -20,6 +20,7 @@ import { parseOutsideSubmissionNotes } from "@/lib/training/outside-submission-n
 import { buildDateRangeFromPreset, buildUtcBoundsForDateRange, formatReportPeriodLabel, parseDateOnly } from "@/lib/reports/date-range";
 import { runInventoryReport } from "@/lib/reports/inventory-report";
 import { runScbaMaskFitReport } from "@/lib/reports/scba-mask-fit-report";
+import { runRedOakEmsCompetencyReport } from "@/lib/reports/red-oak-ems-competency-report";
 import { hydrostaticDueDate } from "@/lib/scba-hydro/date";
 import { getReportSourceConfig } from "@/lib/reports/registry";
 import type {
@@ -5667,6 +5668,10 @@ export async function runReport(
 			utcBounds.fromIso,
 			utcBounds.toExclusiveIso,
 		);
+	}
+
+	if (source.key === "red-oak-ems-competency") {
+		return runRedOakEmsCompetencyReport(request, context, source);
 	}
 
 	if (source.key === "scba-mask-fit") {
