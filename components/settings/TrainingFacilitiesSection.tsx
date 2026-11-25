@@ -44,10 +44,6 @@ const EMPTY_FORM: FacilityForm = {
   active: true,
 };
 
-function qualifies(facility: TrainingFacilityRow) {
-  return getFacilityIsoCreditLevel(facility) !== "none";
-}
-
 function qualificationLabel(facility: TrainingFacilityRow) {
   const level = getFacilityIsoCreditLevel(facility);
   return level === "full" ? "Full-credit ISO facility" : level === "partial" ? "Partial-credit ISO facility" : "Not yet qualifying";
