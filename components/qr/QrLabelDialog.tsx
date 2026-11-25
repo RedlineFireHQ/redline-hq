@@ -71,56 +71,8 @@ export default function QrLabelDialog({ title, subtitle, value, onClose }: Props
     };
   }, [value]);
 
-  function downloadLabel() {
-    if (!dataUrl || !dimensions.valid) return;
-    const dpi = 300;
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(dimensions.width * dpi);
-    canvas.height = Math.round(dimensions.height * dpi);
-    const context = canvas.getContext("2d");
-    if (!context) return;
-    context.fillStyle = "#fff";
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    const qr = new Image();
-    qr.onload = () => {
-      const margin = Math.round(0.045 * dpi);
-      const titleSize = Math.max(17, Math.min(29, Math.round(dimensions.width * 17)));
-      context.fillStyle = "#111";
-      context.textAlign = "center";
-      context.textBaseline = "top";
-      context.font = `700 ${titleSize}px Arial, sans-serif`;
-      const titleLines = wrapCanvasText(context, title, canvas.width - margin * 2);
-      let y = margin;
-      for (const line of titleLines) {
-        context.fillText(line, canvas.width / 2, y, canvas.width - margin * 2);
-        y += titleSize + 2;
-      }
-      if (subtitle?.trim()) {
-        const subSize = Math.max(14, Math.round(titleSize * 0.8));
-        context.font = `600 ${subSize}px Arial, sans-serif`;
-        for (const line of wrapCanvasText(context, subtitle.trim(), canvas.width - margin * 2)) {
-          context.fillText(line, canvas.width / 2, y, canvas.width - margin * 2);
-          y += subSize + 2;
-        }
-      }
-      const qrSize = Math.min(
-        Math.round(Math.min(dimensions.width, dimensions.height) * dpi * 0.66),
-        canvas.width - margin * 2,
-        canvas.height - y - margin,
-      );
-      if (qrSize < Math.round(0.6 * dpi)) return;
-      context.imageSmoothingEnabled = false;
-      context.drawImage(qr, Math.round((canvas.width - qrSize) / 2), y + Math.max(0, Math.round((canvas.height - y - margin - qrSize) / 2)), qrSize, qrSize);
-      const link = document.createElement("a");
-      link.download = `${title.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-label.png`;
-      link.href = canvas.toDataURL("image/png");
-      link.click();
-    };
-    qr.src = dataUrl;
-  }
-
   function wrapCanvasText(context: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
-    const words = text.split(/\\s+/);
+    const words = text.trim().split(/\\s+/);
     const lines: string[] = [];
     let line = "";
     for (const word of words) {
@@ -136,40 +88,128 @@ export default function QrLabelDialog({ title, subtitle, value, onClose }: Props
     return lines;
   }
 
-  async function printLabel() {
-    if (!dataUrl || !dimensions.valid) return;
-    const printWindow = window.open("", "_blank", "width=520,height=680");
-    if (!printWindow) return;
+  function createLabelPdf(imageData: ImageData, widthInches: number, heightInches: number): Blob {
+    const { width: pixelWidth, height: pixelHeight, data } = imageData;
+    const rgb = new Uint8Array(pixelWidth * pixelHeight * 3);
+    for (let source = 0, target = 0; source < data.length; source += 4) {
+      rgb[target++] = data[source];
+      rgb[target++] = data[source + 1];
+      rgb[target++] = data[source + 2];
+    }
+
+    const pageWidth = widthInches * 72;
+    const pageHeight = heightInches * 72;
+    const content = `q\\n${pageWidth} 0 0 ${pageHeight} 0 0 cm\\n/Im0 Do\\nQ\\n`;
+    const encoder = new TextEncoder();
+    const objects: Uint8Array[] = [];
+    const stream = (header: string, bytes: Uint8Array) => {
+      const prefix = encoder.encode(`${header}\\nstream\\n`);
+      const suffix = encoder.encode("\\nendstream");
+      const combined = new Uint8Array(prefix.length + bytes.length + suffix.length);
+      combined.set(prefix, 0);
+      combined.set(bytes, prefix.length);
+      combined.set(suffix, prefix.length + bytes.length);
+      return combined;
+    };
+    objects.push(encoder.encode("<< /Type /Catalog /Pages 2 0 R >>"));
+    objects.push(encoder.encode("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"));
+    objects.push(encoder.encode(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`));
+    objects.push(stream(`<< /Type /XObject /Subtype /Image /Width ${pixelWidth} /Height ${pixelHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length ${rgb.length} >>`, rgb));
+    const contentBytes = encoder.encode(content);
+    objects.push(stream(`<< /Length ${contentBytes.length} >>`, contentBytes));
+
+    const chunks: Uint8Array[] = [encoder.encode("%PDF-1.4\\n% RedlineHQ\\n")];
+    const offsets = [0];
+    let length = chunks[0].length;
+    objects.forEach((object, index) => {
+      offsets.push(length);
+      const chunk = new Uint8Array(encoder.encode(`${index + 1} 0 obj\\n`).length + object.length + encoder.encode("\\nendobj\\n").length);
+      const head = encoder.encode(`${index + 1} 0 obj\\n`);
+      const tail = encoder.encode("\\nendobj\\n");
+      chunk.set(head, 0);
+      chunk.set(object, head.length);
+      chunk.set(tail, head.length + object.length);
+      chunks.push(chunk);
+      length += chunk.length;
+    });
+    const xrefOffset = length;
+    let xref = `xref\\n0 ${objects.length + 1}\\n0000000000 65535 f \\n`;
+    for (let index = 1; index < offsets.length; index++) {
+      xref += `${String(offsets[index]).padStart(10, "0")} 00000 n \\n`;
+    }
+    xref += `trailer\\n<< /Size ${objects.length + 1} /Root 1 0 R >>\\nstartxref\\n${xrefOffset}\\n%%EOF`;
+    chunks.push(encoder.encode(xref));
+    return new Blob(chunks, { type: "application/pdf" });
+  }
+
+  function buildLabelPdf(): Blob | null {
+    if (!dataUrl || !dimensions.valid) return null;
     const dpi = 300;
     const canvas = document.createElement("canvas");
     canvas.width = Math.round(dimensions.width * dpi);
     canvas.height = Math.round(dimensions.height * dpi);
-    const context = canvas.getContext("2d");
-    if (!context) {
-      printWindow.close();
-      return;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (!context) return null;
+
+    context.fillStyle = "#fff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = "#111";
+    context.textAlign = "center";
+    context.textBaseline = "top";
+    const margin = Math.max(12, Math.round(0.045 * dpi));
+    const maxTextWidth = canvas.width - margin * 2;
+    const titleSize = Math.max(17, Math.min(29, Math.round(dimensions.width * 17)));
+    context.font = `700 ${titleSize}px Arial, sans-serif`;
+    const titleLines = wrapCanvasText(context, title, maxTextWidth);
+    let y = margin;
+    for (const line of titleLines) {
+      context.fillText(line, canvas.width / 2, y, maxTextWidth);
+      y += titleSize + 2;
     }
+    if (subtitle?.trim()) {
+      const subSize = Math.max(14, Math.round(titleSize * 0.8));
+      context.font = `600 ${subSize}px Arial, sans-serif`;
+      for (const line of wrapCanvasText(context, subtitle.trim(), maxTextWidth)) {
+        context.fillText(line, canvas.width / 2, y, maxTextWidth);
+        y += subSize + 2;
+      }
+    }
+
+    const qr = new Image();
+    // QRCode.toDataURL creates a same-origin data URL, so it can be drawn without a network request.
+    // PDF creation is asynchronous because the image must be decoded first.
+    return null;
+  }
+
+  function renderLabelPdf(onReady: (blob: Blob) => void) {
+    if (!dataUrl || !dimensions.valid) return;
+    const dpi = 300;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(dimensions.width * dpi);
+    canvas.height = Math.round(dimensions.height * dpi);
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (!context) return;
     context.fillStyle = "#fff";
     context.fillRect(0, 0, canvas.width, canvas.height);
     const qr = new Image();
     qr.onload = () => {
-      const margin = Math.round(0.045 * dpi);
-      const titleSize = Math.max(17, Math.min(29, Math.round(dimensions.width * 17)));
       context.fillStyle = "#111";
       context.textAlign = "center";
       context.textBaseline = "top";
+      const margin = Math.max(12, Math.round(0.045 * dpi));
+      const maxTextWidth = canvas.width - margin * 2;
+      const titleSize = Math.max(17, Math.min(29, Math.round(dimensions.width * 17)));
       context.font = `700 ${titleSize}px Arial, sans-serif`;
-      const titleLines = wrapCanvasText(context, title, canvas.width - margin * 2);
       let y = margin;
-      for (const line of titleLines) {
-        context.fillText(line, canvas.width / 2, y, canvas.width - margin * 2);
+      for (const line of wrapCanvasText(context, title, maxTextWidth)) {
+        context.fillText(line, canvas.width / 2, y, maxTextWidth);
         y += titleSize + 2;
       }
       if (subtitle?.trim()) {
         const subSize = Math.max(14, Math.round(titleSize * 0.8));
         context.font = `600 ${subSize}px Arial, sans-serif`;
-        for (const line of wrapCanvasText(context, subtitle.trim(), canvas.width - margin * 2)) {
-          context.fillText(line, canvas.width / 2, y, canvas.width - margin * 2);
+        for (const line of wrapCanvasText(context, subtitle.trim(), maxTextWidth)) {
+          context.fillText(line, canvas.width / 2, y, maxTextWidth);
           y += subSize + 2;
         }
       }
@@ -178,38 +218,39 @@ export default function QrLabelDialog({ title, subtitle, value, onClose }: Props
         canvas.width - margin * 2,
         canvas.height - y - margin,
       );
-      if (qrSize < Math.round(0.6 * dpi)) {
-        printWindow.close();
-        return;
-      }
+      if (qrSize < Math.round(0.6 * dpi)) return;
       context.imageSmoothingEnabled = false;
       context.drawImage(qr, Math.round((canvas.width - qrSize) / 2), y + Math.max(0, Math.round((canvas.height - y - margin - qrSize) / 2)), qrSize, qrSize);
-      const imageUrl = canvas.toDataURL("image/png");
-      const width = dimensions.width;
-      const height = dimensions.height;
-      printWindow.document.open();
-      printWindow.document.write(`<!doctype html>
-<html><head><meta charset="utf-8"><title>QR Label</title>
-<style>
-@page { size: ${width}in ${height}in; margin: 0 !important; }
-html, body { width: ${width}in !important; height: ${height}in !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; }
-* { box-sizing: border-box; }
-body { break-inside: avoid !important; page-break-inside: avoid !important; }
-.label-image { display: block; position: fixed; top: 0; left: 0; width: ${width}in !important; height: ${height}in !important; max-width: none !important; max-height: none !important; margin: 0 !important; padding: 0 !important; object-fit: fill; break-inside: avoid !important; page-break-inside: avoid !important; }
-@media screen { body { background: #ddd; } .label-image { position: static; margin: 18px auto !important; box-shadow: 0 1px 8px #999; } }
-</style></head><body>
-<img class="label-image" src="${imageUrl}" alt="QR label" onload="window.__labelReady=true">
-<script>
-window.addEventListener("load", function () {
-  const image = document.querySelector(".label-image");
-  const printWhenReady = function () { setTimeout(function () { window.focus(); window.print(); }, 400); };
-  if (image && image.complete) printWhenReady();
-  else if (image) image.addEventListener("load", printWhenReady, { once: true });
-});
-</script></body></html>`);
-      printWindow.document.close();
+      const pdf = createLabelPdf(context.getImageData(0, 0, canvas.width, canvas.height), dimensions.width, dimensions.height);
+      onReady(pdf);
     };
+    qr.onerror = () => setError("Unable to prepare the QR label PDF.");
     qr.src = dataUrl;
+  }
+
+  function downloadLabel() {
+    renderLabelPdf((blob) => {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${title.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${dimensions.width}x${dimensions.height}-label.pdf`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+    });
+  }
+
+  function printLabel() {
+    renderLabelPdf((blob) => {
+      const url = URL.createObjectURL(blob);
+      const printWindow = window.open(url, "_blank");
+      if (!printWindow) {
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${title.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${dimensions.width}x${dimensions.height}-label.pdf`;
+        link.click();
+      }
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+    });
   }
 
   return (
@@ -270,7 +311,7 @@ window.addEventListener("load", function () {
         {error ? <p className="mt-3 rounded-xl border border-red-400/25 bg-red-500/10 p-3 text-sm text-red-100">{error}</p> : null}
         <p className="mt-3 break-all text-xs text-white/40">QR data: {value}</p>
         <div className="mt-5 flex gap-2">
-          {dataUrl ? <button type="button" onClick={downloadLabel} disabled={!dimensions.valid} className="flex min-h-12 flex-1 items-center justify-center rounded-xl border border-white/15 bg-white/5 px-3 text-sm font-black text-white disabled:opacity-40">Download Label</button> : null}
+          {dataUrl ? <button type="button" onClick={downloadLabel} disabled={!dimensions.valid} className="flex min-h-12 flex-1 items-center justify-center rounded-xl border border-white/15 bg-white/5 px-3 text-sm font-black text-white disabled:opacity-40">Download PDF</button> : null}
           <button type="button" onClick={printLabel} disabled={!dataUrl || !dimensions.valid} className="flex min-h-12 flex-1 items-center justify-center rounded-xl bg-red-600 px-3 text-sm font-black text-white disabled:bg-white/15 disabled:text-white/40">Print Label</button>
         </div>
       </section>
