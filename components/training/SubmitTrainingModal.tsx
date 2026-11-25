@@ -136,7 +136,7 @@ export default function SubmitTrainingModal({
   const router = useRouter();
 
   const activeCategories = useMemo(
-    () => categories.filter((category) => category.active),
+    () => categories.filter((category) => category.active && category.name.trim().toLowerCase() !== "fire suppression"),
     [categories],
   );
 
