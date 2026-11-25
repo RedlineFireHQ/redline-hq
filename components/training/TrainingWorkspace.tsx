@@ -51,6 +51,8 @@ type TrainingEventRow = {
   iso_pre_plan_id: string | null;
   iso_driver_operator_training_type: string | null;
   iso_qualifying_facility: boolean;
+  iso_facility_credit_level: string;
+  iso_facility_stories: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -2278,7 +2280,7 @@ export default function TrainingWorkspace({
           updated_by: currentMemberId,
         })
         .select(
-          "id, title, category_id, topic, training_type, is_ems_training, ems_core_topic, ems_course_definition_id, ems_needs_review, ems_provider_name, description, location, instructor_name, starts_at, ends_at, duration_minutes, hours_credit, status, supporting_document_id, iso_classifications, iso_classification, iso_facility_id, iso_pre_plan_id, iso_driver_operator_training_type, iso_qualifying_facility, created_at, updated_at",
+          "id, title, category_id, topic, training_type, is_ems_training, ems_core_topic, ems_course_definition_id, ems_needs_review, ems_provider_name, description, location, instructor_name, starts_at, ends_at, duration_minutes, hours_credit, status, supporting_document_id, iso_classifications, iso_classification, iso_facility_id, iso_pre_plan_id, iso_driver_operator_training_type, iso_qualifying_facility, iso_facility_credit_level, iso_facility_stories, created_at, updated_at",
         )
         .single();
 
@@ -2349,6 +2351,8 @@ export default function TrainingWorkspace({
         iso_pre_plan_id: typeof data.iso_pre_plan_id === "string" ? data.iso_pre_plan_id : formState.isoPrePlanId || null,
         iso_driver_operator_training_type: typeof data.iso_driver_operator_training_type === "string" ? data.iso_driver_operator_training_type : formState.isoDriverOperatorTrainingType || null,
         iso_qualifying_facility: data.iso_qualifying_facility === true,
+        iso_facility_credit_level: typeof data.iso_facility_credit_level === "string" ? data.iso_facility_credit_level : "none",
+        iso_facility_stories: typeof data.iso_facility_stories === "number" ? data.iso_facility_stories : null,
         created_at: typeof data.created_at === "string" ? data.created_at : new Date().toISOString(),
         updated_at: typeof data.updated_at === "string" ? data.updated_at : new Date().toISOString(),
       };
