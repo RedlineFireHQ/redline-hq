@@ -63,6 +63,8 @@ type DepartmentMemberRow = {
   last_name: string | null;
   role: string | null;
   rank: string | null;
+  hire_start_date: string | null;
+  certifications: string | null;
 };
 
 type DepartmentDocumentRow = {
@@ -623,7 +625,7 @@ export default async function TrainingPage() {
       .eq("department_id", currentMember.departmentId),
     supabase
       .from("members")
-      .select("id, first_name, last_name, role, rank")
+      .select("id, first_name, last_name, role, rank, hire_start_date, certifications")
       .eq("department_id", currentMember.departmentId)
       .eq("active", true)
       .order("last_name", { ascending: true })
@@ -830,6 +832,8 @@ export default async function TrainingPage() {
     last_name: typeof row.last_name === "string" ? row.last_name : null,
     role: typeof row.role === "string" ? row.role : null,
     rank: typeof row.rank === "string" ? row.rank : null,
+    hire_start_date: typeof row.hire_start_date === "string" ? row.hire_start_date : null,
+    certifications: typeof row.certifications === "string" ? row.certifications : null,
   }));
 
   const documents: DepartmentDocumentRow[] = (documentsData ?? []).map((row) => ({
