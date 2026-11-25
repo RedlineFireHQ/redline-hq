@@ -737,7 +737,7 @@ export default async function MyReadinessPage() {
   ] = await Promise.all([
     supabase
       .from("training_categories")
-      .select("id, name, active")
+      .select("id, name, active, compliance_bucket, system_key")
       .eq("department_id", currentMember.departmentId)
       .order("name", { ascending: true }),
     supabase
