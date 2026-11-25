@@ -185,8 +185,8 @@ interface TrainingWorkspaceProps {
   assignmentEvidenceRows: TrainingAssignmentEvidenceRow[];
   emsCourseDefinitions: EmsCourseDefinitionRow[];
   departmentTrainingHoursThisYear: number;
-  facilities: IsoTrainingFacilityOption[];
-  prePlans: IsoPrePlanOption[];
+  facilities?: IsoTrainingFacilityOption[];
+  prePlans?: IsoPrePlanOption[];
   initialAddTrainingEventOpen?: boolean;
   approvedSelfReported?: SelfReportedTraining[];
   departmentSummary?: ReactNode;
@@ -510,6 +510,8 @@ export default function TrainingWorkspace({
   assignmentEvidenceRows,
   emsCourseDefinitions,
   departmentTrainingHoursThisYear,
+  facilities = [],
+  prePlans = [],
   approvedSelfReported = [],
   departmentSummary,
   departmentHistory,
@@ -596,7 +598,7 @@ export default function TrainingWorkspace({
   );
 
   const [formState, setFormState] = useState<TrainingEventFormState>(
-    emptyFormState(activeCategories[0]?.id ?? ""),
+    emptyFormState(activeCategories.find((category) => category.system_key === "fire_training")?.id ?? activeCategories[0]?.id ?? ""),
   );
 
   const membersTrainedCount = useMemo(() => {
