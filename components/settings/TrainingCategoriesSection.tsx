@@ -47,6 +47,10 @@ function normalizeCategoryName(value: string) {
   return value.trim().toLowerCase();
 }
 
+function isSystemEmsCategory(category: TrainingCategoryRow) {
+  return normalizeCategoryName(category.name) === "ems";
+}
+
 export default function TrainingCategoriesSection({
   departmentId,
   currentMemberId,
@@ -276,13 +280,17 @@ export default function TrainingCategoriesSection({
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() => openEditModal(category)}
-                        className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-zinc-200 transition hover:bg-white/[0.08]"
-                      >
-                        Edit
-                      </button>
+                      {isSystemEmsCategory(category) ? (
+                        <span className="text-xs font-semibold uppercase tracking-wide text-red-300">Redline HQ Standard</span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(category)}
+                          className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-zinc-200 transition hover:bg-white/[0.08]"
+                        >
+                          Edit
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
