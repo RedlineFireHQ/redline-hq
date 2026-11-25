@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CalendarDays, Clock3, MapPin, Plus, UserRound, Users } from "lucide-react";
 import { EMS_CORE_TOPICS, type EmsCoreTopicCode } from "@/lib/ems/requirements";
+import { isEmsCategoryName } from "@/lib/training/is-ems-category";
 import { triggerEmsAllocationRecalculation, triggerEmsAllocationRecalculationForMembers } from "@/lib/ems/recalculate-client";
 import { supabase } from "@/lib/supabase";
 import SubmitTrainingModal from "@/components/training/SubmitTrainingModal";
@@ -462,9 +463,6 @@ function getCategoryNameById(categories: TrainingCategoryRow[], categoryId: stri
   return match?.name || "Uncategorized";
 }
 
-function isEmsCategoryName(value: string | null | undefined) {
-  return (value ?? "").trim().toLowerCase() === "ems";
-}
 
 function resolveDocumentCategorySlug(category: string | null | undefined) {
   if (!category) {
