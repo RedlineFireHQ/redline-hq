@@ -139,7 +139,7 @@ export default function QrLabelDialog({ title, subtitle, value, onClose }: Props
     }
     xref += `trailer\\n<< /Size ${objects.length + 1} /Root 1 0 R >>\\nstartxref\\n${xrefOffset}\\n%%EOF`;
     chunks.push(encoder.encode(xref));
-    return new Blob(chunks, { type: "application/pdf" });
+    return new Blob(chunks.map((chunk) => chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength) as ArrayBuffer), { type: "application/pdf" });
   }
 
   function renderLabelPdf(onReady: (blob: Blob) => void) {
