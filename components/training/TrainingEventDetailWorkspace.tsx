@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, CalendarDays, Clock3, MapPin, UserRound } from "lucide-react";
 import { EMS_CORE_TOPICS, type EmsCoreTopicCode } from "@/lib/ems/requirements";
+import { isEmsCategoryName } from "@/lib/training/is-ems-category";
 import { triggerEmsAllocationRecalculationForMembers } from "@/lib/ems/recalculate-client";
 import { supabase } from "@/lib/supabase";
 import { ISO_FACILITY_TYPES, ISO_TRAINING_CLASSIFICATIONS, suggestIsoTrainingClassification, type IsoFacilityType, type IsoTrainingClassification } from "@/lib/training/iso-classifications";
@@ -218,9 +219,6 @@ function normalizeSearchValue(value: string) {
   return value.toLowerCase().trim().replace(/\s+/g, " ");
 }
 
-function isEmsCategoryName(value: string | null | undefined) {
-  return (value ?? "").trim().toLowerCase() === "ems";
-}
 
 function initialFormState(trainingEvent: TrainingEventRow): EventFormState {
   return {
