@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { ISO_TRAINING_CLASSIFICATIONS, calculateIsoMemberHours, type IsoTrainingClassification } from "@/lib/training/iso-training";
+import { ISO_TRAINING_CLASSIFICATIONS } from "@/lib/training/iso-training";
 import type { IsoPrePlanOption } from "@/components/training/IsoTrainingFields";
 
 type EventRow = {
@@ -43,8 +43,6 @@ export default function IsoTrainingDashboard({ events, attendanceRows, members, 
   const year = new Date().getFullYear();
   const summary = useMemo(() => {
     const completedEvents = events.filter((event) => event.status === "completed" && new Date(event.starts_at).getFullYear() === year);
-    const memberHours = calculateIsoMemberHours({ events, attendance: attendanceRows, year });
-    const memberById = new Map(members.map((member) => [member.id, member]));
     const officerIds = new Set(members.filter((member) => {
       const role = (member.role ?? "").toLowerCase();
       const rank = (member.rank ?? "").toLowerCase();
