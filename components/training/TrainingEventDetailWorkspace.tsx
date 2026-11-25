@@ -295,7 +295,7 @@ export default function TrainingEventDetailWorkspace({
   );
 
   const categoryOptions = useMemo(() => {
-    const active = categories.filter((category) => category.active);
+    const active = categories.filter((category) => category.active && category.name.trim().toLowerCase() !== "fire suppression");
     if (eventState.category_id) {
       const current = categoryLookup.get(eventState.category_id);
       if (current && !active.some((category) => category.id === current.id)) {
