@@ -2189,6 +2189,10 @@ export default function TrainingWorkspace({
     }
 
     const isEmsTraining = isEmsCategoryName(selectedCategory.name);
+    if (formState.isoClassification === "training_facilities" && !formState.isoQualifyingFacility) {
+      setSaveError("Training Facilities requires the qualifying ISO facility checkbox and facility details.");
+      return;
+    }
     if (formState.isoQualifyingFacility && (!formState.isoFacilityType || formState.isoClassification !== "training_facilities")) {
       setSaveError("Choose Training Facilities as the ISO classification and select a qualifying facility type.");
       return;
