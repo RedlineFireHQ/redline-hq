@@ -2210,7 +2210,7 @@ export default function TrainingWorkspace({
 
     if (formState.isoClassifications.includes("training_facilities")) {
       const facility = facilities.find((item) => item.id === formState.isoFacilityId);
-      if (!facility || !facilityQualifiesForIso(facility)) {
+      if (!facility || !facilityQualifiesForIso(facility, formState.date)) {
         setSaveError("Select a qualifying training facility before assigning ISO Training Facilities credit.");
         return;
       }
@@ -3747,6 +3747,7 @@ export default function TrainingWorkspace({
                     facilityId={formState.isoFacilityId}
                     onFacilityChange={(next) => setFormState((current) => ({ ...current, isoFacilityId: next }))}
                     facilities={facilities}
+                    eventDate={formState.date}
                     prePlanId={formState.isoPrePlanId}
                     onPrePlanChange={(next) => setFormState((current) => ({ ...current, isoPrePlanId: next }))}
                     prePlans={prePlans}
