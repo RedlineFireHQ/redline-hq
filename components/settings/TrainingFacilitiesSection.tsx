@@ -176,7 +176,7 @@ export default function TrainingFacilitiesSection({ departmentId, currentMemberI
               <div className="mt-1 text-xs text-neutral-400">{row.facility_type.replaceAll("_", " ")} · {row.ownership_type.replaceAll("_", " ")}</div>
               <div className="mt-1 text-xs text-neutral-400">{[row.address, row.city, row.state, row.zip].filter(Boolean).join(", ") || "No address recorded"}</div>
               <div className="mt-2 flex flex-wrap gap-2">
-                <span className={`rounded-full border px-2.5 py-1 text-xs ${qualifies(row) ? "border-green-500/30 bg-green-500/10 text-green-300" : "border-amber-500/30 bg-amber-500/10 text-amber-200"}`}>{qualificationLabel(row)}</span>
+                <span className={`rounded-full border px-2.5 py-1 text-xs ${getFacilityIsoCreditLevel(row) !== "none" ? "border-green-500/30 bg-green-500/10 text-green-300" : "border-amber-500/30 bg-amber-500/10 text-amber-200"}`}>{qualificationLabel(row)}</span>
                 {!row.active ? <span className="rounded-full border border-neutral-700 px-2.5 py-1 text-xs text-neutral-400">Inactive</span> : null}
               </div>
             </div>
