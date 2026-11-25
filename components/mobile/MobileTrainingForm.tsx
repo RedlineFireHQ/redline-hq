@@ -366,7 +366,7 @@ export default function MobileTrainingForm({
                       EMS Details
                     </p>
                     <label className="block text-sm font-bold">
-                      EMS Core Topic
+                      EMS Subject Area
                       <select
                         value={emsTopic}
                         onChange={(event) =>
