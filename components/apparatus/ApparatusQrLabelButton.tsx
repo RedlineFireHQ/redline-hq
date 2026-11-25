@@ -12,6 +12,6 @@ export default function ApparatusQrLabelButton({ apparatusId, apparatusName }: P
 
   return <>
     <button type="button" onClick={() => setIsOpen(true)} className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800">QR Code</button>
-    {isOpen ? <QrLabelDialog title={apparatusName} subtitle="Apparatus Check" value={value} onClose={() => setIsOpen(false)} /> : null}
+    {isOpen ? <QrLabelDialog title={apparatusName} value={value} onClose={() => setIsOpen(false)} /> : null}
   </>;
 }
