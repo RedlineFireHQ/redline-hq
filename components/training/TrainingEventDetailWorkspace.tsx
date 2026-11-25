@@ -887,7 +887,7 @@ export default function TrainingEventDetailWorkspace({
                 <option value="">Select category</option>
                 {categoryOptions.map((category) => (
                   <option key={category.id} value={category.id}>
-                    {category.name}{!category.active ? " (Inactive)" : ""}
+                    {isEmsCategoryName(category.name) ? "EMS Continuing Education" : category.name}{!category.active ? " (Inactive)" : ""}
                   </option>
                 ))}
               </select>
