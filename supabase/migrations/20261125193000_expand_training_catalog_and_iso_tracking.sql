@@ -297,6 +297,19 @@ alter table public.training_events
   add column if not exists iso_pre_plan_id uuid references public.pre_plans(id) on delete set null;
 
 alter table public.training_events
+  drop constraint if exists training_events_iso_facility_details_check;
+alter table public.training_events
+  add constraint training_events_iso_facility_details_check
+  check (
+    iso_qualifying_facility = false
+    or (
+      'training_facilities' = any(iso_classifications)
+      and iso_facility_type is not null
+      and (iso_facility_type <> 'regional_academy' or iso_facility_agreement = true)
+    )
+  );
+
+alter table public.training_events
   add constraint training_events_iso_classifications_check
   check (
     iso_classifications <@ array[
@@ -318,7 +331,7 @@ alter table public.training_events
   add constraint training_events_iso_facility_id_department_fk
   foreign key (department_id, iso_facility_id)
   references public.training_facilities(department_id, id)
-  on delete set null;
+  on delete restrict;
 
 alter table public.pre_plans
   add column if not exists iso_high_hazard boolean not null default false;
