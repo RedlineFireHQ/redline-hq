@@ -142,45 +142,6 @@ export default function QrLabelDialog({ title, subtitle, value, onClose }: Props
     return new Blob(chunks, { type: "application/pdf" });
   }
 
-  function buildLabelPdf(): Blob | null {
-    if (!dataUrl || !dimensions.valid) return null;
-    const dpi = 300;
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(dimensions.width * dpi);
-    canvas.height = Math.round(dimensions.height * dpi);
-    const context = canvas.getContext("2d", { willReadFrequently: true });
-    if (!context) return null;
-
-    context.fillStyle = "#fff";
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.fillStyle = "#111";
-    context.textAlign = "center";
-    context.textBaseline = "top";
-    const margin = Math.max(12, Math.round(0.045 * dpi));
-    const maxTextWidth = canvas.width - margin * 2;
-    const titleSize = Math.max(17, Math.min(29, Math.round(dimensions.width * 17)));
-    context.font = `700 ${titleSize}px Arial, sans-serif`;
-    const titleLines = wrapCanvasText(context, title, maxTextWidth);
-    let y = margin;
-    for (const line of titleLines) {
-      context.fillText(line, canvas.width / 2, y, maxTextWidth);
-      y += titleSize + 2;
-    }
-    if (subtitle?.trim()) {
-      const subSize = Math.max(14, Math.round(titleSize * 0.8));
-      context.font = `600 ${subSize}px Arial, sans-serif`;
-      for (const line of wrapCanvasText(context, subtitle.trim(), maxTextWidth)) {
-        context.fillText(line, canvas.width / 2, y, maxTextWidth);
-        y += subSize + 2;
-      }
-    }
-
-    const qr = new Image();
-    // QRCode.toDataURL creates a same-origin data URL, so it can be drawn without a network request.
-    // PDF creation is asynchronous because the image must be decoded first.
-    return null;
-  }
-
   function renderLabelPdf(onReady: (blob: Blob) => void) {
     if (!dataUrl || !dimensions.valid) return;
     const dpi = 300;
