@@ -13,6 +13,7 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 type PrePlanEditRecord = {
   id: string;
   business_name: string;
+  iso_high_hazard: boolean;
   address: string;
   city: string;
   state: string;
@@ -117,7 +118,7 @@ export default async function EditPrePlanPage({ params }: EditPrePlanPageProps) 
   const { data, error } = await supabase
     .from("pre_plans")
     .select(
-      "id, business_name, address, city, state, zip, business_phone, occupancy_id_number, property_owner_name, property_owner_phone, primary_contact_name, primary_contact_phone, secondary_contact_name, secondary_contact_phone, additional_comments, normal_occupant_load, special_needs_occupants, primary_apparatus_access, knox_box_details, knox_box_location, fdc_details, fdc_location, fdc_notes, other_water_supply_info, fire_alarm_details, fire_alarm_panel_location, sprinkler_system_details, riser_location, fire_pump_details, fire_pump_location, standpipe_details, standpipe_location, electrical_shutoff, electrical_shutoff_location, electrical_comments, water_shutoff, water_shutoff_location, water_comments, gas_shutoff, gas_shutoff_location, gas_comments, critical_information, site_plan_document_revision_id",
+      "id, business_name, iso_high_hazard, address, city, state, zip, business_phone, occupancy_id_number, property_owner_name, property_owner_phone, primary_contact_name, primary_contact_phone, secondary_contact_name, secondary_contact_phone, additional_comments, normal_occupant_load, special_needs_occupants, primary_apparatus_access, knox_box_details, knox_box_location, fdc_details, fdc_location, fdc_notes, other_water_supply_info, fire_alarm_details, fire_alarm_panel_location, sprinkler_system_details, riser_location, fire_pump_details, fire_pump_location, standpipe_details, standpipe_location, electrical_shutoff, electrical_shutoff_location, electrical_comments, water_shutoff, water_shutoff_location, water_comments, gas_shutoff, gas_shutoff_location, gas_comments, critical_information, site_plan_document_revision_id",
     )
     .eq("id", id)
     .eq("department_id", departmentId)
@@ -259,6 +260,7 @@ export default async function EditPrePlanPage({ params }: EditPrePlanPageProps) 
         documentRevisionOptions={documentRevisionOptions}
         initialValues={{
           businessName: record.business_name,
+          isoHighHazard: record.iso_high_hazard === true,
           address: record.address,
           city: record.city,
           state: record.state,
