@@ -10,6 +10,7 @@ import { triggerEmsAllocationRecalculation, triggerEmsAllocationRecalculationFor
 import { supabase } from "@/lib/supabase";
 import SubmitTrainingModal from "@/components/training/SubmitTrainingModal";
 import IsoTrainingFields, { type IsoTrainingFacilityOption, type IsoPrePlanOption } from "@/components/training/IsoTrainingFields";
+import IsoTrainingDashboard from "@/components/training/IsoTrainingDashboard";
 import { facilityQualifiesForIso } from "@/lib/training/iso-training";
 import type { SelfReportedTraining } from "@/components/training/TrainingDepartmentOverview";
 
@@ -60,6 +61,7 @@ type TrainingAttendanceRow = {
   member_id: string;
   attendance_status: string;
   completion_status: string;
+  hours_earned: number | null;
 };
 
 type DepartmentMemberRow = {
@@ -67,6 +69,7 @@ type DepartmentMemberRow = {
   first_name: string | null;
   last_name: string | null;
   role: string | null;
+  rank: string | null;
 };
 
 type DepartmentDocumentRow = {
@@ -2817,6 +2820,10 @@ export default function TrainingWorkspace({
           <p className="mt-1 text-xs text-neutral-500">Outside + assignments + attendance</p>
         </div>
       </div>
+
+      {canManageTraining ? (
+        <IsoTrainingDashboard events={eventRows} attendanceRows={attendanceRows} members={members} prePlans={prePlans} />
+      ) : null}
 
       {myAssignedTrainingSection}
 
