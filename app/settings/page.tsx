@@ -4,6 +4,7 @@ import DepartmentRolesSection from "@/components/settings/DepartmentRolesSection
 import RoleRequirementsSection from "@/components/settings/RoleRequirementsSection";
 import ReadinessRequirementsSection from "@/components/settings/ReadinessRequirementsSection";
 import TrainingCategoriesSection from "@/components/settings/TrainingCategoriesSection";
+import TrainingFacilitiesSection, { type TrainingFacilityRow } from "@/components/settings/TrainingFacilitiesSection";
 import ApparatusInspectionSettingsSection from "@/components/settings/ApparatusInspectionSettingsSection";
 import GasMonitorCalibrationSettingsSection from "@/components/settings/GasMonitorCalibrationSettingsSection";
 import GroundLadderInspectionSettingsSection from "@/components/settings/GroundLadderInspectionSettingsSection";
@@ -31,6 +32,7 @@ type TrainingCategoryRow = {
   description: string | null;
   active: boolean;
   compliance_bucket: string | null;
+  system_key: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -112,7 +114,7 @@ export default async function SettingsPage() {
       .order("name", { ascending: true }),
     supabase
       .from("training_categories")
-      .select("id, name, description, active, compliance_bucket, created_at, updated_at")
+      .select("id, name, description, active, compliance_bucket, system_key, created_at, updated_at")
       .eq("department_id", currentMember.departmentId)
       .order("active", { ascending: false })
       .order("created_at", { ascending: true }),
@@ -229,6 +231,35 @@ export default async function SettingsPage() {
     throw new Error(departmentSettingsError.message || "Unable to load department settings.");
   }
 
+  const { data: trainingFacilitiesData, error: trainingFacilitiesError } = await supabase
+    .from("training_facilities")
+    .select("id, name, facility_type, ownership_type, address, city, state, zip, tower_stories, yard_acres, purpose_built_live_fire, formal_agreement, agreement_reference, agreement_start_date, agreement_end_date, active")
+    .eq("department_id", currentMember.departmentId)
+    .order("name", { ascending: true });
+
+  if (trainingFacilitiesError) {
+    throw new Error(trainingFacilitiesError.message || "Unable to load ISO training facilities.");
+  }
+
+  const trainingFacilities: TrainingFacilityRow[] = (trainingFacilitiesData ?? []).map((row) => ({
+    id: String(row.id),
+    name: typeof row.name === "string" ? row.name : "",
+    facility_type: typeof row.facility_type === "string" ? row.facility_type : "other",
+    ownership_type: typeof row.ownership_type === "string" ? row.ownership_type : "department_owned",
+    address: typeof row.address === "string" ? row.address : null,
+    city: typeof row.city === "string" ? row.city : null,
+    state: typeof row.state === "string" ? row.state : null,
+    zip: typeof row.zip === "string" ? row.zip : null,
+    tower_stories: typeof row.tower_stories === "number" ? row.tower_stories : null,
+    yard_acres: typeof row.yard_acres === "number" ? row.yard_acres : null,
+    purpose_built_live_fire: row.purpose_built_live_fire === true,
+    formal_agreement: row.formal_agreement === true,
+    agreement_reference: typeof row.agreement_reference === "string" ? row.agreement_reference : null,
+    agreement_start_date: typeof row.agreement_start_date === "string" ? row.agreement_start_date : null,
+    agreement_end_date: typeof row.agreement_end_date === "string" ? row.agreement_end_date : null,
+    active: row.active === true,
+  }));
+
   const emsSupplyRecipient = emsSupplyRecipientData
     ? {
         id: String(emsSupplyRecipientData.id),
@@ -282,6 +313,7 @@ export default async function SettingsPage() {
     description: typeof row.description === "string" ? row.description : null,
     active: typeof row.active === "boolean" ? row.active : true,
     compliance_bucket: typeof row.compliance_bucket === "string" ? row.compliance_bucket : null,
+    system_key: typeof row.system_key === "string" ? row.system_key : null,
     created_at: typeof row.created_at === "string" ? row.created_at : new Date().toISOString(),
     updated_at: typeof row.updated_at === "string" ? row.updated_at : new Date().toISOString(),
   }));
@@ -437,4 +469,12 @@ export default async function SettingsPage() {
       </div>
     </div>
   );
-}
+}      <div className="mt-6">
+        <TrainingFacilitiesSection
+          departmentId={currentMember.departmentId}
+          currentMemberId={currentMember.id}
+          facilities={trainingFacilities}
+        />
+      </div>
+
+
