@@ -1,6 +1,6 @@
 "use client";
 
-import { ISO_TRAINING_CLASSIFICATIONS, facilityQualifiesForIso, type IsoTrainingClassification } from "@/lib/training/iso-training";
+import { ISO_TRAINING_CLASSIFICATIONS, getFacilityIsoCreditLevel, type IsoTrainingClassification } from "@/lib/training/iso-training";
 
 export type IsoTrainingFacilityOption = {
   id: string;
@@ -16,6 +16,8 @@ export type IsoTrainingFacilityOption = {
   purpose_built_live_fire: boolean;
   formal_agreement: boolean;
   agreement_reference: string | null;
+  agreement_start_date: string | null;
+  agreement_end_date: string | null;
   active: boolean;
 };
 
@@ -40,6 +42,7 @@ interface Props {
   prePlans: IsoPrePlanOption[];
   driverOperatorTrainingType: string;
   onDriverOperatorTrainingTypeChange: (next: string) => void;
+  eventDate?: string;
   disabled?: boolean;
 }
 
@@ -56,6 +59,7 @@ export default function IsoTrainingFields({
   prePlans,
   driverOperatorTrainingType,
   onDriverOperatorTrainingTypeChange,
+  eventDate,
   disabled = false,
 }: Props) {
   const selectedFacility = facilities.find((facility) => facility.id === facilityId) ?? null;
@@ -102,11 +106,11 @@ export default function IsoTrainingFields({
             <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
               <div className="text-sm font-semibold text-white">{selectedFacility.name}</div>
               <div className="mt-1 text-xs text-neutral-400">{[selectedFacility.address, selectedFacility.city, selectedFacility.state, selectedFacility.zip].filter(Boolean).join(", ") || "Location not recorded"}</div>
-              <div className={`mt-2 text-xs font-semibold ${facilityQualifiesForIso(selectedFacility) ? "text-green-300" : "text-amber-200"}`}>{facilityQualifiesForIso(selectedFacility) ? "Qualifying facility — eligible for ISO facility-hour tracking" : "This facility does not currently meet the qualifying rules"}</div>
+              <div className={`mt-2 text-xs font-semibold ${facilityQualifiesForIso(selectedFacility) ? "text-green-300" : "text-amber-200"}`}>{getFacilityIsoCreditLevel(selectedFacility, eventDate) === "full" ? "Full-credit qualifying facility" : getFacilityIsoCreditLevel(selectedFacility, eventDate) === "partial" ? "Partial-credit qualifying facility (2-story tower)" : "This facility does not currently meet the qualifying rules"}</div>
               {selectedFacility.ownership_type !== "department_owned" ? <div className="mt-1 text-xs text-neutral-400">Formal agreement: {selectedFacility.formal_agreement ? selectedFacility.agreement_reference || "Recorded" : "Not recorded"}</div> : null}
             </div>
           ) : null}
-          {facilities.filter((facility) => facility.active && facilityQualifiesForIso(facility)).length === 0 ? <p className="mt-2 text-xs text-amber-200">No qualifying facilities are configured yet. Add one under Settings → ISO Training Facilities.</p> : null}
+          {facilities.filter((facility) => facility.active && getFacilityIsoCreditLevel(facility, eventDate) !== "none").length === 0 ? <p className="mt-2 text-xs text-amber-200">No qualifying facilities are configured yet. Add one under Settings → ISO Training Facilities.</p> : null}
         </div>
       ) : null}
 
