@@ -16,7 +16,7 @@ export type RedOakCompetencySkillKey = typeof RED_OAK_EMS_COMPETENCY_SKILLS[numb
 export type RedOakCompetencySkillStatus = "Competent" | "Remediation Required" | "N/A";
 export type RedOakCompetencySkillResult = {
   skill_key: RedOakCompetencySkillKey;
-  status: RedOakCompetencySkillStatus;
+  status: RedOakCompetencySkillStatus | "";
   evaluator: string;
   date: string;
 };
