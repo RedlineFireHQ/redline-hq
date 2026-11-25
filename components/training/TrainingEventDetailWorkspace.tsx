@@ -431,6 +431,10 @@ export default function TrainingEventDetailWorkspace({
     const startsAt = toIsoDateTime(formState.date, formState.startTime);
     const endsAt = formState.endTime ? toIsoDateTime(formState.date, formState.endTime) : null;
     const durationMinutes = endMinutes !== null ? endMinutes - startMinutes : null;
+    if (formState.isoClassification === "training_facilities" && !formState.isoQualifyingFacility) {
+      setEventError("Training Facilities requires the qualifying ISO facility checkbox and facility details.");
+      return;
+    }
     if (formState.isoQualifyingFacility && (!formState.isoFacilityType || formState.isoClassification !== "training_facilities")) {
       setEventError("Choose Training Facilities as the ISO classification and select a qualifying facility type.");
       return;
