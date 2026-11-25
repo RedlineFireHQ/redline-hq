@@ -100,6 +100,7 @@ type PrePlanFormValues = {
 
   criticalInformation: string;
   additionalComments: string;
+  isoHighHazard: boolean;
 };
 
 type HydrantDraft = {
@@ -205,6 +206,7 @@ const EMPTY_VALUES: PrePlanFormValues = {
 
   criticalInformation: "",
   additionalComments: "",
+  isoHighHazard: false,
 };
 
 const DOCUMENT_LINK_TYPES: Array<{ value: BuilderDocumentLinkType; label: string }> = [
@@ -692,6 +694,21 @@ export default function PrePlanForm({
               className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
             />
           </FormField>
+
+          <div className="md:col-span-2 rounded-xl border border-sky-500/20 bg-sky-500/[0.05] p-4">
+            <label className="flex cursor-pointer items-start gap-3">
+              <input
+                type="checkbox"
+                checked={formValues.isoHighHazard}
+                onChange={(event) => setFormValues((current) => ({ ...current, isoHighHazard: event.target.checked }))}
+                className="mt-1 h-4 w-4 accent-red-600"
+              />
+              <span>
+                <span className="block text-sm font-semibold text-white">ISO High-Hazard / Large Building</span>
+                <span className="mt-1 block text-xs text-neutral-400">Mark properties that require two documented building-familiarization visits per year instead of one.</span>
+              </span>
+            </label>
+          </div>
 
           <FormField label="Occupancy ID Number">
             <input
