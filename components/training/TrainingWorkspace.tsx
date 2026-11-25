@@ -18,6 +18,8 @@ type TrainingCategoryRow = {
   name: string;
   description: string | null;
   active: boolean;
+  system_key: string | null;
+  compliance_bucket: string | null;
 };
 
 type TrainingEventRow = {
@@ -449,8 +451,8 @@ function getCategoryNameById(categories: TrainingCategoryRow[], categoryId: stri
   return match?.name || "Uncategorized";
 }
 
-function isEmsCategoryName(value: string | null | undefined) {
-  return (value ?? "").trim().toLowerCase() === "ems";
+function isEmsCategoryName(category: TrainingCategoryRow | null | undefined) {
+  return category?.system_key === "ems_continuing_education" || category?.compliance_bucket === "ems_ce" || (category?.name ?? "").trim().toLowerCase() === "ems";
 }
 
 function resolveDocumentCategorySlug(category: string | null | undefined) {
@@ -2175,7 +2177,7 @@ export default function TrainingWorkspace({
       return;
     }
 
-    const isEmsTraining = isEmsCategoryName(selectedCategory.name);
+    const isEmsTraining = isEmsCategoryName(selectedCategory);
     const emsCourseDefinitionId = isEmsTraining ? (formState.emsCourseDefinitionId || null) : null;
     const emsCoreTopic = isEmsTraining ? formState.emsCoreTopic : null;
     const emsNeedsReview =
