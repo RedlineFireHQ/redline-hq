@@ -200,6 +200,7 @@ export default function TrainingCategoriesSection({
           description: typeof data.description === "string" ? data.description : null,
           active: typeof data.active === "boolean" ? data.active : formState.active,
           compliance_bucket: typeof data.compliance_bucket === "string" ? data.compliance_bucket : formState.complianceBucket,
+          system_key: typeof data.system_key === "string" ? data.system_key : null,
           created_at: typeof data.created_at === "string" ? data.created_at : new Date().toISOString(),
           updated_at: typeof data.updated_at === "string" ? data.updated_at : new Date().toISOString(),
         };
@@ -224,7 +225,7 @@ export default function TrainingCategoriesSection({
         <div>
           <h2 className="text-2xl font-semibold text-white">Training Categories</h2>
           <p className="mt-2 max-w-3xl text-sm text-neutral-400">
-            Redline HQ provides the standard EMS Continuing Education category automatically. You can add department-specific categories, but the standard EMS category and its CE classification cannot be changed or removed.
+            Redline HQ provides the same standard training catalog to every department, including EMS Continuing Education. You can add department-specific categories, but system categories and their compliance classifications cannot be changed or removed.
           </p>
         </div>
 
@@ -280,7 +281,7 @@ export default function TrainingCategoriesSection({
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      {isSystemEmsCategory(category) ? (
+                      {isSystemTrainingCategory(category) ? (
                         <span className="text-xs font-semibold uppercase tracking-wide text-red-300">Redline HQ Standard</span>
                       ) : (
                         <button
