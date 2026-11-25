@@ -225,6 +225,16 @@ export default function QrLabelDialog({ title, subtitle, value, onClose }: Props
       setError("Safari blocked the print window. Allow pop-ups for this Preview site, then try Print Label again.");
       return;
     }
+    printWindow.onload = () => {
+      window.setTimeout(() => {
+        try {
+          printWindow.focus();
+          printWindow.print();
+        } catch {
+          // The browser's built-in PDF viewer may require the user to use its Print control.
+        }
+      }, 500);
+    };
     renderLabelPdf((blob) => {
       const url = URL.createObjectURL(blob);
       printWindow.location.href = url;
@@ -264,16 +274,17 @@ export default function QrLabelDialog({ title, subtitle, value, onClose }: Props
         {preset === "custom" ? (
           <div className="mt-3 grid grid-cols-2 gap-3">
             <label className="text-xs font-semibold text-white/70">Width (inches)
-              <input type="number" min="1" max="4" step="0.1" value={customWidth} onChange={(event) => setCustomWidth(event.target.value)}
+              <input type="number" min="0.5" max="4" step="0.05" value={customWidth} onChange={(event) => setCustomWidth(event.target.value)}
                 className="mt-1 w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm text-white" />
             </label>
             <label className="text-xs font-semibold text-white/70">Height (inches)
-              <input type="number" min="1" max="4" step="0.1" value={customHeight} onChange={(event) => setCustomHeight(event.target.value)}
+              <input type="number" min="0.5" max="4" step="0.05" value={customHeight} onChange={(event) => setCustomHeight(event.target.value)}
                 className="mt-1 w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm text-white" />
             </label>
           </div>
         ) : null}
         {!dimensions.valid ? <p className="mt-2 text-xs text-red-300">Enter a width and height from 0.5 to 4 inches.</p> : null}
+        {dimensions.valid && (dimensions.width < 0.75 || dimensions.height < 0.75) ? <p className="mt-2 text-xs text-amber-300">Very small labels may be difficult for some phones to scan. Test one before printing a full batch.</p> : null}
 
         <div className="mt-5 rounded-xl border border-white/10 bg-white p-4">
           <p className="mb-2 text-center text-xs font-semibold uppercase tracking-wide text-neutral-500">Label preview · {dimensions.valid ? `${dimensions.width} × ${dimensions.height} in` : "Invalid size"}</p>
