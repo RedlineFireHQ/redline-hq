@@ -186,12 +186,23 @@ export default function AlertsPanel() {
     let isMounted = true;
 
     async function loadDeficiencies() {
+      if (!departmentId) {
+        if (isMounted) {
+          setRows([]);
+          setActivityById(new Map());
+          setActiveStatusIds(new Set());
+          setIsLoading(false);
+        }
+        return;
+      }
+
       const [deficienciesResult, statusesResult] = await Promise.all([
         supabase
           .from("deficiencies")
           .select(
-            "id, deficiency_number, description, reported_at, created_at, status_code:status, status:deficiency_statuses!fk_deficiencies_status(name), priority:deficiency_priorities!fk_deficiencies_priority(name), apparatus:apparatus!fk_deficiencies_apparatus(name), fire_hose:fire_hose_id(inventory_number), scba_cylinder:scba_cylinder_id(cylinder_number), scba_pack:scba_pack_id(pack_number), pie_equipment:pie_equipment_id(equipment_number), ems_equipment:ems_equipment_id(equipment_name), ppe_item:ppe_item_id(item_name), rope_item:rope_item_id(rope_name, rope_identifier), fire_extinguisher:fire_extinguisher_id(extinguisher_number, extinguisher_type), misc_fire_equipment:misc_fire_equipment_id(equipment_name, asset_number)"
-          ),
+            "id, department_id, deficiency_number, description, reported_at, created_at, status_code:status, status:deficiency_statuses!fk_deficiencies_status(name), priority:deficiency_priorities!fk_deficiencies_priority(name), apparatus:apparatus!fk_deficiencies_apparatus(name), fire_hose:fire_hose_id(inventory_number), scba_cylinder:scba_cylinder_id(cylinder_number), scba_pack:scba_pack_id(pack_number), pie_equipment:pie_equipment_id(equipment_number), ems_equipment:ems_equipment!deficiencies_ems_equipment_id_fkey(equipment_name), ppe_item:ppe_items!deficiencies_ppe_item_id_fkey(item_name), rope_item:rope_item_id(rope_name, rope_identifier), fire_extinguisher:fire_extinguisher_id(extinguisher_number, extinguisher_type), misc_fire_equipment:misc_fire_equipment_id(equipment_name, asset_number)"
+          )
+          .eq("department_id", departmentId),
         supabase
           .from("deficiency_statuses")
           .select("id, name"),
