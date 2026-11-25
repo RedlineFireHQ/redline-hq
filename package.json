@@ -9,7 +9,8 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test:readiness": "tsx --test lib/readiness/apparatus-readiness.test.ts lib/readiness/department-readiness.test.ts lib/training/homework-integration.test.ts lib/readiness/member-readiness-training-pace.test.ts",
-    "test:ems": "tsx --test lib/ems/*.test.ts"
+    "test:ems": "tsx --test lib/ems/*.test.ts",
+    "test:training": "tsx --test lib/training/*.test.ts"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.2",
