@@ -15,6 +15,8 @@ type TrainingCategoryRow = {
   name: string;
   description: string | null;
   active: boolean;
+  system_key: string | null;
+  compliance_bucket: string | null;
 };
 
 type TrainingEventRow = {
@@ -209,8 +211,8 @@ function normalizeSearchValue(value: string) {
   return value.toLowerCase().trim().replace(/\s+/g, " ");
 }
 
-function isEmsCategoryName(value: string | null | undefined) {
-  return (value ?? "").trim().toLowerCase() === "ems";
+function isEmsCategoryName(category: TrainingCategoryRow | null | undefined) {
+  return category?.system_key === "ems_continuing_education" || category?.compliance_bucket === "ems_ce" || (category?.name ?? "").trim().toLowerCase() === "ems";
 }
 
 function initialFormState(trainingEvent: TrainingEventRow): EventFormState {
@@ -369,7 +371,7 @@ export default function TrainingEventDetailWorkspace({
     }
 
     const selectedCategory = categoryLookup.get(formState.categoryId);
-    const isEmsTraining = isEmsCategoryName(selectedCategory?.name);
+    const isEmsTraining = isEmsCategoryName(selectedCategory);
     const emsCoreTopic = isEmsTraining ? formState.emsCoreTopic : null;
     const emsCourseDefinitionId = isEmsTraining ? (formState.emsCourseDefinitionId || null) : null;
     const emsNeedsReview = isEmsTraining && (formState.emsNeedsReview || formState.emsCoreTopic === "other");
@@ -887,7 +889,7 @@ export default function TrainingEventDetailWorkspace({
                 <option value="">Select category</option>
                 {categoryOptions.map((category) => (
                   <option key={category.id} value={category.id}>
-                    {isEmsCategoryName(category.name) ? "EMS Continuing Education" : category.name}{!category.active ? " (Inactive)" : ""}
+                    {isEmsCategoryName(category) ? "EMS Continuing Education" : category.name}{!category.active ? " (Inactive)" : ""}
                   </option>
                 ))}
               </select>
@@ -917,7 +919,7 @@ export default function TrainingEventDetailWorkspace({
               </div>
             </label>
 
-            {isEmsCategoryName(categoryLookup.get(formState.categoryId)?.name) ? (
+            {isEmsCategoryName(categoryLookup.get(formState.categoryId)) ? (
               <>
                 <label className="block">
                   <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">EMS Core Topic</span>
