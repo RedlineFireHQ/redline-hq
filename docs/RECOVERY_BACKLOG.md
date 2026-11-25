@@ -565,3 +565,13 @@ expose credentials, or change Production before these gates pass.
 - **Separate event detail editor:** also retains Category, Training Method, EMS Core Topic, EMS Course / Training, Training Provider / Sponsor, Needs Review, date/time, hours, instructor, location, details, status, and supporting document.
 - **Next actions (not yet authorized/implemented):** Fix EMS category detection to recognize the actual configured EMS category (rather than one exact display string); verify the same detection is used consistently for new events, editing, outside training, and mobile entry; inspect/restore any intended multi-topic CE allocation UI and configure/validate course applicability rules; then propose a cleaner grouping of regular category, ISO classification, location, and facility details while preserving every existing field and behavior.
 - **Guardrail:** Do not remove any modal field, change CE allocation behavior, or rearrange the modal until the user reviews the audit and approves the implementation approach. Production remains untouched.
+
+
+## Training modal EMS category fix — 2026-11-25
+
+- **Status:** Implemented on Preview; deployment build verification pending.
+- Added shared EMS category detection that recognizes both `EMS` and department labels such as `EMS Continuing Education` / `Emergency Medical Services`.
+- Applied the shared detection to Add Training Event, event editing, outside-training submission, and mobile outside-training submission. This corrects both field visibility and the saved `is_ems_training` classification.
+- Clarified the Add Training modal labels: Department Training Category, ISO Reporting Classification, EMS Continuing Education Topic, and qualifying-facility question. Moved the ISO/facility block next to Location in the Add Training modal so facility qualification is associated with the location rather than presented as another category. Preserved all prior modal fields and attendance controls.
+- Restored the event-detail editor layout after an initial ISO-block move caused a JSX parse error; the editor retains its existing layout and shared EMS detection fix.
+- No Production code, schema, or data changed. No EMS course applicability rules or credit-allocation behavior changed; Preview database review showed no matching applicability rules for the active course definitions queried, so multi-topic course-credit mapping remains a separate validation/configuration item and must not be assumed to work automatically.
