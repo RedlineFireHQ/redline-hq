@@ -2189,6 +2189,14 @@ export default function TrainingWorkspace({
     }
 
     const isEmsTraining = isEmsCategoryName(selectedCategory.name);
+    if (formState.isoQualifyingFacility && (!formState.isoFacilityType || formState.isoClassification !== "training_facilities")) {
+      setSaveError("Choose Training Facilities as the ISO classification and select a qualifying facility type.");
+      return;
+    }
+    if (formState.isoQualifyingFacility && formState.isoFacilityType === "regional_academy" && !formState.isoFacilityAgreement) {
+      setSaveError("A formal agreement is required for a regional academy to be marked as qualifying.");
+      return;
+    }
     const emsCourseDefinitionId = isEmsTraining ? (formState.emsCourseDefinitionId || null) : null;
     const emsCoreTopic = isEmsTraining ? formState.emsCoreTopic : null;
     const emsNeedsReview =
@@ -2237,13 +2245,17 @@ export default function TrainingWorkspace({
           ends_at: null,
           duration_minutes: null,
           hours_credit: hoursCredit,
+          iso_classification: formState.isoClassification || null,
+          iso_qualifying_facility: formState.isoQualifyingFacility,
+          iso_facility_type: formState.isoQualifyingFacility ? formState.isoFacilityType : null,
+          iso_facility_agreement: formState.isoQualifyingFacility && formState.isoFacilityType === "regional_academy" ? formState.isoFacilityAgreement : false,
           status: "scheduled",
           supporting_document_id: null,
           created_by: currentMemberId,
           updated_by: currentMemberId,
         })
         .select(
-          "id, title, category_id, topic, training_type, is_ems_training, ems_core_topic, ems_course_definition_id, ems_needs_review, ems_provider_name, description, location, instructor_name, starts_at, ends_at, duration_minutes, hours_credit, status, supporting_document_id, created_at, updated_at",
+          "id, title, category_id, topic, training_type, is_ems_training, ems_core_topic, ems_course_definition_id, ems_needs_review, ems_provider_name, description, location, instructor_name, starts_at, ends_at, duration_minutes, hours_credit, iso_classification, iso_qualifying_facility, iso_facility_type, iso_facility_agreement, status, supporting_document_id, created_at, updated_at",
         )
         .single();
 
@@ -2306,6 +2318,10 @@ export default function TrainingWorkspace({
           typeof data.hours_credit === "number" && Number.isFinite(data.hours_credit)
             ? data.hours_credit
             : hoursCredit,
+        iso_classification: typeof data.iso_classification === "string" ? data.iso_classification : formState.isoClassification || null,
+        iso_qualifying_facility: data.iso_qualifying_facility === true,
+        iso_facility_type: typeof data.iso_facility_type === "string" ? data.iso_facility_type : null,
+        iso_facility_agreement: data.iso_facility_agreement === true,
         status: typeof data.status === "string" ? data.status : "scheduled",
         supporting_document_id: typeof data.supporting_document_id === "string" ? data.supporting_document_id : null,
         created_at: typeof data.created_at === "string" ? data.created_at : new Date().toISOString(),
