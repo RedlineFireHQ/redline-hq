@@ -51,7 +51,6 @@ export default function IsoTrainingDashboard({ events, attendanceRows, members, 
       return role.includes("officer") || role.includes("administrator") || /(chief|captain|lieutenant|lieut|battalion)/.test(rank);
     }).map((member) => member.id));
     const totalActiveMembers = Math.max(1, members.length);
-    const recruitIds = new Set(recruitMembers.map((member) => member.id));
     const now = new Date();
     const recruitMembers = members.filter((member) => {
       if (!member.hire_start_date) return false;
@@ -60,6 +59,7 @@ export default function IsoTrainingDashboard({ events, attendanceRows, members, 
       const hasFirefighterI = (member.certifications ?? "").toLowerCase().includes("firefighter i");
       return Number.isFinite(start.getTime()) && days >= 0 && days <= 365 && !hasFirefighterI;
     });
+    const recruitIds = new Set(recruitMembers.map((member) => member.id));
     const rows = ISO_TRAINING_CLASSIFICATIONS.map((classification) => {
       const eligibleEvents = completedEvents.filter((event) => {
         if (!event.iso_classifications.includes(classification.code)) return false;
@@ -77,7 +77,7 @@ export default function IsoTrainingDashboard({ events, attendanceRows, members, 
         participantIds.add(attendance.member_id);
         memberHoursTotal += Math.max(0, attendance.hours_earned ?? event.hours_credit ?? 0);
       }
-      const denominator = classification.code === "officer_training" ? Math.max(1, officerIds.size) : totalActiveMembers;
+      const denominator = classification.code === "officer_training" ? Math.max(1, officerIds.size) : classification.code === "recruit" ? Math.max(1, recruitMembers.length) : totalActiveMembers;
       const averagePerPerson = memberHoursTotal / denominator;
       return {
         ...classification,
@@ -99,7 +99,6 @@ export default function IsoTrainingDashboard({ events, attendanceRows, members, 
     const initialDriverHours = completedEvents.filter((event) => event.iso_classifications.includes("driver_operator") && event.iso_driver_operator_training_type === "initial").reduce((sum, event) => sum + attendanceRows.filter((row) => row.training_event_id === event.id && row.attendance_status === "attending").reduce((eventSum, row) => eventSum + Math.max(0, row.hours_earned ?? event.hours_credit ?? 0), 0), 0);
     const refresherDriverHours = completedEvents.filter((event) => event.iso_classifications.includes("driver_operator") && event.iso_driver_operator_training_type === "refresher").reduce((sum, event) => sum + attendanceRows.filter((row) => row.training_event_id === event.id && row.attendance_status === "attending").reduce((eventSum, row) => eventSum + Math.max(0, row.hours_earned ?? event.hours_credit ?? 0), 0), 0);
     const company = rows.find((row) => row.code === "company_training");
-    const recruit = rows.find((row) => row.code === "recruit");
     const facility = rows.find((row) => row.code === "training_facilities");
     const hazmat = rows.find((row) => row.code === "hazmat");
     const officer = rows.find((row) => row.code === "officer_training");
