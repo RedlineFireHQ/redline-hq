@@ -17,6 +17,8 @@ type TrainingCategoryRow = {
   name: string;
   description: string | null;
   active: boolean;
+  system_key: string | null;
+  compliance_bucket: string | null;
 };
 
 type DepartmentMemberRow = {
@@ -88,6 +90,8 @@ export default async function HomePage() {
     name: typeof row.name === "string" ? row.name : "",
     description: typeof row.description === "string" ? row.description : null,
     active: row.active === true,
+    system_key: typeof row.system_key === "string" ? row.system_key : null,
+    compliance_bucket: typeof row.compliance_bucket === "string" ? row.compliance_bucket : null,
   }));
 
   const members: DepartmentMemberRow[] = (membersResult.data ?? []).map((row) => ({
