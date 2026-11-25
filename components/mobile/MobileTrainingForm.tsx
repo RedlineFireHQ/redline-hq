@@ -141,8 +141,8 @@ export default function MobileTrainingForm({
           p_hours: parsedHours,
           p_is_ems_training: isEms,
           p_ems_core_topic: isEms ? emsTopic : null,
-          p_ems_course_definition_id: isEms ? emsCourseId || null : null,
-          p_ems_needs_review: isEms && (emsNeedsReview || emsTopic === "other"),
+          p_ems_course_definition_id: null,
+          p_ems_needs_review: false,
           p_ems_provider_name: isEms ? provider.trim() || null : null,
           p_description: details.trim() || null,
           p_notes: buildOutsideSubmissionNotes({
@@ -380,34 +380,6 @@ export default function MobileTrainingForm({
                           </option>
                         ))}
                       </select>
-                    </label>
-                    <label className="block text-sm font-bold">
-                      EMS Course / Training
-                      <select
-                        value={emsCourseId}
-                        onChange={(event) => setEmsCourseId(event.target.value)}
-                        className="mt-2 min-h-12 w-full rounded-xl border border-white/15 bg-[#101010] px-3 text-white"
-                      >
-                        <option value="">Unlisted / Other</option>
-                        {emsCourses
-                          .filter((course) => course.active)
-                          .map((course) => (
-                            <option key={course.id} value={course.id}>
-                              {course.course_name}
-                            </option>
-                          ))}
-                      </select>
-                    </label>
-                    <label className="flex min-h-12 items-center gap-3 text-sm font-bold">
-                      <input
-                        type="checkbox"
-                        checked={emsNeedsReview}
-                        onChange={(event) =>
-                          setEmsNeedsReview(event.target.checked)
-                        }
-                        className="h-5 w-5 accent-red-600"
-                      />
-                      Mark as Needs Review
                     </label>
                   </div>
                 ) : null}
