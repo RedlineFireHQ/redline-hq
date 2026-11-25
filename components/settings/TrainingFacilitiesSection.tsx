@@ -44,59 +44,6 @@ const EMPTY_FORM: FacilityForm = {
   active: true,
 };
 
-function qualifies(facility: TrainingFacilityRow) {
-  return getFacilityIsoCreditLevel(facility) !== "none";
-}
-
-function qualificationLabel(facility: TrainingFacilityRow) {
-  const level = getFacilityIsoCreditLevel(facility);
-  return level === "full" ? "Full-credit ISO facility" : level === "partial" ? "Partial-credit ISO facility" : "Not yet qualifying";
-}use client";
-
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
-import { getFacilityIsoCreditLevel } from "@/lib/training/iso-training";
-
-export type TrainingFacilityRow = {
-  id: string;
-  name: string;
-  facility_type: string;
-  ownership_type: string;
-  address: string | null;
-  city: string | null;
-  state: string | null;
-  zip: string | null;
-  tower_stories: number | null;
-  yard_acres: number | null;
-  purpose_built_live_fire: boolean;
-  formal_agreement: boolean;
-  agreement_reference: string | null;
-  agreement_start_date: string | null;
-  agreement_end_date: string | null;
-  active: boolean;
-};
-
-type FacilityForm = Omit<TrainingFacilityRow, "id">;
-
-const EMPTY_FORM: FacilityForm = {
-  name: "",
-  facility_type: "drill_tower",
-  ownership_type: "department_owned",
-  address: "",
-  city: "",
-  state: "",
-  zip: "",
-  tower_stories: null,
-  yard_acres: null,
-  purpose_built_live_fire: false,
-  formal_agreement: false,
-  agreement_reference: "",
-  agreement_start_date: "",
-  agreement_end_date: "",
-  active: true,
-};
-
 function qualifies(facility: Pick<TrainingFacilityRow, "facility_type" | "ownership_type" | "tower_stories" | "yard_acres" | "purpose_built_live_fire" | "formal_agreement" | "agreement_reference">) {
   const agreementOkay =
     facility.ownership_type === "department_owned" ||
