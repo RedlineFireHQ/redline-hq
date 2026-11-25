@@ -88,7 +88,7 @@ export default function MobileTrainingForm({
   const [participants, setParticipants] = useState<string[]>([memberId]);
   const [participantSearch, setParticipantSearch] = useState("");
   const activeCategories = useMemo(
-    () => categories.filter((category) => category.active),
+    () => categories.filter((category) => category.active && category.name.trim().toLowerCase() !== "fire suppression"),
     [categories],
   );
   const selectedCategory = activeCategories.find((category) => category.id === categoryId);
