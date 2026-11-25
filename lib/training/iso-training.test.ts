@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculateIsoMemberHours, facilityQualifiesForIso, normalizeIsoClassifications } from "@/lib/training/iso-training";
+import { calculateIsoMemberHours, facilityQualifiesForIso, getFacilityIsoCreditLevel, normalizeIsoClassifications } from "@/lib/training/iso-training";
 
 test("ISO facility qualification applies the supplied tower, burn-building, and yard thresholds", () => {
   assert.equal(facilityQualifiesForIso({ facility_type: "drill_tower", ownership_type: "department_owned", tower_stories: 2, yard_acres: null, purpose_built_live_fire: false, formal_agreement: false, agreement_reference: null }), true);
@@ -9,6 +9,28 @@ test("ISO facility qualification applies the supplied tower, burn-building, and 
   assert.equal(facilityQualifiesForIso({ facility_type: "live_fire_burn_building", ownership_type: "department_owned", tower_stories: null, yard_acres: null, purpose_built_live_fire: false, formal_agreement: false, agreement_reference: null }), false);
   assert.equal(facilityQualifiesForIso({ facility_type: "training_yard", ownership_type: "department_owned", tower_stories: null, yard_acres: 2, purpose_built_live_fire: false, formal_agreement: false, agreement_reference: null }), true);
   assert.equal(facilityQualifiesForIso({ facility_type: "training_yard", ownership_type: "department_owned", tower_stories: null, yard_acres: 1.9, purpose_built_live_fire: false, formal_agreement: false, agreement_reference: null }), false);
+});
+
+test("two-story towers are partial credit and three-story towers are full credit", () => {
+  const base = { ownership_type: "department_owned", yard_acres: null, purpose_built_live_fire: false, formal_agreement: false, agreement_reference: null };
+  assert.equal(getFacilityIsoCreditLevel({ ...base, facility_type: "drill_tower", tower_stories: 2 }), "partial");
+  assert.equal(getFacilityIsoCreditLevel({ ...base, facility_type: "drill_tower", tower_stories: 3 }), "full");
+});
+
+test("outside facility agreements must be valid on the training date", () => {
+  const facility = {
+    facility_type: "drill_tower",
+    ownership_type: "neighboring_department",
+    tower_stories: 3,
+    yard_acres: null,
+    purpose_built_live_fire: false,
+    formal_agreement: true,
+    agreement_reference: "MOU 2026",
+    agreement_start_date: "2026-01-01",
+    agreement_end_date: "2026-12-31",
+  };
+  assert.equal(getFacilityIsoCreditLevel(facility, "2026-06-01"), "full");
+  assert.equal(getFacilityIsoCreditLevel(facility, "2027-01-01"), "none");
 });
 
 test("neighboring and regional facilities require a formal agreement reference", () => {
