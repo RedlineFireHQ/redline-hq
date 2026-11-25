@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculateIsoMemberHours, facilityQualifiesForIso, getFacilityIsoCreditLevel, normalizeIsoClassifications } from "@/lib/training/iso-training";
+import { calculateIsoMemberHours, facilityQualifiesForIso, getFacilityIsoCreditLevel, normalizeIsoClassifications } from "./iso-training";
 
 test("ISO facility qualification applies the supplied tower, burn-building, and yard thresholds", () => {
   assert.equal(facilityQualifiesForIso({ facility_type: "drill_tower", ownership_type: "department_owned", tower_stories: 2, yard_acres: null, purpose_built_live_fire: false, formal_agreement: false, agreement_reference: null }), true);
