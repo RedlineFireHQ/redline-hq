@@ -54,6 +54,7 @@ type TrainingAttendanceRow = {
   member_id: string;
   attendance_status: string;
   completion_status: string;
+  hours_earned: number | null;
 };
 
 type DepartmentMemberRow = {
@@ -618,7 +619,7 @@ export default async function TrainingPage() {
       .order("starts_at", { ascending: false }),
     supabase
       .from("training_event_attendance")
-      .select("id, training_event_id, member_id, attendance_status, completion_status")
+      .select("id, training_event_id, member_id, attendance_status, completion_status, hours_earned")
       .eq("department_id", currentMember.departmentId),
     supabase
       .from("members")
@@ -820,6 +821,7 @@ export default async function TrainingPage() {
     member_id: typeof row.member_id === "string" ? row.member_id : "",
     attendance_status: typeof row.attendance_status === "string" ? row.attendance_status : "",
     completion_status: typeof row.completion_status === "string" ? row.completion_status : "",
+    hours_earned: typeof row.hours_earned === "number" && Number.isFinite(row.hours_earned) ? row.hours_earned : null,
   }));
 
   const members: DepartmentMemberRow[] = (membersData ?? []).map((row) => ({
