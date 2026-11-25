@@ -461,6 +461,14 @@ export default async function SettingsPage() {
       </div>
 
       <div className="mt-6">
+        <TrainingFacilitiesSection
+          departmentId={currentMember.departmentId}
+          currentMemberId={currentMember.id}
+          facilities={trainingFacilities}
+        />
+      </div>
+
+      <div className="mt-6">
         <GasMonitorCalibrationSettingsSection
           departmentId={currentMember.departmentId}
           currentMemberId={currentMember.id}
@@ -469,12 +477,5 @@ export default async function SettingsPage() {
       </div>
     </div>
   );
-}      <div className="mt-6">
-        <TrainingFacilitiesSection
-          departmentId={currentMember.departmentId}
-          currentMemberId={currentMember.id}
-          facilities={trainingFacilities}
-        />
-      </div>
-
+}
 
