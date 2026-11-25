@@ -100,11 +100,11 @@ export default function QrLabelDialog({ title, subtitle, value, onClose }: Props
 
     const pageWidth = widthInches * 72;
     const pageHeight = heightInches * 72;
-    const content = \`q\n\${pageWidth} 0 0 \${pageHeight} 0 0 cm\n/Im0 Do\nQ\n\`;
+    const content = `q\n${pageWidth} 0 0 ${pageHeight} 0 0 cm\n/Im0 Do\nQ\n`;
     const encoder = new TextEncoder();
     const objects: Uint8Array[] = [];
     const stream = (header: string, bytes: Uint8Array) => {
-      const prefix = encoder.encode(\`\${header}\nstream\n\`);
+      const prefix = encoder.encode(`${header}\nstream\n`);
       const suffix = encoder.encode("\nendstream");
       const combined = new Uint8Array(prefix.length + bytes.length + suffix.length);
       combined.set(prefix, 0);
@@ -115,16 +115,16 @@ export default function QrLabelDialog({ title, subtitle, value, onClose }: Props
 
     objects.push(encoder.encode("<< /Type /Catalog /Pages 2 0 R >>"));
     objects.push(encoder.encode("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"));
-    objects.push(encoder.encode(\`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 \${pageWidth} \${pageHeight}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\`));
-    objects.push(stream(\`<< /Type /XObject /Subtype /Image /Width \${pixelWidth} /Height \${pixelHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length \${rgb.length} >>\`, rgb));
+    objects.push(encoder.encode(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`));
+    objects.push(stream(`<< /Type /XObject /Subtype /Image /Width ${pixelWidth} /Height ${pixelHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length ${rgb.length} >>`, rgb));
     const contentBytes = encoder.encode(content);
-    objects.push(stream(\`<< /Length \${contentBytes.length} >>\`, contentBytes));
+    objects.push(stream(`<< /Length ${contentBytes.length} >>`, contentBytes));
 
     const chunks: Uint8Array[] = [encoder.encode("%PDF-1.4\n%RedlineHQ\n")];
     const offsets = [0];
     let length = chunks[0].length;
     objects.forEach((object, index) => {
-      const head = encoder.encode(\`\${index + 1} 0 obj\n\`);
+      const head = encoder.encode(`${index + 1} 0 obj\n`);
       const tail = encoder.encode("\nendobj\n");
       offsets.push(length);
       const chunk = new Uint8Array(head.length + object.length + tail.length);
@@ -136,11 +136,11 @@ export default function QrLabelDialog({ title, subtitle, value, onClose }: Props
     });
 
     const xrefOffset = length;
-    let xref = \`xref\n0 \${objects.length + 1}\n0000000000 65535 f \n\`;
+    let xref = `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
     for (let index = 1; index < offsets.length; index++) {
-      xref += \`\${String(offsets[index]).padStart(10, "0")} 00000 n \n\`;
+      xref += `${String(offsets[index]).padStart(10, "0")} 00000 n \n`;
     }
-    xref += \`trailer\n<< /Size \${objects.length + 1} /Root 1 0 R >>\nstartxref\n\${xrefOffset}\n%%EOF\`;
+    xref += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
     chunks.push(encoder.encode(xref));
 
     return new Blob(
@@ -171,7 +171,7 @@ export default function QrLabelDialog({ title, subtitle, value, onClose }: Props
       context.textBaseline = "top";
 
       const titleSize = Math.max(10, Math.round(minSide * 0.052));
-      context.font = \`700 \${titleSize}px Arial, sans-serif\`;
+      context.font = `700 ${titleSize}px Arial, sans-serif`;
       let y = margin;
       for (const line of wrapCanvasText(context, title, maxTextWidth)) {
         context.fillText(line, canvas.width / 2, y, maxTextWidth);
@@ -180,7 +180,7 @@ export default function QrLabelDialog({ title, subtitle, value, onClose }: Props
 
       if (subtitle?.trim()) {
         const subSize = Math.max(9, Math.round(titleSize * 0.78));
-        context.font = \`600 \${subSize}px Arial, sans-serif\`;
+        context.font = `600 ${subSize}px Arial, sans-serif`;
         for (const line of wrapCanvasText(context, subtitle.trim(), maxTextWidth)) {
           context.fillText(line, canvas.width / 2, y, maxTextWidth);
           y += subSize + 1;
@@ -210,7 +210,7 @@ export default function QrLabelDialog({ title, subtitle, value, onClose }: Props
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = \`\${title.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-\${dimensions.width}x\${dimensions.height}-label.pdf\`;
+      link.download = `${title.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${dimensions.width}x${dimensions.height}-label.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();
