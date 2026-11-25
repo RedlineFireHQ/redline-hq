@@ -196,8 +196,11 @@ html, body { margin: 0; padding: 0; width: ${width}in; height: ${height}in; }
 
         <div className="mt-5 rounded-xl border border-white/10 bg-white p-4">
           <p className="mb-2 text-center text-xs font-semibold uppercase tracking-wide text-neutral-500">Label preview · {dimensions.valid ? `${dimensions.width} × ${dimensions.height} in` : "Invalid size"}</p>
-          <div className="mx-auto flex flex-col items-center justify-between overflow-hidden bg-white p-2 text-center text-black shadow-sm"
-            style={{ width: "min(100%, 280px)", aspectRatio: dimensions.valid ? `${dimensions.width} / ${dimensions.height}` : "1 / 1" }}>
+          <div className="mx-auto flex max-w-full flex-col items-center justify-between overflow-hidden bg-white p-2 text-center text-black shadow-sm transition-[width] duration-200"
+            style={{
+              width: dimensions.valid ? `${Math.min(280, Math.max(120, dimensions.width * 120))}px` : "180px",
+              aspectRatio: dimensions.valid ? `${dimensions.width} / ${dimensions.height}` : "1 / 1",
+            }}>
             <div className="w-full leading-tight">
               <p className="break-words text-sm font-bold">{title}</p>
               {subtitle?.trim() ? <p className="mt-0.5 break-words text-xs font-semibold">{subtitle}</p> : null}
