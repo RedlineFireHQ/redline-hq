@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 type UpdateSupplyPayload = {
   itemName?: unknown;
+  manufacturer?: unknown;
   itemCategory?: unknown;
   unitOfMeasure?: unknown;
   customUnitOfMeasure?: unknown;
@@ -97,7 +98,7 @@ export async function GET(_: Request, context: RouteContext) {
     const { data: item, error: itemError } = await supabase
       .from("ems_supply_items")
       .select(
-        "id, item_name, item_category, unit_of_measure, custom_unit_of_measure, quantity_on_hand, reorder_threshold, critical_threshold, target_quantity, location, notes, status, qr_identifier, created_at, updated_at",
+        "id, item_name, manufacturer, item_category, unit_of_measure, custom_unit_of_measure, quantity_on_hand, reorder_threshold, critical_threshold, target_quantity, location, notes, status, qr_identifier, created_at, updated_at",
       )
       .eq("id", id)
       .eq("department_id", currentMember.departmentId)
@@ -191,6 +192,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
 
     const itemName = asTrimmedString(payload.itemName);
+    const manufacturer = asTrimmedString(payload.manufacturer).slice(0, 120) || null;
     const unitOfMeasureRaw = asTrimmedString(payload.unitOfMeasure).toLowerCase() as AllowedUnit;
     const customUnitOfMeasure = asTrimmedString(payload.customUnitOfMeasure) || null;
     const reorderThreshold = parseOptionalNumber(payload.reorderThreshold);
@@ -223,6 +225,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       .from("ems_supply_items")
       .update({
         item_name: itemName,
+        manufacturer,
         unit_of_measure: unitOfMeasureRaw,
         custom_unit_of_measure: unitOfMeasureRaw === "custom" ? customUnitOfMeasure : null,
         reorder_threshold: reorderThreshold,
@@ -235,7 +238,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       .eq("id", id)
       .eq("department_id", currentMember.departmentId)
       .select(
-        "id, item_name, item_category, unit_of_measure, custom_unit_of_measure, quantity_on_hand, reorder_threshold, critical_threshold, target_quantity, location, notes, status, qr_identifier, created_at, updated_at",
+        "id, item_name, manufacturer, item_category, unit_of_measure, custom_unit_of_measure, quantity_on_hand, reorder_threshold, critical_threshold, target_quantity, location, notes, status, qr_identifier, created_at, updated_at",
       )
       .single();
 
