@@ -2727,6 +2727,7 @@ export default function TrainingWorkspace({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <Link href="/reports/iso-training" className="inline-flex items-center justify-center rounded-xl border border-sky-500/40 bg-sky-500/10 px-4 py-2.5 text-sm font-semibold text-sky-100 transition hover:bg-sky-500/20">ISO Documentation</Link>
           <button
             type="button"
             onClick={openHomeworkModal}
