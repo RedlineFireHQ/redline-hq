@@ -1,4 +1,5 @@
 export type ReportCategoryKey =
+	| "scba-mask-fit"
 	| "training"
 	| "personnel"
 	| "certifications"

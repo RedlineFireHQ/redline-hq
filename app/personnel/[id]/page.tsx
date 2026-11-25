@@ -2,6 +2,7 @@ import PageLayout from "@/components/layout/PageLayout";
 import DepartmentRoleSelector from "@/components/personnel/DepartmentRoleSelector";
 import EditMemberButton from "@/components/personnel/EditMemberButton";
 import MemberReadinessCard from "@/components/personnel/MemberReadinessCard";
+import MaskFitHistory from "@/components/personnel/MaskFitHistory";
 import PersonnelEmsTracksSection from "@/components/personnel/PersonnelEmsTracksSection";
 import EmsContinuingEducationSection from "@/components/ems/EmsContinuingEducationSection";
 import { buildMemberEmsProgress } from "@/lib/ems/member-ems-progress";
@@ -1244,6 +1245,8 @@ export default async function PersonnelProfilePage({
           </div>
         )}
       </div>
+
+      <MaskFitHistory departmentId={currentMember.departmentId} memberId={id} />
 
       <div className="mt-6">
         <RoleRequirementsSection
