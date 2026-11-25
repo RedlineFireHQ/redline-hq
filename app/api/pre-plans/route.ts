@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 type CreatePrePlanPayload = {
   businessName?: unknown;
+  isoHighHazard?: unknown;
   address?: unknown;
   city?: unknown;
   state?: unknown;
@@ -430,6 +431,7 @@ export async function POST(request: Request) {
       .insert({
         department_id: currentMember.departmentId,
         business_name: businessName,
+        iso_high_hazard: payload.isoHighHazard === true,
         address,
         city,
         state,

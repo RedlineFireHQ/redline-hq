@@ -17,6 +17,8 @@ type TrainingCategoryRow = {
   name: string;
   description: string | null;
   active: boolean;
+  system_key: string | null;
+  compliance_bucket: string | null;
 };
 
 type DepartmentMemberRow = {
@@ -24,6 +26,9 @@ type DepartmentMemberRow = {
   first_name: string | null;
   last_name: string | null;
   role: string | null;
+  rank: string | null;
+  hire_start_date: string | null;
+  certifications: string | null;
 };
 
 type EmsCourseDefinitionRow = {
@@ -65,12 +70,12 @@ export default async function HomePage() {
   const [categoriesResult, membersResult, emsCourseDefinitionsResult] = await Promise.all([
     supabase
       .from("training_categories")
-      .select("id, name, description, active")
+      .select("id, name, description, active, system_key, compliance_bucket")
       .eq("department_id", currentMember.departmentId)
       .order("name", { ascending: true }),
     supabase
       .from("members")
-      .select("id, first_name, last_name, role")
+      .select("id, first_name, last_name, role, rank, hire_start_date, certifications")
       .eq("department_id", currentMember.departmentId)
       .eq("active", true)
       .order("last_name", { ascending: true })
@@ -88,6 +93,8 @@ export default async function HomePage() {
     name: typeof row.name === "string" ? row.name : "",
     description: typeof row.description === "string" ? row.description : null,
     active: row.active === true,
+    system_key: typeof row.system_key === "string" ? row.system_key : null,
+    compliance_bucket: typeof row.compliance_bucket === "string" ? row.compliance_bucket : null,
   }));
 
   const members: DepartmentMemberRow[] = (membersResult.data ?? []).map((row) => ({
@@ -95,6 +102,9 @@ export default async function HomePage() {
     first_name: typeof row.first_name === "string" ? row.first_name : null,
     last_name: typeof row.last_name === "string" ? row.last_name : null,
     role: typeof row.role === "string" ? row.role : null,
+    rank: typeof row.rank === "string" ? row.rank : null,
+    hire_start_date: typeof row.hire_start_date === "string" ? row.hire_start_date : null,
+    certifications: typeof row.certifications === "string" ? row.certifications : null,
   }));
 
   const emsCourseDefinitions: EmsCourseDefinitionRow[] = (emsCourseDefinitionsResult.data ?? []).map((row) => ({

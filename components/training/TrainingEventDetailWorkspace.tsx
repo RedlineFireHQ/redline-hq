@@ -7,6 +7,8 @@ import { ArrowLeft, CalendarDays, Clock3, MapPin, UserRound } from "lucide-react
 import { EMS_CORE_TOPICS, type EmsCoreTopicCode } from "@/lib/ems/requirements";
 import { triggerEmsAllocationRecalculationForMembers } from "@/lib/ems/recalculate-client";
 import { supabase } from "@/lib/supabase";
+import IsoTrainingFields, { type IsoTrainingFacilityOption, type IsoPrePlanOption } from "@/components/training/IsoTrainingFields";
+import { facilityQualifiesForIso } from "@/lib/training/iso-training";
 
 type CurrentMemberRole = "firefighter" | "officer" | "administrator";
 
@@ -15,6 +17,8 @@ type TrainingCategoryRow = {
   name: string;
   description: string | null;
   active: boolean;
+  system_key: string | null;
+  compliance_bucket: string | null;
 };
 
 type TrainingEventRow = {
@@ -37,6 +41,14 @@ type TrainingEventRow = {
   hours_credit: number | null;
   status: string;
   supporting_document_id: string | null;
+  iso_classifications: string[];
+  iso_classification: string | null;
+  iso_facility_id: string | null;
+  iso_pre_plan_id: string | null;
+  iso_driver_operator_training_type: string | null;
+  iso_qualifying_facility: boolean;
+  iso_facility_credit_level: string;
+  iso_facility_stories: number | null;
 };
 
 type TrainingAttendanceRow = {
@@ -82,6 +94,8 @@ interface TrainingEventDetailWorkspaceProps {
   emsCourseDefinitions: EmsCourseDefinitionRow[];
   members: DepartmentMemberRow[];
   attendanceRows: TrainingAttendanceRow[];
+  facilities: IsoTrainingFacilityOption[];
+  prePlans: IsoPrePlanOption[];
 }
 
 type EventFormState = {
@@ -102,6 +116,10 @@ type EventFormState = {
   description: string;
   status: string;
   supportingDocumentId: string;
+  isoClassifications: string[];
+  isoFacilityId: string;
+  isoPrePlanId: string;
+  isoDriverOperatorTrainingType: string;
 };
 
 const MILITARY_TIME_OPTIONS = Array.from({ length: 24 * 4 }, (_, index) => {
@@ -209,8 +227,8 @@ function normalizeSearchValue(value: string) {
   return value.toLowerCase().trim().replace(/\s+/g, " ");
 }
 
-function isEmsCategoryName(value: string | null | undefined) {
-  return (value ?? "").trim().toLowerCase() === "ems";
+function isEmsCategoryName(category: TrainingCategoryRow | null | undefined) {
+  return category?.system_key === "ems_continuing_education" || category?.compliance_bucket === "ems_ce" || (category?.name ?? "").trim().toLowerCase() === "ems";
 }
 
 function initialFormState(trainingEvent: TrainingEventRow): EventFormState {
@@ -235,6 +253,10 @@ function initialFormState(trainingEvent: TrainingEventRow): EventFormState {
     description: trainingEvent.description ?? "",
     status: trainingEvent.status,
     supportingDocumentId: trainingEvent.supporting_document_id ?? "",
+    isoClassifications: Array.isArray(trainingEvent.iso_classifications) ? trainingEvent.iso_classifications : trainingEvent.iso_classification ? [trainingEvent.iso_classification] : [],
+    isoFacilityId: trainingEvent.iso_facility_id ?? "",
+    isoPrePlanId: trainingEvent.iso_pre_plan_id ?? "",
+    isoDriverOperatorTrainingType: trainingEvent.iso_driver_operator_training_type ?? "",
   };
 }
 
@@ -249,6 +271,8 @@ export default function TrainingEventDetailWorkspace({
   emsCourseDefinitions,
   members,
   attendanceRows,
+  facilities,
+  prePlans,
 }: TrainingEventDetailWorkspaceProps) {
   const router = useRouter();
   const [eventState, setEventState] = useState(trainingEvent);
@@ -369,10 +393,26 @@ export default function TrainingEventDetailWorkspace({
     }
 
     const selectedCategory = categoryLookup.get(formState.categoryId);
-    const isEmsTraining = isEmsCategoryName(selectedCategory?.name);
+    const isEmsTraining = isEmsCategoryName(selectedCategory);
     const emsCoreTopic = isEmsTraining ? formState.emsCoreTopic : null;
     const emsCourseDefinitionId = isEmsTraining ? (formState.emsCourseDefinitionId || null) : null;
     const emsNeedsReview = isEmsTraining && (formState.emsNeedsReview || formState.emsCoreTopic === "other");
+
+    if (formState.isoClassifications.includes("training_facilities")) {
+      const facility = facilities.find((item) => item.id === formState.isoFacilityId);
+      if (!facility || !facilityQualifiesForIso(facility, formState.date)) {
+        setEventError("Select a qualifying training facility before assigning ISO Training Facilities credit.");
+        return;
+      }
+    }
+    if (formState.isoClassifications.includes("driver_operator") && !formState.isoDriverOperatorTrainingType) {
+      setEventError("Select initial or refresher training for ISO Driver / Operator classification.");
+      return;
+    }
+    if (formState.isoClassifications.includes("building_familiarization") && !formState.isoPrePlanId) {
+      setEventError("Select the building pre-plan visited for ISO Building Familiarization.");
+      return;
+    }
 
     if (!formState.date) {
       setEventError("Date is required.");
@@ -432,6 +472,11 @@ export default function TrainingEventDetailWorkspace({
           topic: isEmsTraining ? emsCoreTopic : topic || null,
           training_type: trainingType || null,
           is_ems_training: isEmsTraining,
+          iso_classifications: formState.isoClassifications,
+          iso_classification: formState.isoClassifications[0] ?? null,
+          iso_facility_id: formState.isoFacilityId || null,
+          iso_pre_plan_id: formState.isoPrePlanId || null,
+          iso_driver_operator_training_type: formState.isoDriverOperatorTrainingType || null,
           ems_core_topic: emsCoreTopic,
           ems_course_definition_id: emsCourseDefinitionId,
           ems_needs_review: emsNeedsReview,
@@ -450,7 +495,7 @@ export default function TrainingEventDetailWorkspace({
         .eq("id", eventState.id)
         .eq("department_id", departmentId)
         .select(
-          "id, title, category_id, topic, training_type, is_ems_training, ems_core_topic, ems_course_definition_id, ems_needs_review, ems_provider_name, description, location, instructor_name, starts_at, ends_at, duration_minutes, hours_credit, status, supporting_document_id",
+          "id, title, category_id, topic, training_type, is_ems_training, ems_core_topic, ems_course_definition_id, ems_needs_review, ems_provider_name, description, location, instructor_name, starts_at, ends_at, duration_minutes, hours_credit, status, supporting_document_id, iso_classifications, iso_classification, iso_facility_id, iso_pre_plan_id, iso_driver_operator_training_type, iso_qualifying_facility, iso_facility_credit_level, iso_facility_stories",
         )
         .single();
 
@@ -490,6 +535,14 @@ export default function TrainingEventDetailWorkspace({
           typeof data.supporting_document_id === "string"
             ? data.supporting_document_id
             : formState.supportingDocumentId || null,
+        iso_classifications: Array.isArray(data.iso_classifications) ? data.iso_classifications.filter((value): value is string => typeof value === "string") : formState.isoClassifications,
+        iso_classification: typeof data.iso_classification === "string" ? data.iso_classification : formState.isoClassifications[0] ?? null,
+        iso_facility_id: typeof data.iso_facility_id === "string" ? data.iso_facility_id : formState.isoFacilityId || null,
+        iso_pre_plan_id: typeof data.iso_pre_plan_id === "string" ? data.iso_pre_plan_id : formState.isoPrePlanId || null,
+        iso_driver_operator_training_type: typeof data.iso_driver_operator_training_type === "string" ? data.iso_driver_operator_training_type : formState.isoDriverOperatorTrainingType || null,
+        iso_qualifying_facility: data.iso_qualifying_facility === true,
+        iso_facility_credit_level: typeof data.iso_facility_credit_level === "string" ? data.iso_facility_credit_level : "none",
+        iso_facility_stories: typeof data.iso_facility_stories === "number" ? data.iso_facility_stories : null,
       };
 
       setEventState(updatedEvent);
@@ -887,7 +940,7 @@ export default function TrainingEventDetailWorkspace({
                 <option value="">Select category</option>
                 {categoryOptions.map((category) => (
                   <option key={category.id} value={category.id}>
-                    {category.name}{!category.active ? " (Inactive)" : ""}
+                    {isEmsCategoryName(category) ? "EMS Continuing Education" : category.name}{!category.active ? " (Inactive)" : ""}
                   </option>
                 ))}
               </select>
@@ -917,10 +970,10 @@ export default function TrainingEventDetailWorkspace({
               </div>
             </label>
 
-            {isEmsCategoryName(categoryLookup.get(formState.categoryId)?.name) ? (
+            {isEmsCategoryName(categoryLookup.get(formState.categoryId)) ? (
               <>
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">EMS Core Topic</span>
+                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">EMS Subject Area</span>
                   <select
                     value={formState.emsCoreTopic}
                     onChange={(event) => setFormState((current) => ({ ...current, emsCoreTopic: event.target.value as EmsCoreTopicCode }))}
@@ -974,6 +1027,22 @@ export default function TrainingEventDetailWorkspace({
                 />
               </label>
             )}
+
+            <div className="md:col-span-2">
+              <IsoTrainingFields
+                classifications={formState.isoClassifications}
+                onClassificationsChange={(next) => setFormState((current) => ({ ...current, isoClassifications: next }))}
+                facilityId={formState.isoFacilityId}
+                onFacilityChange={(next) => setFormState((current) => ({ ...current, isoFacilityId: next }))}
+                facilities={facilities}
+                eventDate={formState.date}
+                prePlanId={formState.isoPrePlanId}
+                onPrePlanChange={(next) => setFormState((current) => ({ ...current, isoPrePlanId: next }))}
+                prePlans={prePlans}
+                driverOperatorTrainingType={formState.isoDriverOperatorTrainingType}
+                onDriverOperatorTrainingTypeChange={(next) => setFormState((current) => ({ ...current, isoDriverOperatorTrainingType: next }))}
+              />
+            </div>
 
             <label className="block">
               <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Date *</span>

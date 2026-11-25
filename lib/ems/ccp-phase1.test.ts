@@ -226,7 +226,7 @@ test("Pediatric is selectable and credited for every Iowa level with its current
   assert.ok(EMS_CORE_TOPICS.some((topic) => topic.code === "pediatric" && topic.label === "Pediatric"));
   for (const level of ["emr", "emt", "aemt", "paramedic", "ccp"] as const) {
     assert.ok(isTopicApplicableToTrack("pediatric", "iowa", level));
-    assert.equal(isTopicApplicableToTrack("critical_care_paramedic", "iowa", level), level === "ccp");
+    assert.equal(EMS_CORE_TOPICS.some((topic) => topic.code === "critical_care_paramedic"), false);
     if (level !== "ccp") assert.equal(isTopicApplicableToTrack("pediatric", "nremt", level), false);
     const pediatric = getIowaTopicRequirements(level).find((topic) => topic.topic === "pediatric");
     assert.equal(pediatric?.requiredHours, pediatricHours[level]);

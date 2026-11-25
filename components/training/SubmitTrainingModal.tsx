@@ -12,6 +12,8 @@ type TrainingCategoryRow = {
   id: string;
   name: string;
   active: boolean;
+  system_key: string | null;
+  compliance_bucket: string | null;
 };
 
 type EmsCourseDefinitionRow = {
@@ -102,8 +104,8 @@ function emptyOutsideTrainingFormState(defaultCategoryId: string): OutsideTraini
   };
 }
 
-function isEmsCategoryName(value: string | null | undefined) {
-  return (value ?? "").trim().toLowerCase() === "ems";
+function isEmsCategoryName(category: TrainingCategoryRow | null | undefined) {
+  return category?.system_key === "ems_continuing_education" || category?.compliance_bucket === "ems_ce" || (category?.name ?? "").trim().toLowerCase() === "ems";
 }
 
 function sanitizeFileName(name: string) {
@@ -167,7 +169,7 @@ export default function SubmitTrainingModal({
     const details = outsideFormState.details.trim();
     const emsProviderName = outsideFormState.emsProviderName.trim();
     const selectedCategoryForEms = activeCategories.find((category) => category.id === outsideFormState.categoryId);
-    const isEmsTraining = isEmsCategoryName(selectedCategoryForEms?.name);
+    const isEmsTraining = isEmsCategoryName(selectedCategoryForEms);
     const emsCourseDefinitionId = isEmsTraining ? (outsideFormState.emsCourseDefinitionId || null) : null;
     const emsCoreTopic = isEmsTraining ? outsideFormState.emsCoreTopic : null;
     const emsNeedsReview =
@@ -389,7 +391,7 @@ export default function SubmitTrainingModal({
               <option value="">Select category</option>
               {activeCategories.map((category) => (
                 <option key={category.id} value={category.id}>
-                  {category.name}
+                  {isEmsCategoryName(category) ? "EMS Continuing Education" : category.name}
                 </option>
               ))}
             </select>
@@ -441,10 +443,10 @@ export default function SubmitTrainingModal({
             </div>
           </label>
 
-          {isEmsCategoryName(activeCategories.find((category) => category.id === outsideFormState.categoryId)?.name) ? (
+          {isEmsCategoryName(activeCategories.find((category) => category.id === outsideFormState.categoryId)) ? (
             <>
               <label className="block">
-                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">EMS Core Topic</span>
+                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">EMS Subject Area</span>
                 <select
                   value={outsideFormState.emsCoreTopic}
                   onChange={(event) => setOutsideFormState((current) => ({ ...current, emsCoreTopic: event.target.value as EmsCoreTopicCode }))}
