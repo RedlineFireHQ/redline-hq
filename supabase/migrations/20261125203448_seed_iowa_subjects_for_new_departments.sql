@@ -10,9 +10,9 @@ insert into public.training_categories(department_id,name,description,active,com
 (new.id,'Officer Development','Officer development.',true,'fire_annual','officer_development',null),
 (new.id,'Building Familiarization / Pre-Planning','Building visits and pre-incident planning.',true,'fire_annual','building_familiarization',null),
 (new.id,'Recruit Training','Recruit training.',true,'fire_annual','recruit_training',null),
-(new.id,'Safety','Firefighter safety and risk management.',true,'fire_annual','safety',null),
+(new.id,'Safety','Iowa subjects: firefighter safety, PPE, and respiratory protection.',true,'fire_annual','safety','01,08'),
 (new.id,'Other Training','Iowa local-needs training subject.',true,'fire_annual','other_training',null),
-(new.id,'PPE / Respiratory Protection','Personal protective equipment and respiratory protection.',true,'fire_annual','iowa_ppe_respiratory','01'),
+
 (new.id,'Structural Firefighting / SOPs & SOGs','Structural firefighting techniques including SOPs and SOGs.',true,'fire_annual','iowa_structural_firefighting','02'),
 (new.id,'Ground Ladders','Ground ladders.',true,'fire_annual','iowa_ground_ladders','03'),
 (new.id,'Hose & Hose Appliances','Hose and hose appliances.',true,'fire_annual','iowa_hose_appliances','04'),
