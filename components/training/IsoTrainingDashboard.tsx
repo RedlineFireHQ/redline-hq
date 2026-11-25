@@ -26,6 +26,8 @@ type MemberRow = {
   id: string;
   role: string | null;
   rank: string | null;
+  hire_start_date: string | null;
+  certifications: string | null;
 };
 
 interface Props {
@@ -49,6 +51,14 @@ export default function IsoTrainingDashboard({ events, attendanceRows, members, 
       return role.includes("officer") || role.includes("administrator") || /(chief|captain|lieutenant|lieut|battalion)/.test(rank);
     }).map((member) => member.id));
     const totalActiveMembers = Math.max(1, members.length);
+    const now = new Date();
+    const recruitMembers = members.filter((member) => {
+      if (!member.hire_start_date) return false;
+      const start = new Date(`${member.hire_start_date}T00:00:00`);
+      const days = (now.getTime() - start.getTime()) / 86400000;
+      const hasFirefighterI = (member.certifications ?? "").toLowerCase().includes("firefighter i");
+      return Number.isFinite(start.getTime()) && days >= 0 && days <= 365 && !hasFirefighterI;
+    });
     const rows = ISO_TRAINING_CLASSIFICATIONS.map((classification) => {
       const eligibleEvents = completedEvents.filter((event) => {
         if (!event.iso_classifications.includes(classification.code)) return false;
@@ -75,6 +85,7 @@ export default function IsoTrainingDashboard({ events, attendanceRows, members, 
       };
     });
 
+    const memberHours = calculateIsoMemberHours({ events, attendance: attendanceRows, year });
     const visitsByPlan = new Map<string, number>();
     for (const event of completedEvents) {
       if (!event.iso_classifications.includes("building_familiarization") || !event.iso_pre_plan_id) continue;
@@ -85,11 +96,15 @@ export default function IsoTrainingDashboard({ events, attendanceRows, members, 
     const initialDriverHours = completedEvents.filter((event) => event.iso_classifications.includes("driver_operator") && event.iso_driver_operator_training_type === "initial").reduce((sum, event) => sum + attendanceRows.filter((row) => row.training_event_id === event.id && row.attendance_status === "attending").reduce((eventSum, row) => eventSum + Math.max(0, row.hours_earned ?? event.hours_credit ?? 0), 0), 0);
     const refresherDriverHours = completedEvents.filter((event) => event.iso_classifications.includes("driver_operator") && event.iso_driver_operator_training_type === "refresher").reduce((sum, event) => sum + attendanceRows.filter((row) => row.training_event_id === event.id && row.attendance_status === "attending").reduce((eventSum, row) => eventSum + Math.max(0, row.hours_earned ?? event.hours_credit ?? 0), 0), 0);
     const company = rows.find((row) => row.code === "company_training");
+    const recruit = rows.find((row) => row.code === "recruit");
     const facility = rows.find((row) => row.code === "training_facilities");
     const hazmat = rows.find((row) => row.code === "hazmat");
     const officer = rows.find((row) => row.code === "officer_training");
+    const recruitMemberHours = recruitMembers.reduce((sum, member) => sum + (memberHours.get(member.id)?.recruit ?? 0), 0);
+    const recruitAverageHours = recruitMembers.length ? recruitMemberHours / recruitMembers.length : 0;
+    const companyAverageMonthlyHours = (company?.averagePerPerson ?? 0) / 12;
     const preplanCoverage = activePlans.length ? Math.round((plansMeetingVisitTarget / activePlans.length) * 100) : 0;
-    return { rows, facility, company, hazmat, officer, initialDriverHours, refresherDriverHours, activePlans: activePlans.length, plansMeetingVisitTarget, preplanCoverage, totalActiveMembers };
+    return { rows, facility, company, hazmat, officer, recruitAverageHours, recruitCount: recruitMembers.length, companyAverageMonthlyHours, initialDriverHours, refresherDriverHours, activePlans: activePlans.length, plansMeetingVisitTarget, preplanCoverage, totalActiveMembers };
   }, [events, attendanceRows, members, prePlans, year]);
 
   return (
@@ -105,7 +120,7 @@ export default function IsoTrainingDashboard({ events, attendanceRows, members, 
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div className="text-xs text-slate-400">Qualifying facility hours / member</div><div className="mt-1 text-xl font-bold text-white">{hours(summary.facility?.averagePerPerson ?? 0)} <span className="text-xs font-medium text-slate-400">/ 18</span></div></div>
-        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div className="text-xs text-slate-400">Company training / member</div><div className="mt-1 text-xl font-bold text-white">{hours(summary.company?.averagePerPerson ?? 0)} <span className="text-xs font-medium text-slate-400">/ 192 yearly</span></div></div>
+        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div className="text-xs text-slate-400">Company training / member / month</div><div className="mt-1 text-xl font-bold text-white">{hours(summary.companyAverageMonthlyHours)} <span className="text-xs font-medium text-slate-400">/ 16</span></div></div>
         <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div className="text-xs text-slate-400">HazMat / member</div><div className="mt-1 text-xl font-bold text-white">{hours(summary.hazmat?.averagePerPerson ?? 0)} <span className="text-xs font-medium text-slate-400">/ 6</span></div></div>
         <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div className="text-xs text-slate-400">Officer training / officer</div><div className="mt-1 text-xl font-bold text-white">{hours(summary.officer?.averagePerPerson ?? 0)} <span className="text-xs font-medium text-slate-400">/ 12</span></div></div>
       </div>
@@ -133,7 +148,7 @@ export default function IsoTrainingDashboard({ events, attendanceRows, members, 
       <div className="mt-4 grid gap-3 md:grid-cols-3">
         <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Driver / Operator</div><div className="mt-2 text-sm text-white">Initial: {hours(summary.initialDriverHours)}</div><div className="mt-1 text-sm text-white">Refresher: {hours(summary.refresherDriverHours)}</div><p className="mt-2 text-xs text-slate-400">60-hour initial benchmark; 12-hour annual refresher benchmark.</p></div>
         <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Building familiarization</div><div className="mt-2 text-lg font-bold text-white">{summary.plansMeetingVisitTarget} / {summary.activePlans} properties</div><p className="mt-1 text-xs text-slate-400">{summary.preplanCoverage}% of active pre-plans have the required annual visit count. High-hazard properties require two visits.</p></div>
-        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Officer qualification</div><div className="mt-2 text-sm text-white">12 training hours per officer per year</div><p className="mt-1 text-xs text-slate-400">Fire Officer I or equivalent certification must also be maintained and verified in Personnel certifications.</p></div>
+        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Recruit training</div><div className="mt-2 text-lg font-bold text-white">{hours(summary.recruitAverageHours)} average · {summary.recruitCount} recruits</div><p className="mt-1 text-xs text-slate-400">240 hours during the first year for recruits without Firefighter I.</p></div>
       </div>
     </section>
   );
