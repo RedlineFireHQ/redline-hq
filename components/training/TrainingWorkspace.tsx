@@ -850,7 +850,7 @@ export default function TrainingWorkspace({
 
     setSaveError(null);
     setSuccessMessage(null);
-    setFormState(emptyFormState(activeCategories[0]?.id ?? ""));
+    setFormState(emptyFormState(activeCategories.find((category) => category.system_key === "fire_training")?.id ?? activeCategories[0]?.id ?? ""));
     setMemberSearch("");
     setSelectedMemberIds(new Set());
     setIsModalOpen(true);
