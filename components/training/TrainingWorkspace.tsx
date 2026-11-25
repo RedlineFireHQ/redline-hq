@@ -10,6 +10,7 @@ import { triggerEmsAllocationRecalculation, triggerEmsAllocationRecalculationFor
 import { supabase } from "@/lib/supabase";
 import SubmitTrainingModal from "@/components/training/SubmitTrainingModal";
 import type { SelfReportedTraining } from "@/components/training/TrainingDepartmentOverview";
+import { ISO_FACILITY_TYPES, ISO_TRAINING_CLASSIFICATIONS, suggestIsoTrainingClassification, type IsoFacilityType, type IsoTrainingClassification } from "@/lib/training/iso-classifications";
 
 type CurrentMemberRole = "firefighter" | "officer" | "administrator";
 
@@ -40,6 +41,10 @@ type TrainingEventRow = {
   hours_credit: number | null;
   status: string;
   supporting_document_id: string | null;
+  iso_classification: string | null;
+  iso_qualifying_facility: boolean;
+  iso_facility_type: string | null;
+  iso_facility_agreement: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -195,6 +200,10 @@ type TrainingEventFormState = {
   instructorName: string;
   location: string;
   details: string;
+  isoClassification: IsoTrainingClassification | "";
+  isoQualifyingFacility: boolean;
+  isoFacilityType: IsoFacilityType | "";
+  isoFacilityAgreement: boolean;
 };
 
 type HomeworkAssignmentFormState = {
@@ -231,10 +240,14 @@ const MILITARY_TIME_OPTIONS = Array.from({ length: 24 * 4 }, (_, index) => {
   return `${String(hours).padStart(2, "0")}${String(minutes).padStart(2, "0")}`;
 });
 
-function emptyFormState(defaultCategoryId: string): TrainingEventFormState {
+function emptyFormState(defaultCategoryId: string, defaultCategoryName = ""): TrainingEventFormState {
   return {
     title: "",
     categoryId: defaultCategoryId,
+    isoClassification: suggestIsoTrainingClassification(defaultCategoryName),
+    isoQualifyingFacility: false,
+    isoFacilityType: "",
+    isoFacilityAgreement: false,
     emsCoreTopic: "other",
     emsCourseDefinitionId: "",
     emsNeedsReview: false,
@@ -576,7 +589,7 @@ export default function TrainingWorkspace({
   );
 
   const [formState, setFormState] = useState<TrainingEventFormState>(
-    emptyFormState(activeCategories[0]?.id ?? ""),
+    emptyFormState(activeCategories[0]?.id ?? "", activeCategories[0]?.name ?? ""),
   );
 
   const membersTrainedCount = useMemo(() => {
