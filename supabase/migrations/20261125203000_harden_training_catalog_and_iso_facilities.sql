@@ -234,3 +234,12 @@ begin
   return new;
 end;
 $$;
+
+
+drop trigger if exists trg_sync_training_event_iso_fields on public.training_events;
+create trigger trg_sync_training_event_iso_fields
+before insert or update of
+  department_id, starts_at, iso_classification, iso_classifications, iso_facility_id,
+  iso_pre_plan_id, iso_qualifying_facility, iso_facility_type, iso_facility_agreement
+on public.training_events
+for each row execute function public.sync_training_event_iso_fields();
