@@ -595,7 +595,7 @@ export default function TrainingWorkspace({
   }, [isHomeworkModalOpen, isModalOpen]);
 
   const activeCategories = useMemo(
-    () => categories.filter((category) => category.active),
+    () => categories.filter((category) => category.active && category.name.trim().toLowerCase() !== "fire suppression"),
     [categories],
   );
 
