@@ -40,6 +40,8 @@ type TrainingEventRow = {
   iso_pre_plan_id: string | null;
   iso_driver_operator_training_type: string | null;
   iso_qualifying_facility: boolean;
+  iso_facility_credit_level: string;
+  iso_facility_stories: number | null;
 };
 
 type TrainingAttendanceRow = {
@@ -108,7 +110,7 @@ export default async function TrainingEventDetailPage({
     supabase
       .from("training_events")
       .select(
-        "id, title, category_id, topic, training_type, is_ems_training, ems_core_topic, ems_course_definition_id, ems_needs_review, ems_provider_name, description, location, instructor_name, starts_at, ends_at, duration_minutes, hours_credit, status, supporting_document_id, iso_classifications, iso_classification, iso_facility_id, iso_pre_plan_id, iso_driver_operator_training_type, iso_qualifying_facility",
+        "id, title, category_id, topic, training_type, is_ems_training, ems_core_topic, ems_course_definition_id, ems_needs_review, ems_provider_name, description, location, instructor_name, starts_at, ends_at, duration_minutes, hours_credit, status, supporting_document_id, iso_classifications, iso_classification, iso_facility_id, iso_pre_plan_id, iso_driver_operator_training_type, iso_qualifying_facility, iso_facility_credit_level, iso_facility_stories",
       )
       .eq("department_id", currentMember.departmentId)
       .eq("id", id)
@@ -218,6 +220,8 @@ export default async function TrainingEventDetailPage({
     iso_pre_plan_id: typeof eventData.iso_pre_plan_id === "string" ? eventData.iso_pre_plan_id : null,
     iso_driver_operator_training_type: typeof eventData.iso_driver_operator_training_type === "string" ? eventData.iso_driver_operator_training_type : null,
     iso_qualifying_facility: eventData.iso_qualifying_facility === true,
+    iso_facility_credit_level: typeof eventData.iso_facility_credit_level === "string" ? eventData.iso_facility_credit_level : "none",
+    iso_facility_stories: typeof eventData.iso_facility_stories === "number" ? eventData.iso_facility_stories : null,
   };
 
   const categories: TrainingCategoryRow[] = (categoriesData ?? []).map((row) => ({
