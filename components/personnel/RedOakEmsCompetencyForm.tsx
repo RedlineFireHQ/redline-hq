@@ -14,7 +14,7 @@ type Props = { members: Member[]; verifications: RedOakCompetencyVerification[] 
 
 const field = "mt-1 w-full rounded-lg border border-white/15 bg-neutral-950 px-3 py-2 text-white";
 const blankSkills = (): RedOakCompetencySkillResult[] => RED_OAK_EMS_COMPETENCY_SKILLS.map((skill) => ({
-  skill_key: skill.key, status: "Competent", evaluator: "", date: "",
+  skill_key: skill.key, status: "", evaluator: "", date: "",
 }));
 
 export default function RedOakEmsCompetencyForm({ members, verifications }: Props) {
@@ -54,7 +54,7 @@ export default function RedOakEmsCompetencyForm({ members, verifications }: Prop
     setCertificationLevel(row.certification_level); setEvaluator(row.evaluator);
     setSkills(RED_OAK_EMS_COMPETENCY_SKILLS.map((skill) =>
       row.skill_results.find((result) => result.skill_key === skill.key) ?? {
-        skill_key: skill.key, status: "Competent", evaluator: "", date: "",
+        skill_key: skill.key, status: "", evaluator: "", date: "",
       }));
     setRemediationSkills(row.remediation_skills ?? "");
     setRemediationTraining(row.remediation_training_completed ?? "");
@@ -78,7 +78,7 @@ export default function RedOakEmsCompetencyForm({ members, verifications }: Prop
       setMessage("Complete the member, verification year, certification level, and evaluator first.");
       return;
     }
-    if (skills.some((skill) => !skill.evaluator.trim() || !skill.date)) {
+    if (skills.some((skill) => !skill.status || !skill.evaluator.trim() || !skill.date)) {
       setMessage("Each skill needs an evaluator and verification date.");
       return;
     }
@@ -122,9 +122,9 @@ export default function RedOakEmsCompetencyForm({ members, verifications }: Prop
         <h2 className="text-xl font-semibold">EMS Skills Competency Verification</h2>
         <p className="mt-1 text-sm text-neutral-400">CQI Policy – Section D: Skill Maintenance · Frequency: Annually</p>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <label className="text-sm">Member Name<select className={field} value={memberId} onChange={(e) => setMemberId(e.target.value)}><option value="">Select member</option>{members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
+          <label className="text-sm">Member Name<select className={field} disabled={Boolean(selectedId)} value={memberId} onChange={(e) => setMemberId(e.target.value)}><option value="">Select member</option>{members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
           <label className="text-sm">Certification Level<input className={field} value={certificationLevel} onChange={(e) => setCertificationLevel(e.target.value)} placeholder="e.g. EMT, AEMT, Paramedic" /></label>
-          <label className="text-sm">Verification Year<input className={field} type="number" min="2000" max="2200" value={year} onChange={(e) => setYear(e.target.value)} /></label>
+          <label className="text-sm">Verification Year<input className={field} disabled={Boolean(selectedId)} type="number" min="2000" max="2200" value={year} onChange={(e) => setYear(e.target.value)} /></label>
           <label className="text-sm">Evaluator<input className={field} value={evaluator} onChange={(e) => setEvaluator(e.target.value)} /></label>
         </div>
 
@@ -137,7 +137,7 @@ export default function RedOakEmsCompetencyForm({ members, verifications }: Prop
                 return <div key={skill.key} className="rounded-xl border border-white/10 p-3">
                   <p className="font-medium">{index + 1}. {skill.label}</p>
                   <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <label className="text-xs text-neutral-400">Verification<select className={field} value={result.status} onChange={(e) => updateSkill(skill.key, { status: e.target.value as RedOakCompetencySkillStatus })}><option>Competent</option><option>Remediation Required</option><option>N/A</option></select></label>
+                    <label className="text-xs text-neutral-400">Verification<select className={field} value={result.status} onChange={(e) => updateSkill(skill.key, { status: e.target.value as RedOakCompetencySkillStatus | "" })}><option value="">Select</option><option>Competent</option><option>Remediation Required</option><option>N/A</option></select></label>
                     <label className="text-xs text-neutral-400">Evaluator<input className={field} value={result.evaluator} onChange={(e) => updateSkill(skill.key, { evaluator: e.target.value })} /></label>
                     <label className="text-xs text-neutral-400">Date<input className={field} type="date" value={result.date} onChange={(e) => updateSkill(skill.key, { date: e.target.value })} /></label>
                   </div>
