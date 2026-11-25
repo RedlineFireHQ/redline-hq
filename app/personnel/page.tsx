@@ -9,6 +9,7 @@ import { getCurrentMember } from "@/lib/current-member";
 import { canManagePersonnel } from "@/lib/member-permissions";
 import { canViewEmsCeProgress } from "@/lib/ems/department-ems-progress-data";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { RED_OAK_FIRE_DEPARTMENT_ID } from "@/lib/red-oak-ems-competency";
 import {
   buildCanonicalMemberCertificationRows,
   getRoleRequirementStatus,
@@ -257,6 +258,14 @@ export default async function PersonnelPage() {
           >
             SCBA Mask Fit Test
           </Link>
+          {currentMember.departmentId === RED_OAK_FIRE_DEPARTMENT_ID ? (
+            <Link
+              href="/personnel/ems-skills-competency"
+              className="rounded-xl border border-white/15 bg-neutral-900 px-4 py-2 text-sm font-semibold text-neutral-200 hover:border-white/40"
+            >
+              EMS Skills Competency
+            </Link>
+          ) : null}
           {canSeeEmsCeProgress ? (
             <Link
               href="/ems-ce-progress"

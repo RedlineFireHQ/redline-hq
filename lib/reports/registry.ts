@@ -908,6 +908,23 @@ export const REPORT_SOURCES: ReportSourceConfig[] = [
 			{ key: "related_item", label: "Related Item" },
 		],
 	},
+	{
+		key: "red-oak-ems-competency",
+		name: "EMS Skills Competency Verification",
+		description: "Red Oak annual EMS skills competency checkoffs and final verification.",
+		availability: "available",
+		filters: [
+			{ key: "member_id", label: "Member", type: "select", options: [{ value: "all", label: "All Members" }] },
+			{ key: "verification_year", label: "Verification Year", type: "text", placeholder: "e.g. 2026" },
+		],
+		columns: [
+			{ key: "member_name", label: "Member" },
+			{ key: "verification_year", label: "Verification Year" },
+			{ key: "certification_level", label: "Certification Level" },
+			{ key: "overall_status", label: "Overall Status" },
+			{ key: "evaluator", label: "Evaluator" },
+		],
+	}
 ];
 
 export function getReportSourceConfig(categoryKey: string) {

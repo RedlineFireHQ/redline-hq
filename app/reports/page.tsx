@@ -3,6 +3,7 @@ import ReportsWorkspace from "@/components/reports/ReportsWorkspace";
 import { getCurrentMember } from "@/lib/current-member";
 import { hasDepartmentPermission } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { RED_OAK_FIRE_DEPARTMENT_ID } from "@/lib/red-oak-ems-competency";
 
 type ReportMemberOption = {
   id: string;
@@ -320,6 +321,7 @@ export default async function ReportsPage() {
   return (
     <ReportsWorkspace
       isAuthenticated={Boolean(currentMember?.departmentId)}
+      isRedOakDepartment={currentMember.departmentId === RED_OAK_FIRE_DEPARTMENT_ID}
       departmentName={departmentName}
       members={members}
       trainingCategories={trainingCategories}

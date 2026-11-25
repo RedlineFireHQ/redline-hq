@@ -7,6 +7,7 @@ import { REPORT_SOURCES } from "@/lib/reports/registry";
 import { getInventoryReportTypeOptions } from "@/lib/reports/inventory-report";
 import { reportToCsv } from "@/lib/reports/csv";
 import { PrintableReportTable } from "./PrintableReportTable";
+import RedOakEmsCompetencyPrintable from "./RedOakEmsCompetencyPrintable";
 import type {
 	ReportColumn,
 	ReportDatePresetKey,
@@ -21,6 +22,7 @@ import type {
 
 type ReportsWorkspaceProps = {
 	isAuthenticated: boolean;
+	isRedOakDepartment: boolean;
 	departmentName: string | null;
 	initialError?: string | null;
 	members: Array<{
@@ -474,6 +476,7 @@ function ReportResultsTable({
 
 export default function ReportsWorkspace({
 	isAuthenticated,
+	isRedOakDepartment,
 	departmentName,
 	initialError = null,
 	members = [],
@@ -602,8 +605,9 @@ export default function ReportsWorkspace({
 			...inspectionGroundLadders.map((item) => ({ value: item.id, label: item.name })),
 		];
 
-		return REPORT_SOURCES.map((source) => {
-			if (source.key !== "scba-mask-fit" && source.key !== "training" && source.key !== "certifications" && source.key !== "maintenance" && source.key !== "apparatus" && source.key !== "personnel" && source.key !== "ems" && source.key !== "inspections" && source.key !== "activity" && source.key !== "inventory") {
+		const visibleSources = REPORT_SOURCES.filter((source) => source.key !== "red-oak-ems-competency" || isRedOakDepartment);
+		return visibleSources.map((source) => {
+			if (source.key !== "red-oak-ems-competency" && source.key !== "scba-mask-fit" && source.key !== "training" && source.key !== "certifications" && source.key !== "maintenance" && source.key !== "apparatus" && source.key !== "personnel" && source.key !== "ems" && source.key !== "inspections" && source.key !== "activity" && source.key !== "inventory") {
 				return source;
 			}
 
@@ -817,7 +821,7 @@ export default function ReportsWorkspace({
 				}),
 			};
 		});
-	}, [members, trainingCategories, certifications, apparatuses, apparatusCheckMembers, departmentRoles, inspectionFireHose, inspectionScbaCylinders, inspectionScbaPacks, inspectionGasMonitors, inspectionRopeItems, inspectionGroundLadders, emsEquipment, emsSupplies]);
+	}, [isRedOakDepartment, members, trainingCategories, certifications, apparatuses, apparatusCheckMembers, departmentRoles, inspectionFireHose, inspectionScbaCylinders, inspectionScbaPacks, inspectionGasMonitors, inspectionRopeItems, inspectionGroundLadders, emsEquipment, emsSupplies]);
 
 	const selectedSource = useMemo(
 		() => reportSources.find((source) => source.key === selectedCategory) ?? null,
@@ -1347,7 +1351,11 @@ export default function ReportsWorkspace({
 					) : null}
 					<p className="mt-2 text-sm text-black">Records: {result.totalRows}</p>
 
-					<PrintableReportTable columns={result.columns} rows={result.rows} />
+					{result.source.key === "red-oak-ems-competency" ? (
+						<RedOakEmsCompetencyPrintable rows={result.rows} />
+					) : (
+						<PrintableReportTable columns={result.columns} rows={result.rows} />
+					)}
 				</section>
 			) : null}
 		</div>

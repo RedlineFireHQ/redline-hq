@@ -3,6 +3,7 @@ import { hasDepartmentPermission } from "@/lib/member-permissions";
 import { runReport } from "@/lib/reports/server-runner";
 import type { ReportRunRequest } from "@/lib/reports/types";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
+import { RED_OAK_FIRE_DEPARTMENT_ID } from "@/lib/red-oak-ems-competency";
 
 function jsonResponse(payload: unknown, status = 200): Response {
 	return new Response(JSON.stringify(payload), {
@@ -90,6 +91,13 @@ export async function POST(request: Request) {
 			return jsonResponse(
 				{ ok: false, errorCode: "INVALID_INPUT", error: "Invalid report request payload." },
 				400,
+			);
+		}
+
+		if (payload.category === "red-oak-ems-competency" && currentMember.departmentId !== RED_OAK_FIRE_DEPARTMENT_ID) {
+			return jsonResponse(
+				{ ok: false, errorCode: "FORBIDDEN", error: "This report is available only to Red Oak Fire Department." },
+				403,
 			);
 		}
 

@@ -1,4 +1,5 @@
 export type ReportCategoryKey =
+	| "red-oak-ems-competency"
 	| "scba-mask-fit"
 	| "training"
 	| "personnel"
