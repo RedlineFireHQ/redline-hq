@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { RED_OAK_FIRE_DEPARTMENT_ID } from "@/lib/red-oak-ems-competency";
+import { canManagePersonnel } from "@/lib/member-permissions";
 import type { ReportRunRequest, ReportRunResponse, ReportSourceConfig } from "@/lib/reports/types";
 
 type Context = { supabase: SupabaseClient; departmentId: string; departmentName: string | null; memberRole: string };
@@ -11,6 +12,9 @@ export async function runRedOakEmsCompetencyReport(
 ): Promise<ReportRunResponse> {
   if (context.departmentId !== RED_OAK_FIRE_DEPARTMENT_ID) {
     return { ok: false, errorCode: "FORBIDDEN", error: "This report is available only to Red Oak Fire Department." };
+  }
+  if (!await canManagePersonnel(context.supabase, context.departmentId, context.memberRole)) {
+    return { ok: false, errorCode: "FORBIDDEN", error: "Personnel management permission is required for competency verification reports." };
   }
 
   let query = context.supabase.from("red_oak_ems_competency_verifications")
