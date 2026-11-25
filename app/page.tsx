@@ -65,7 +65,7 @@ export default async function HomePage() {
   const [categoriesResult, membersResult, emsCourseDefinitionsResult] = await Promise.all([
     supabase
       .from("training_categories")
-      .select("id, name, description, active")
+      .select("id, name, description, active, system_key, compliance_bucket")
       .eq("department_id", currentMember.departmentId)
       .order("name", { ascending: true }),
     supabase
