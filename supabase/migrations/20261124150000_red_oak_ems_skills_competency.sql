@@ -28,9 +28,9 @@ create table public.red_oak_ems_competency_verifications (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (department_id, member_id, verification_year),
-  foreign key (member_id, department_id) references public.members(id, department_id),
-  foreign key (created_by, department_id) references public.members(id, department_id),
-  foreign key (updated_by, department_id) references public.members(id, department_id)
+  foreign key (member_id) references public.members(id),
+  foreign key (created_by) references public.members(id),
+  foreign key (updated_by) references public.members(id)
 );
 
 create index red_oak_ems_competency_year_idx
@@ -87,7 +87,10 @@ begin
   select id into v_actor_id
   from public.members
   where department_id = v_department_id
-    and auth_user_id = v_user_id
+    and (
+      auth_user_id = v_user_id
+      or lower(coalesce(email, '')) = lower(coalesce(auth.jwt()->>'email', ''))
+    )
     and coalesce(active, false)
   order by id limit 1;
   if v_actor_id is null then
