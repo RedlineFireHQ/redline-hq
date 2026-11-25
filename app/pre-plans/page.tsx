@@ -6,6 +6,7 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 type PrePlanListRow = {
   id: string;
   business_name: string;
+  iso_high_hazard: boolean;
   address: string;
   city: string;
   state: string;
@@ -52,7 +53,7 @@ export default async function PrePlansPage({ searchParams }: PrePlansPageProps) 
   if (departmentId) {
     let request = supabase
       .from("pre_plans")
-      .select("id, business_name, address, city, state, zip, occupancy_id_number, updated_at")
+      .select("id, business_name, iso_high_hazard, address, city, state, zip, occupancy_id_number, updated_at")
       .eq("department_id", departmentId)
       .eq("lifecycle_status", "active")
       .order("business_name", { ascending: true })
