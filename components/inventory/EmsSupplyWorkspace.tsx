@@ -17,6 +17,7 @@ type QuantityActionMode = "restock" | "adjust";
 export type EmsSupplyItemRow = {
   id: string;
   item_name: string;
+  manufacturer: string | null;
   item_category: string | null;
   unit_of_measure: string;
   custom_unit_of_measure: string | null;
@@ -231,6 +232,7 @@ function parseNumber(value: string): number | null {
 function toFormValues(row: EmsSupplyItemRow): EmsSupplyFormValues {
   return {
     itemName: row.item_name,
+    manufacturer: row.manufacturer ?? "",
     itemCategory: row.item_category ?? "",
     unitOfMeasure: row.unit_of_measure as EmsSupplyUnitOptionValue,
     customUnitOfMeasure: row.custom_unit_of_measure ?? "",
@@ -619,6 +621,7 @@ export default function EmsSupplyWorkspace({
 
     const payload = {
       itemName: values.itemName,
+      manufacturer: values.manufacturer,
       unitOfMeasure: values.unitOfMeasure,
       customUnitOfMeasure: values.customUnitOfMeasure,
       reorderThreshold: values.reorderThreshold,
@@ -688,6 +691,7 @@ export default function EmsSupplyWorkspace({
         },
         body: JSON.stringify({
           itemName: selectedItem.item_name,
+          manufacturer: selectedItem.manufacturer ?? "",
           unitOfMeasure: selectedItem.unit_of_measure,
           customUnitOfMeasure: selectedItem.custom_unit_of_measure,
           reorderThreshold: selectedItem.reorder_threshold,
@@ -1426,7 +1430,7 @@ export default function EmsSupplyWorkspace({
         onClose={() => setIsCheckoutOpen(false)}
         onSubmit={submitCheckout}
       />
-      {canManageSupplies && isQrDialogOpen && selectedItem ? <QrLabelDialog title={selectedItem.item_name} subtitle="EMS Supply" value={selectedItem.qr_identifier} onClose={() => setIsQrDialogOpen(false)} /> : null}
+      {canManageSupplies && isQrDialogOpen && selectedItem ? <QrLabelDialog title={selectedItem.item_name} subtitle={selectedItem.manufacturer} value={selectedItem.qr_identifier} onClose={() => setIsQrDialogOpen(false)} /> : null}
     </div>
   );
 }
