@@ -446,7 +446,7 @@ export default function SubmitTrainingModal({
           {isEmsCategoryName(activeCategories.find((category) => category.id === outsideFormState.categoryId)) ? (
             <>
               <label className="block">
-                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">EMS Core Topic</span>
+                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">EMS Subject Area</span>
                 <select
                   value={outsideFormState.emsCoreTopic}
                   onChange={(event) => setOutsideFormState((current) => ({ ...current, emsCoreTopic: event.target.value as EmsCoreTopicCode }))}
