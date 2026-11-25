@@ -8,7 +8,9 @@ type TrainingCategoryRow = {
   id: string;
   name: string;
   active: boolean;
-};
+  system_key: string | null;
+  compliance_bucket: string | null;
+}
 
 type EmsCourseDefinitionRow = {
   id: string;
