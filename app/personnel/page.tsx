@@ -3,6 +3,7 @@ import Link from "next/link";
 import PageLayout from "@/components/layout/PageLayout";
 import AddMemberButton from "@/components/personnel/AddMemberButton";
 import PersonnelMembersTable from "@/components/personnel/PersonnelMembersTable";
+import MaskFitHistory from "@/components/personnel/MaskFitHistory";
 import type { AppPermissionOption } from "@/lib/app-permissions";
 import { getCurrentMember } from "@/lib/current-member";
 import { canManagePersonnel } from "@/lib/member-permissions";
@@ -250,6 +251,12 @@ export default async function PersonnelPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <Link
+            href="/personnel/scba-mask-fit"
+            className="rounded-xl border border-white/15 bg-neutral-900 px-4 py-2 text-sm font-semibold text-neutral-200 hover:border-white/40"
+          >
+            SCBA Mask Fit Test
+          </Link>
           {canSeeEmsCeProgress ? (
             <Link
               href="/ems-ce-progress"
@@ -268,6 +275,7 @@ export default async function PersonnelPage() {
       </div>
 
       <PersonnelMembersTable members={members} />
+      <MaskFitHistory departmentId={currentMember.departmentId} />
     </PageLayout>
   );
 }
