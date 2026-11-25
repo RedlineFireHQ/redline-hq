@@ -44,16 +44,13 @@ const EMPTY_FORM: FacilityForm = {
   active: true,
 };
 
-function qualifies(facility: Pick<TrainingFacilityRow, "facility_type" | "ownership_type" | "tower_stories" | "yard_acres" | "purpose_built_live_fire" | "formal_agreement" | "agreement_reference">) {
-  const agreementOkay =
-    facility.ownership_type === "department_owned" ||
-    (facility.formal_agreement && Boolean(facility.agreement_reference?.trim()));
-  if (!agreementOkay) return false;
-  if (facility.facility_type === "drill_tower") return (facility.tower_stories ?? 0) >= 2;
-  if (facility.facility_type === "live_fire_burn_building") return facility.purpose_built_live_fire;
-  if (facility.facility_type === "training_yard") return (facility.yard_acres ?? 0) >= 2;
-  if (facility.facility_type === "regional_academy") return facility.formal_agreement;
-  return false;
+function qualifies(facility: TrainingFacilityRow) {
+  return getFacilityIsoCreditLevel(facility) !== "none";
+}
+
+function qualificationLabel(facility: TrainingFacilityRow) {
+  const level = getFacilityIsoCreditLevel(facility);
+  return level === "full" ? "Full-credit ISO facility" : level === "partial" ? "Partial-credit ISO facility" : "Not yet qualifying";
 }
 
 interface Props {
