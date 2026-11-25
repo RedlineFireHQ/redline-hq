@@ -106,7 +106,7 @@ export default function IsoTrainingFields({
             <div className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
               <div className="text-sm font-semibold text-white">{selectedFacility.name}</div>
               <div className="mt-1 text-xs text-neutral-400">{[selectedFacility.address, selectedFacility.city, selectedFacility.state, selectedFacility.zip].filter(Boolean).join(", ") || "Location not recorded"}</div>
-              <div className={`mt-2 text-xs font-semibold ${facilityQualifiesForIso(selectedFacility) ? "text-green-300" : "text-amber-200"}`}>{getFacilityIsoCreditLevel(selectedFacility, eventDate) === "full" ? "Full-credit qualifying facility" : getFacilityIsoCreditLevel(selectedFacility, eventDate) === "partial" ? "Partial-credit qualifying facility (2-story tower)" : "This facility does not currently meet the qualifying rules"}</div>
+              <div className={`mt-2 text-xs font-semibold ${getFacilityIsoCreditLevel(selectedFacility, eventDate) !== "none" ? "text-green-300" : "text-amber-200"}`}>{getFacilityIsoCreditLevel(selectedFacility, eventDate) === "full" ? "Full-credit qualifying facility" : getFacilityIsoCreditLevel(selectedFacility, eventDate) === "partial" ? "Partial-credit qualifying facility (2-story tower)" : "This facility does not currently meet the qualifying rules"}</div>
               {selectedFacility.ownership_type !== "department_owned" ? <div className="mt-1 text-xs text-neutral-400">Formal agreement: {selectedFacility.formal_agreement ? selectedFacility.agreement_reference || "Recorded" : "Not recorded"}</div> : null}
             </div>
           ) : null}
