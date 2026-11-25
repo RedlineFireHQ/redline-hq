@@ -973,7 +973,7 @@ export default function TrainingEventDetailWorkspace({
             {isEmsCategoryName(categoryLookup.get(formState.categoryId)) ? (
               <>
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">EMS Core Topic</span>
+                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">EMS Subject Area</span>
                   <select
                     value={formState.emsCoreTopic}
                     onChange={(event) => setFormState((current) => ({ ...current, emsCoreTopic: event.target.value as EmsCoreTopicCode }))}
