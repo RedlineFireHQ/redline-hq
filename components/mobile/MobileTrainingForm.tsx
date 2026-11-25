@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { EMS_CORE_TOPICS, type EmsCoreTopicCode } from "@/lib/ems/requirements";
+import { isEmsCategoryName } from "@/lib/training/is-ems-category";
 import { triggerEmsAllocationRecalculationForMembers } from "@/lib/ems/recalculate-client";
 import { supabase } from "@/lib/supabase";
 import { buildOutsideSubmissionNotes } from "@/lib/training/outside-submission-notes";
@@ -91,11 +92,9 @@ export default function MobileTrainingForm({
     () => categories.filter((category) => category.active),
     [categories],
   );
-  const isEms =
-    activeCategories
-      .find((category) => category.id === categoryId)
-      ?.name.trim()
-      .toLowerCase() === "ems";
+  const isEms = isEmsCategoryName(
+    activeCategories.find((category) => category.id === categoryId)?.name,
+  );
   const visibleMembers = members.filter((member) =>
     `${member.first_name ?? ""} ${member.last_name ?? ""}`
       .toLowerCase()
