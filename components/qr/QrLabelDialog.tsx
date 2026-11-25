@@ -71,6 +71,56 @@ export default function QrLabelDialog({ title, subtitle, value, onClose }: Props
     };
   }, [value]);
 
+  function downloadLabel() {
+    if (!dataUrl || !dimensions.valid) return;
+    const dpi = 300;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(dimensions.width * dpi);
+    canvas.height = Math.round(dimensions.height * dpi);
+    const context = canvas.getContext("2d");
+    if (!context) return;
+
+    context.fillStyle = "#fff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = "#111";
+    context.textAlign = "center";
+    context.textBaseline = "top";
+
+    const margin = Math.round(0.055 * dpi);
+    const maxTextWidth = canvas.width - margin * 2;
+    const fontSize = Math.max(20, Math.min(32, Math.round(dimensions.width * 18)));
+    context.font = `700 ${fontSize}px Arial, sans-serif`;
+    context.fillText(title, canvas.width / 2, margin, maxTextWidth);
+
+    let textBottom = margin + fontSize + 3;
+    if (subtitle?.trim()) {
+      const subtitleSize = Math.max(18, Math.min(29, Math.round(dimensions.width * 16)));
+      context.font = `600 ${subtitleSize}px Arial, sans-serif`;
+      context.fillText(subtitle.trim(), canvas.width / 2, textBottom, maxTextWidth);
+      textBottom += subtitleSize + 3;
+    }
+
+    const qrImage = new Image();
+    qrImage.onload = () => {
+      const availableHeight = canvas.height - textBottom - margin;
+      const qrSize = Math.min(
+        Math.round(Math.min(dimensions.width, dimensions.height) * dpi * 0.68),
+        availableHeight,
+        canvas.width - margin * 2,
+      );
+      if (qrSize < Math.round(0.6 * dpi)) return;
+      const x = Math.round((canvas.width - qrSize) / 2);
+      const y = textBottom + Math.max(0, Math.round((availableHeight - qrSize) / 2));
+      context.imageSmoothingEnabled = false;
+      context.drawImage(qrImage, x, y, qrSize, qrSize);
+      const link = document.createElement("a");
+      link.download = `${title.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-label.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    };
+    qrImage.src = dataUrl;
+  }
+
   function printLabel() {
     if (!dataUrl || !dimensions.valid) return;
     const safeTitle = escapeHtml(title);
@@ -102,8 +152,6 @@ html, body { margin: 0; padding: 0; width: ${width}in; height: ${height}in; }
 </body></html>`);
     printWindow.document.close();
   }
-
-  const downloadName = `${title.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-qr.png`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/75 px-4 py-6" role="dialog" aria-modal="true" aria-label={`${title} QR code`}>
@@ -160,7 +208,7 @@ html, body { margin: 0; padding: 0; width: ${width}in; height: ${height}in; }
         {error ? <p className="mt-3 rounded-xl border border-red-400/25 bg-red-500/10 p-3 text-sm text-red-100">{error}</p> : null}
         <p className="mt-3 break-all text-xs text-white/40">QR data: {value}</p>
         <div className="mt-5 flex gap-2">
-          {dataUrl ? <a href={dataUrl} download={downloadName} className="flex min-h-12 flex-1 items-center justify-center rounded-xl border border-white/15 bg-white/5 px-3 text-sm font-black text-white">Download</a> : null}
+          {dataUrl ? <button type="button" onClick={downloadLabel} disabled={!dimensions.valid} className="flex min-h-12 flex-1 items-center justify-center rounded-xl border border-white/15 bg-white/5 px-3 text-sm font-black text-white disabled:opacity-40">Download Label</button> : null}
           <button type="button" onClick={printLabel} disabled={!dataUrl || !dimensions.valid} className="flex min-h-12 flex-1 items-center justify-center rounded-xl bg-red-600 px-3 text-sm font-black text-white disabled:bg-white/15 disabled:text-white/40">Print Label</button>
         </div>
       </section>
