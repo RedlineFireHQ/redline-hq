@@ -220,7 +220,7 @@ export default function TrainingCategoriesSection({
         <div>
           <h2 className="text-2xl font-semibold text-white">Training Categories</h2>
           <p className="mt-2 max-w-3xl text-sm text-neutral-400">
-            Define the training categories used by your department when logging training.
+            Redline HQ provides the standard EMS Continuing Education category automatically. You can add department-specific categories, but the standard EMS category and its CE classification cannot be changed or removed.
           </p>
         </div>
 
