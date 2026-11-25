@@ -11,6 +11,8 @@ type EventRow = {
   hours_credit: number | null;
   iso_classifications: string[];
   iso_qualifying_facility: boolean;
+  iso_facility_credit_level: string;
+  iso_facility_stories: number | null;
   iso_pre_plan_id: string | null;
   iso_driver_operator_training_type: string | null;
 };
@@ -60,6 +62,8 @@ export default function IsoTrainingDashboard({ events, attendanceRows, members, 
       return Number.isFinite(start.getTime()) && days >= 0 && days <= 365 && !hasFirefighterI;
     });
     const recruitIds = new Set(recruitMembers.map((member) => member.id));
+    let fullFacilityHours = 0;
+    let partialFacilityHours = 0;
     const rows = ISO_TRAINING_CLASSIFICATIONS.map((classification) => {
       const eligibleEvents = completedEvents.filter((event) => {
         if (!event.iso_classifications.includes(classification.code)) return false;
@@ -75,7 +79,12 @@ export default function IsoTrainingDashboard({ events, attendanceRows, members, 
         const event = eligibleEvents.find((item) => item.id === attendance.training_event_id);
         if (!event) continue;
         participantIds.add(attendance.member_id);
-        memberHoursTotal += Math.max(0, attendance.hours_earned ?? event.hours_credit ?? 0);
+        const earned = Math.max(0, attendance.hours_earned ?? event.hours_credit ?? 0);
+        memberHoursTotal += earned;
+        if (classification.code === "training_facilities") {
+          if (event.iso_facility_credit_level === "partial") partialFacilityHours += earned;
+          else if (event.iso_facility_credit_level === "full") fullFacilityHours += earned;
+        }
       }
       const denominator = classification.code === "officer_training" ? Math.max(1, officerIds.size) : classification.code === "recruit" ? Math.max(1, recruitMembers.length) : totalActiveMembers;
       const averagePerPerson = memberHoursTotal / denominator;
@@ -106,7 +115,7 @@ export default function IsoTrainingDashboard({ events, attendanceRows, members, 
     const recruitAverageHours = recruitMembers.length ? recruitMemberHours / recruitMembers.length : 0;
     const companyAverageMonthlyHours = (company?.averagePerPerson ?? 0) / 12;
     const preplanCoverage = activePlans.length ? Math.round((plansMeetingVisitTarget / activePlans.length) * 100) : 0;
-    return { rows, facility, company, hazmat, officer, recruitAverageHours, recruitCount: recruitMembers.length, companyAverageMonthlyHours, initialDriverHours, refresherDriverHours, activePlans: activePlans.length, plansMeetingVisitTarget, preplanCoverage, totalActiveMembers };
+    return { rows, facility, company, hazmat, officer, recruitAverageHours, recruitCount: recruitMembers.length, companyAverageMonthlyHours, fullFacilityHours, partialFacilityHours, initialDriverHours, refresherDriverHours, activePlans: activePlans.length, plansMeetingVisitTarget, preplanCoverage, totalActiveMembers };
   }, [events, attendanceRows, members, prePlans, year]);
 
   return (
@@ -115,13 +124,13 @@ export default function IsoTrainingDashboard({ events, attendanceRows, members, 
         <div>
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-sky-300">ISO / PPC Documentation</p>
           <h2 className="mt-1 text-xl font-bold text-white">{year} Training Classification Summary</h2>
-          <p className="mt-1 max-w-3xl text-sm text-slate-300">Completed training records are grouped into the seven ISO documentation categories. A single training event can count in multiple applicable categories without creating duplicate training records.</p>
+          <p className="mt-1 max-w-3xl text-sm text-slate-300">Completed training records are grouped into the seven ISO documentation categories. A single event can count in multiple applicable categories without creating duplicate records. Two-story towers are shown separately as partial-credit facilities.</p>
         </div>
         <span className="rounded-full border border-sky-300/20 bg-sky-300/10 px-3 py-1.5 text-xs font-semibold text-sky-200">Weights total 100%</span>
       </div>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div className="text-xs text-slate-400">Qualifying facility hours / member</div><div className="mt-1 text-xl font-bold text-white">{hours(summary.facility?.averagePerPerson ?? 0)} <span className="text-xs font-medium text-slate-400">/ 18</span></div></div>
+        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div className="text-xs text-slate-400">Training facility hours / member</div><div className="mt-1 text-xl font-bold text-white">{hours(summary.facility?.averagePerPerson ?? 0)} <span className="text-xs font-medium text-slate-400">/ 18</span></div><div className="mt-1 text-[11px] text-slate-400">Full-credit: {hours(summary.fullFacilityHours)} · Partial-credit: {hours(summary.partialFacilityHours)}</div></div>
         <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div className="text-xs text-slate-400">Company training / member / month</div><div className="mt-1 text-xl font-bold text-white">{hours(summary.companyAverageMonthlyHours)} <span className="text-xs font-medium text-slate-400">/ 16</span></div></div>
         <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div className="text-xs text-slate-400">HazMat / member</div><div className="mt-1 text-xl font-bold text-white">{hours(summary.hazmat?.averagePerPerson ?? 0)} <span className="text-xs font-medium text-slate-400">/ 6</span></div></div>
         <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div className="text-xs text-slate-400">Officer training / officer</div><div className="mt-1 text-xl font-bold text-white">{hours(summary.officer?.averagePerPerson ?? 0)} <span className="text-xs font-medium text-slate-400">/ 12</span></div></div>
