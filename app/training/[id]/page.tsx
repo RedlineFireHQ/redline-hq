@@ -9,6 +9,8 @@ type TrainingCategoryRow = {
   name: string;
   description: string | null;
   active: boolean;
+  system_key: string | null;
+  compliance_bucket: string | null;
 };
 
 type TrainingEventRow = {
@@ -104,7 +106,7 @@ export default async function TrainingEventDetailPage({
       .maybeSingle(),
     supabase
       .from("training_categories")
-      .select("id, name, description, active")
+      .select("id, name, description, active, system_key, compliance_bucket")
       .eq("department_id", currentMember.departmentId)
       .order("name", { ascending: true }),
     supabase
@@ -194,6 +196,8 @@ export default async function TrainingEventDetailPage({
     name: typeof row.name === "string" ? row.name : "",
     description: typeof row.description === "string" ? row.description : null,
     active: typeof row.active === "boolean" ? row.active : true,
+    system_key: typeof row.system_key === "string" ? row.system_key : null,
+    compliance_bucket: typeof row.compliance_bucket === "string" ? row.compliance_bucket : null,
   }));
 
   const attendanceRows: TrainingAttendanceRow[] = (attendanceData ?? []).map((row) => ({
