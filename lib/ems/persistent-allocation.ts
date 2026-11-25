@@ -82,6 +82,7 @@ type TrackProfileRow = {
 type TrainingEventAttendanceRow = {
   id: string;
   training_event_id: string;
+  completion_status: string;
 };
 
 type TrainingEventRow = {
@@ -563,10 +564,11 @@ async function loadMemberEmsSources(
 ) {
   const { data: attendanceData, error: attendanceError } = await supabase
     .from("training_event_attendance")
-    .select("id, training_event_id")
+    .select("id, training_event_id, completion_status")
     .eq("department_id", departmentId)
     .eq("member_id", memberId)
-    .eq("attendance_status", "attending");
+    .eq("attendance_status", "attending")
+    .eq("completion_status", "approved");
 
   if (attendanceError) {
     throw new Error(attendanceError.message || "Unable to load EMS attendance sources.");
@@ -575,6 +577,7 @@ async function loadMemberEmsSources(
   const attendanceRows = (attendanceData ?? []).map((row) => ({
     id: String(row.id),
     training_event_id: String(row.training_event_id),
+    completion_status: typeof row.completion_status === "string" ? row.completion_status : "",
   })) satisfies TrainingEventAttendanceRow[];
 
   const eventIds = Array.from(new Set(attendanceRows.map((row) => row.training_event_id).filter((value) => value.length > 0)));
