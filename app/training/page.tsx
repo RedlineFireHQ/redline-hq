@@ -35,6 +35,10 @@ type TrainingEventRow = {
   hours_credit: number | null;
   status: string;
   supporting_document_id: string | null;
+  iso_classification: string | null;
+  iso_qualifying_facility: boolean;
+  iso_facility_type: string | null;
+  iso_facility_agreement: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -600,7 +604,7 @@ export default async function TrainingPage() {
     supabase
       .from("training_events")
       .select(
-        "id, title, category_id, topic, training_type, is_ems_training, ems_core_topic, ems_course_definition_id, ems_needs_review, ems_provider_name, description, location, instructor_name, starts_at, ends_at, duration_minutes, hours_credit, status, supporting_document_id, created_at, updated_at",
+        "id, title, category_id, topic, training_type, is_ems_training, ems_core_topic, ems_course_definition_id, ems_needs_review, ems_provider_name, description, location, instructor_name, starts_at, ends_at, duration_minutes, hours_credit, iso_classification, iso_qualifying_facility, iso_facility_type, iso_facility_agreement, status, supporting_document_id, created_at, updated_at",
       )
       .eq("department_id", currentMember.departmentId)
       .order("starts_at", { ascending: false }),
@@ -767,6 +771,10 @@ export default async function TrainingPage() {
       typeof row.hours_credit === "number" && Number.isFinite(row.hours_credit)
         ? row.hours_credit
         : null,
+    iso_classification: typeof row.iso_classification === "string" ? row.iso_classification : null,
+    iso_qualifying_facility: row.iso_qualifying_facility === true,
+    iso_facility_type: typeof row.iso_facility_type === "string" ? row.iso_facility_type : null,
+    iso_facility_agreement: row.iso_facility_agreement === true,
     status: typeof row.status === "string" ? row.status : "scheduled",
     supporting_document_id: typeof row.supporting_document_id === "string" ? row.supporting_document_id : null,
     created_at: typeof row.created_at === "string" ? row.created_at : "",

@@ -31,6 +31,10 @@ type TrainingEventRow = {
   hours_credit: number | null;
   status: string;
   supporting_document_id: string | null;
+  iso_classification: string | null;
+  iso_qualifying_facility: boolean;
+  iso_facility_type: string | null;
+  iso_facility_agreement: boolean;
 };
 
 type TrainingAttendanceRow = {
@@ -97,7 +101,7 @@ export default async function TrainingEventDetailPage({
     supabase
       .from("training_events")
       .select(
-        "id, title, category_id, topic, training_type, is_ems_training, ems_core_topic, ems_course_definition_id, ems_needs_review, ems_provider_name, description, location, instructor_name, starts_at, ends_at, duration_minutes, hours_credit, status, supporting_document_id",
+        "id, title, category_id, topic, training_type, is_ems_training, ems_core_topic, ems_course_definition_id, ems_needs_review, ems_provider_name, description, location, instructor_name, starts_at, ends_at, duration_minutes, hours_credit, iso_classification, iso_qualifying_facility, iso_facility_type, iso_facility_agreement, status, supporting_document_id",
       )
       .eq("department_id", currentMember.departmentId)
       .eq("id", id)
@@ -187,6 +191,10 @@ export default async function TrainingEventDetailPage({
         : null,
     status: typeof eventData.status === "string" ? eventData.status : "scheduled",
     supporting_document_id: typeof eventData.supporting_document_id === "string" ? eventData.supporting_document_id : null,
+    iso_classification: typeof eventData.iso_classification === "string" ? eventData.iso_classification : null,
+    iso_qualifying_facility: eventData.iso_qualifying_facility === true,
+    iso_facility_type: typeof eventData.iso_facility_type === "string" ? eventData.iso_facility_type : null,
+    iso_facility_agreement: eventData.iso_facility_agreement === true,
   };
 
   const categories: TrainingCategoryRow[] = (categoriesData ?? []).map((row) => ({

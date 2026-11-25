@@ -7,6 +7,7 @@ import { ArrowLeft, CalendarDays, Clock3, MapPin, UserRound } from "lucide-react
 import { EMS_CORE_TOPICS, type EmsCoreTopicCode } from "@/lib/ems/requirements";
 import { triggerEmsAllocationRecalculationForMembers } from "@/lib/ems/recalculate-client";
 import { supabase } from "@/lib/supabase";
+import { ISO_FACILITY_TYPES, ISO_TRAINING_CLASSIFICATIONS, suggestIsoTrainingClassification, type IsoFacilityType, type IsoTrainingClassification } from "@/lib/training/iso-classifications";
 
 type CurrentMemberRole = "firefighter" | "officer" | "administrator";
 
@@ -37,6 +38,10 @@ type TrainingEventRow = {
   hours_credit: number | null;
   status: string;
   supporting_document_id: string | null;
+  iso_classification: string | null;
+  iso_qualifying_facility: boolean;
+  iso_facility_type: string | null;
+  iso_facility_agreement: boolean;
 };
 
 type TrainingAttendanceRow = {
@@ -102,6 +107,10 @@ type EventFormState = {
   description: string;
   status: string;
   supportingDocumentId: string;
+  isoClassification: IsoTrainingClassification | "";
+  isoQualifyingFacility: boolean;
+  isoFacilityType: IsoFacilityType | "";
+  isoFacilityAgreement: boolean;
 };
 
 const MILITARY_TIME_OPTIONS = Array.from({ length: 24 * 4 }, (_, index) => {
@@ -235,6 +244,10 @@ function initialFormState(trainingEvent: TrainingEventRow): EventFormState {
     description: trainingEvent.description ?? "",
     status: trainingEvent.status,
     supportingDocumentId: trainingEvent.supporting_document_id ?? "",
+    isoClassification: (trainingEvent.iso_classification as IsoTrainingClassification | null) ?? "",
+    isoQualifyingFacility: trainingEvent.iso_qualifying_facility === true,
+    isoFacilityType: (trainingEvent.iso_facility_type as IsoFacilityType | null) ?? "",
+    isoFacilityAgreement: trainingEvent.iso_facility_agreement === true,
   };
 }
 
@@ -418,6 +431,18 @@ export default function TrainingEventDetailWorkspace({
     const startsAt = toIsoDateTime(formState.date, formState.startTime);
     const endsAt = formState.endTime ? toIsoDateTime(formState.date, formState.endTime) : null;
     const durationMinutes = endMinutes !== null ? endMinutes - startMinutes : null;
+    if (formState.isoClassification === "training_facilities" && !formState.isoQualifyingFacility) {
+      setEventError("Training Facilities requires the qualifying ISO facility checkbox and facility details.");
+      return;
+    }
+    if (formState.isoQualifyingFacility && (!formState.isoFacilityType || formState.isoClassification !== "training_facilities")) {
+      setEventError("Choose Training Facilities as the ISO classification and select a qualifying facility type.");
+      return;
+    }
+    if (formState.isoQualifyingFacility && formState.isoFacilityType === "regional_academy" && !formState.isoFacilityAgreement) {
+      setEventError("A formal agreement is required for a regional academy to be marked as qualifying.");
+      return;
+    }
 
     setIsSavingEvent(true);
     setEventError(null);
@@ -443,6 +468,10 @@ export default function TrainingEventDetailWorkspace({
           ends_at: endsAt,
           duration_minutes: durationMinutes,
           hours_credit: hoursCredit,
+          iso_classification: formState.isoClassification || null,
+          iso_qualifying_facility: formState.isoQualifyingFacility,
+          iso_facility_type: formState.isoQualifyingFacility ? formState.isoFacilityType : null,
+          iso_facility_agreement: formState.isoQualifyingFacility && formState.isoFacilityType === "regional_academy" ? formState.isoFacilityAgreement : false,
           status: formState.status,
           supporting_document_id: formState.supportingDocumentId || null,
           updated_by: currentMemberId,
@@ -450,7 +479,7 @@ export default function TrainingEventDetailWorkspace({
         .eq("id", eventState.id)
         .eq("department_id", departmentId)
         .select(
-          "id, title, category_id, topic, training_type, is_ems_training, ems_core_topic, ems_course_definition_id, ems_needs_review, ems_provider_name, description, location, instructor_name, starts_at, ends_at, duration_minutes, hours_credit, status, supporting_document_id",
+          "id, title, category_id, topic, training_type, is_ems_training, ems_core_topic, ems_course_definition_id, ems_needs_review, ems_provider_name, description, location, instructor_name, starts_at, ends_at, duration_minutes, hours_credit, iso_classification, iso_qualifying_facility, iso_facility_type, iso_facility_agreement, status, supporting_document_id",
         )
         .single();
 
@@ -485,6 +514,10 @@ export default function TrainingEventDetailWorkspace({
           typeof data.hours_credit === "number" && Number.isFinite(data.hours_credit)
             ? data.hours_credit
             : hoursCredit,
+        iso_classification: typeof data.iso_classification === "string" ? data.iso_classification : formState.isoClassification || null,
+        iso_qualifying_facility: data.iso_qualifying_facility === true,
+        iso_facility_type: typeof data.iso_facility_type === "string" ? data.iso_facility_type : null,
+        iso_facility_agreement: data.iso_facility_agreement === true,
         status: typeof data.status === "string" ? data.status : formState.status,
         supporting_document_id:
           typeof data.supporting_document_id === "string"
@@ -892,6 +925,38 @@ export default function TrainingEventDetailWorkspace({
                 ))}
               </select>
             </label>
+
+            <div className="md:col-span-2 rounded-xl border border-sky-500/20 bg-sky-500/[0.04] p-4">
+              <div className="mb-3">
+                <p className="text-sm font-semibold text-white">ISO Documentation</p>
+                <p className="mt-1 text-xs text-neutral-400">Separate from the regular training category. This same training record is used for ISO documentation.</p>
+              </div>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">ISO Training Classification</span>
+                <select value={formState.isoClassification} onChange={(event) => setFormState((current) => ({ ...current, isoClassification: event.target.value as IsoTrainingClassification | "" }))} className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none">
+                  <option value="">Not classified for ISO</option>
+                  {ISO_TRAINING_CLASSIFICATIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                </select>
+              </label>
+              <label className="mt-4 flex items-start gap-2 text-sm text-neutral-200">
+                <input type="checkbox" checked={formState.isoQualifyingFacility} onChange={(event) => setFormState((current) => ({ ...current, isoQualifyingFacility: event.target.checked, isoClassification: event.target.checked ? "training_facilities" : (current.isoClassification === "training_facilities" ? suggestIsoTrainingClassification(categories.find((category) => category.id === current.categoryId)?.name) : current.isoClassification), isoFacilityType: event.target.checked ? current.isoFacilityType : "", isoFacilityAgreement: event.target.checked ? current.isoFacilityAgreement : false }))} className="mt-0.5 h-4 w-4 accent-sky-500" />
+                <span><span className="font-semibold">Qualifying ISO Training Facility</span><span className="mt-1 block text-xs text-neutral-400">Check only for a qualifying tower, burn building, 2+ acre training yard, or qualifying regional facility.</span></span>
+              </label>
+              {formState.isoQualifyingFacility ? (
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Facility Type *</span>
+                    <select value={formState.isoFacilityType} onChange={(event) => setFormState((current) => ({ ...current, isoFacilityType: event.target.value as IsoFacilityType | "" }))} className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none">
+                      <option value="">Select facility type</option>
+                      {ISO_FACILITY_TYPES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                    </select>
+                  </label>
+                  {formState.isoFacilityType === "regional_academy" ? (
+                    <label className="flex items-center gap-2 text-sm text-neutral-200"><input type="checkbox" checked={formState.isoFacilityAgreement} onChange={(event) => setFormState((current) => ({ ...current, isoFacilityAgreement: event.target.checked }))} className="h-4 w-4 accent-sky-500" />Formal agreement on file</label>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
 
             <label className="block">
               <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Training Method</span>
