@@ -44,6 +44,8 @@ type TrainingEventRow = {
   iso_pre_plan_id: string | null;
   iso_driver_operator_training_type: string | null;
   iso_qualifying_facility: boolean;
+  iso_facility_credit_level: string;
+  iso_facility_stories: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -615,7 +617,7 @@ export default async function TrainingPage() {
     supabase
       .from("training_events")
       .select(
-        "id, title, category_id, topic, training_type, is_ems_training, ems_core_topic, ems_course_definition_id, ems_needs_review, ems_provider_name, description, location, instructor_name, starts_at, ends_at, duration_minutes, hours_credit, status, supporting_document_id, iso_classifications, iso_classification, iso_facility_id, iso_pre_plan_id, iso_driver_operator_training_type, iso_qualifying_facility, created_at, updated_at",
+        "id, title, category_id, topic, training_type, is_ems_training, ems_core_topic, ems_course_definition_id, ems_needs_review, ems_provider_name, description, location, instructor_name, starts_at, ends_at, duration_minutes, hours_credit, status, supporting_document_id, iso_classifications, iso_classification, iso_facility_id, iso_pre_plan_id, iso_driver_operator_training_type, iso_qualifying_facility, iso_facility_credit_level, iso_facility_stories, created_at, updated_at",
       )
       .eq("department_id", currentMember.departmentId)
       .order("starts_at", { ascending: false }),
@@ -813,6 +815,8 @@ export default async function TrainingPage() {
     iso_pre_plan_id: typeof row.iso_pre_plan_id === "string" ? row.iso_pre_plan_id : null,
     iso_driver_operator_training_type: typeof row.iso_driver_operator_training_type === "string" ? row.iso_driver_operator_training_type : null,
     iso_qualifying_facility: row.iso_qualifying_facility === true,
+    iso_facility_credit_level: typeof row.iso_facility_credit_level === "string" ? row.iso_facility_credit_level : "none",
+    iso_facility_stories: typeof row.iso_facility_stories === "number" ? row.iso_facility_stories : null,
     created_at: typeof row.created_at === "string" ? row.created_at : "",
     updated_at: typeof row.updated_at === "string" ? row.updated_at : "",
   }));
