@@ -704,7 +704,7 @@ export default async function TrainingPage() {
   ] = await Promise.all([
     supabase
       .from("training_facilities")
-      .select("id, name, facility_type, ownership_type, address, city, state, zip, tower_stories, yard_acres, purpose_built_live_fire, formal_agreement, agreement_reference, active")
+      .select("id, name, facility_type, ownership_type, address, city, state, zip, tower_stories, yard_acres, purpose_built_live_fire, formal_agreement, agreement_reference, agreement_start_date, agreement_end_date, active")
       .eq("department_id", currentMember.departmentId)
       .eq("active", true)
       .order("name", { ascending: true }),
@@ -940,6 +940,8 @@ export default async function TrainingPage() {
     purpose_built_live_fire: row.purpose_built_live_fire === true,
     formal_agreement: row.formal_agreement === true,
     agreement_reference: typeof row.agreement_reference === "string" ? row.agreement_reference : null,
+    agreement_start_date: typeof row.agreement_start_date === "string" ? row.agreement_start_date : null,
+    agreement_end_date: typeof row.agreement_end_date === "string" ? row.agreement_end_date : null,
     active: row.active === true,
   }));
 
