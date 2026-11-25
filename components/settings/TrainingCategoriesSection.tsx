@@ -11,6 +11,7 @@ type TrainingCategoryRow = {
   description: string | null;
   active: boolean;
   compliance_bucket: string | null;
+  system_key: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -46,8 +47,8 @@ function normalizeCategoryName(value: string) {
   return value.trim().toLowerCase();
 }
 
-function isSystemEmsCategory(category: TrainingCategoryRow) {
-  return normalizeCategoryName(category.name) === "ems";
+function isSystemTrainingCategory(category: TrainingCategoryRow) {
+  return Boolean(category.system_key);
 }
 
 export default function TrainingCategoriesSection({
@@ -180,7 +181,7 @@ export default function TrainingCategoriesSection({
             created_by: currentMemberId,
             updated_by: currentMemberId,
           })
-          .select("id, name, description, active, compliance_bucket, created_at, updated_at")
+          .select("id, name, description, active, compliance_bucket, system_key, created_at, updated_at")
           .single();
 
         if (error || !data) {
