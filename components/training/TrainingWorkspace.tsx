@@ -70,6 +70,8 @@ type DepartmentMemberRow = {
   last_name: string | null;
   role: string | null;
   rank: string | null;
+  hire_start_date: string | null;
+  certifications: string | null;
 };
 
 type DepartmentDocumentRow = {
