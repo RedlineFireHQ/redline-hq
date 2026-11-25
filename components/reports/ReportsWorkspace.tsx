@@ -607,7 +607,7 @@ export default function ReportsWorkspace({
 
 		const visibleSources = REPORT_SOURCES.filter((source) => source.key !== "red-oak-ems-competency" || isRedOakDepartment);
 		return visibleSources.map((source) => {
-			if (source.key !== "scba-mask-fit" && source.key !== "training" && source.key !== "certifications" && source.key !== "maintenance" && source.key !== "apparatus" && source.key !== "personnel" && source.key !== "ems" && source.key !== "inspections" && source.key !== "activity" && source.key !== "inventory") {
+			if (source.key !== "red-oak-ems-competency" && source.key !== "scba-mask-fit" && source.key !== "training" && source.key !== "certifications" && source.key !== "maintenance" && source.key !== "apparatus" && source.key !== "personnel" && source.key !== "ems" && source.key !== "inspections" && source.key !== "activity" && source.key !== "inventory") {
 				return source;
 			}
 
