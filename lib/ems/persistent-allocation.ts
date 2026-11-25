@@ -82,7 +82,6 @@ type TrackProfileRow = {
 type TrainingEventAttendanceRow = {
   id: string;
   training_event_id: string;
-  completion_status: string;
 };
 
 type TrainingEventRow = {
@@ -96,6 +95,7 @@ type TrainingEventRow = {
   ems_needs_review: boolean;
   ems_provider_name: string | null;
   ems_course_definition_id: string | null;
+  status: string;
 };
 
 type OutsideSubmissionRow = {
@@ -564,11 +564,10 @@ async function loadMemberEmsSources(
 ) {
   const { data: attendanceData, error: attendanceError } = await supabase
     .from("training_event_attendance")
-    .select("id, training_event_id, completion_status")
+    .select("id, training_event_id")
     .eq("department_id", departmentId)
     .eq("member_id", memberId)
-    .eq("attendance_status", "attending")
-    .eq("completion_status", "approved");
+    .eq("attendance_status", "attending");
 
   if (attendanceError) {
     throw new Error(attendanceError.message || "Unable to load EMS attendance sources.");
@@ -577,7 +576,6 @@ async function loadMemberEmsSources(
   const attendanceRows = (attendanceData ?? []).map((row) => ({
     id: String(row.id),
     training_event_id: String(row.training_event_id),
-    completion_status: typeof row.completion_status === "string" ? row.completion_status : "",
   })) satisfies TrainingEventAttendanceRow[];
 
   const eventIds = Array.from(new Set(attendanceRows.map((row) => row.training_event_id).filter((value) => value.length > 0)));
@@ -587,7 +585,7 @@ async function loadMemberEmsSources(
     const { data: eventsData, error: eventsError } = await supabase
       .from("training_events")
       .select(
-        "id, title, starts_at, hours_credit, category_id, is_ems_training, ems_core_topic, ems_needs_review, ems_provider_name, ems_course_definition_id",
+        "id, title, starts_at, hours_credit, category_id, is_ems_training, ems_core_topic, ems_needs_review, ems_provider_name, ems_course_definition_id, status",
       )
       .eq("department_id", departmentId)
       .in("id", eventIds);
@@ -608,6 +606,7 @@ async function loadMemberEmsSources(
       ems_provider_name: typeof row.ems_provider_name === "string" ? row.ems_provider_name : null,
       ems_course_definition_id:
         typeof row.ems_course_definition_id === "string" ? row.ems_course_definition_id : null,
+      status: typeof row.status === "string" ? row.status : "scheduled",
     }));
   }
 
@@ -616,7 +615,7 @@ async function loadMemberEmsSources(
   const attendanceSources: AllocationSource[] = [];
   for (const attendance of attendanceRows) {
     const event = eventById.get(attendance.training_event_id);
-    if (!event || event.is_ems_training !== true) {
+    if (!event || event.is_ems_training !== true || event.status !== "completed") {
       continue;
     }
 
