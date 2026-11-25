@@ -26,7 +26,6 @@ export const EMS_CORE_TOPICS: Array<{ code: EmsCoreTopicCode; label: string }> =
   { code: "medical", label: "Medical" },
   { code: "operations", label: "Operations" },
   { code: "pediatric", label: "Pediatric" },
-  { code: "critical_care_paramedic", label: "Critical Care Paramedic" },
   { code: "other", label: "Other" },
 ];
 
@@ -51,6 +50,7 @@ export function formatEmsLevelLabel(level: string) {
 }
 
 export function formatEmsTopicLabel(topic: string) {
+  if (topic === "critical_care_paramedic") return "Other";
   return EMS_CORE_TOPICS.find((item) => item.code === topic)?.label ?? "Other";
 }
 
