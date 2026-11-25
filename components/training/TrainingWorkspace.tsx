@@ -9,6 +9,8 @@ import { EMS_CORE_TOPICS, type EmsCoreTopicCode } from "@/lib/ems/requirements";
 import { triggerEmsAllocationRecalculation, triggerEmsAllocationRecalculationForMembers } from "@/lib/ems/recalculate-client";
 import { supabase } from "@/lib/supabase";
 import SubmitTrainingModal from "@/components/training/SubmitTrainingModal";
+import IsoTrainingFields, { type IsoTrainingFacilityOption, type IsoPrePlanOption } from "@/components/training/IsoTrainingFields";
+import { facilityQualifiesForIso } from "@/lib/training/iso-training";
 import type { SelfReportedTraining } from "@/components/training/TrainingDepartmentOverview";
 
 type CurrentMemberRole = "firefighter" | "officer" | "administrator";
@@ -42,6 +44,12 @@ type TrainingEventRow = {
   hours_credit: number | null;
   status: string;
   supporting_document_id: string | null;
+  iso_classifications: string[];
+  iso_classification: string | null;
+  iso_facility_id: string | null;
+  iso_pre_plan_id: string | null;
+  iso_driver_operator_training_type: string | null;
+  iso_qualifying_facility: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -177,6 +185,8 @@ interface TrainingWorkspaceProps {
   assignmentEvidenceRows: TrainingAssignmentEvidenceRow[];
   emsCourseDefinitions: EmsCourseDefinitionRow[];
   departmentTrainingHoursThisYear: number;
+  facilities: IsoTrainingFacilityOption[];
+  prePlans: IsoPrePlanOption[];
   initialAddTrainingEventOpen?: boolean;
   approvedSelfReported?: SelfReportedTraining[];
   departmentSummary?: ReactNode;
@@ -197,6 +207,10 @@ type TrainingEventFormState = {
   instructorName: string;
   location: string;
   details: string;
+  isoClassifications: string[];
+  isoFacilityId: string;
+  isoPrePlanId: string;
+  isoDriverOperatorTrainingType: string;
 };
 
 type HomeworkAssignmentFormState = {
@@ -248,6 +262,10 @@ function emptyFormState(defaultCategoryId: string): TrainingEventFormState {
     instructorName: "",
     location: "",
     details: "",
+    isoClassifications: [],
+    isoFacilityId: "",
+    isoPrePlanId: "",
+    isoDriverOperatorTrainingType: "",
   };
 }
 
@@ -2183,6 +2201,22 @@ export default function TrainingWorkspace({
     const emsNeedsReview =
       isEmsTraining && (formState.emsNeedsReview || formState.emsCoreTopic === "other");
 
+    if (formState.isoClassifications.includes("training_facilities")) {
+      const facility = facilities.find((item) => item.id === formState.isoFacilityId);
+      if (!facility || !facilityQualifiesForIso(facility)) {
+        setSaveError("Select a qualifying training facility before assigning ISO Training Facilities credit.");
+        return;
+      }
+    }
+    if (formState.isoClassifications.includes("driver_operator") && !formState.isoDriverOperatorTrainingType) {
+      setSaveError("Select initial or refresher training for ISO Driver / Operator classification.");
+      return;
+    }
+    if (formState.isoClassifications.includes("building_familiarization") && !formState.isoPrePlanId) {
+      setSaveError("Select the building pre-plan visited for ISO Building Familiarization.");
+      return;
+    }
+
     setIsSaving(true);
     setSaveError(null);
 
@@ -2215,6 +2249,11 @@ export default function TrainingWorkspace({
           topic: isEmsTraining ? emsCoreTopic : null,
           training_type: trainingMethod || null,
           is_ems_training: isEmsTraining,
+          iso_classifications: formState.isoClassifications,
+          iso_classification: formState.isoClassifications[0] ?? null,
+          iso_facility_id: formState.isoFacilityId || null,
+          iso_pre_plan_id: formState.isoPrePlanId || null,
+          iso_driver_operator_training_type: formState.isoDriverOperatorTrainingType || null,
           ems_core_topic: emsCoreTopic,
           ems_course_definition_id: emsCourseDefinitionId,
           ems_needs_review: emsNeedsReview,
@@ -2232,7 +2271,7 @@ export default function TrainingWorkspace({
           updated_by: currentMemberId,
         })
         .select(
-          "id, title, category_id, topic, training_type, is_ems_training, ems_core_topic, ems_course_definition_id, ems_needs_review, ems_provider_name, description, location, instructor_name, starts_at, ends_at, duration_minutes, hours_credit, status, supporting_document_id, created_at, updated_at",
+          "id, title, category_id, topic, training_type, is_ems_training, ems_core_topic, ems_course_definition_id, ems_needs_review, ems_provider_name, description, location, instructor_name, starts_at, ends_at, duration_minutes, hours_credit, status, supporting_document_id, iso_classifications, iso_classification, iso_facility_id, iso_pre_plan_id, iso_driver_operator_training_type, iso_qualifying_facility, created_at, updated_at",
         )
         .single();
 
@@ -2297,6 +2336,12 @@ export default function TrainingWorkspace({
             : hoursCredit,
         status: typeof data.status === "string" ? data.status : "scheduled",
         supporting_document_id: typeof data.supporting_document_id === "string" ? data.supporting_document_id : null,
+        iso_classifications: Array.isArray(data.iso_classifications) ? data.iso_classifications.filter((value): value is string => typeof value === "string") : formState.isoClassifications,
+        iso_classification: typeof data.iso_classification === "string" ? data.iso_classification : formState.isoClassifications[0] ?? null,
+        iso_facility_id: typeof data.iso_facility_id === "string" ? data.iso_facility_id : formState.isoFacilityId || null,
+        iso_pre_plan_id: typeof data.iso_pre_plan_id === "string" ? data.iso_pre_plan_id : formState.isoPrePlanId || null,
+        iso_driver_operator_training_type: typeof data.iso_driver_operator_training_type === "string" ? data.iso_driver_operator_training_type : formState.isoDriverOperatorTrainingType || null,
+        iso_qualifying_facility: data.iso_qualifying_facility === true,
         created_at: typeof data.created_at === "string" ? data.created_at : new Date().toISOString(),
         updated_at: typeof data.updated_at === "string" ? data.updated_at : new Date().toISOString(),
       };
@@ -3635,7 +3680,7 @@ export default function TrainingWorkspace({
                   </div>
                 </label>
 
-                {isEmsCategoryName(activeCategories.find((category) => category.id === formState.categoryId)?.name) ? (
+                {isEmsCategoryName(activeCategories.find((category) => category.id === formState.categoryId)) ? (
                   <>
                     <label className="block">
                       <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">EMS Core Topic</span>
@@ -3683,6 +3728,21 @@ export default function TrainingWorkspace({
                     </label>
                   </>
                 ) : null}
+
+                <div className="md:col-span-2">
+                  <IsoTrainingFields
+                    classifications={formState.isoClassifications}
+                    onClassificationsChange={(next) => setFormState((current) => ({ ...current, isoClassifications: next }))}
+                    facilityId={formState.isoFacilityId}
+                    onFacilityChange={(next) => setFormState((current) => ({ ...current, isoFacilityId: next }))}
+                    facilities={facilities}
+                    prePlanId={formState.isoPrePlanId}
+                    onPrePlanChange={(next) => setFormState((current) => ({ ...current, isoPrePlanId: next }))}
+                    prePlans={prePlans}
+                    driverOperatorTrainingType={formState.isoDriverOperatorTrainingType}
+                    onDriverOperatorTrainingTypeChange={(next) => setFormState((current) => ({ ...current, isoDriverOperatorTrainingType: next }))}
+                  />
+                </div>
 
                 <label className="block">
                   <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Date *</span>
