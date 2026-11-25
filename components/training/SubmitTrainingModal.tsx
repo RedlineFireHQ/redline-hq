@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { EMS_CORE_TOPICS, type EmsCoreTopicCode } from "@/lib/ems/requirements";
+import { isEmsCategoryName } from "@/lib/training/is-ems-category";
 import { triggerEmsAllocationRecalculation } from "@/lib/ems/recalculate-client";
 import { supabase } from "@/lib/supabase";
 import { buildOutsideSubmissionNotes } from "@/lib/training/outside-submission-notes";
@@ -102,9 +103,6 @@ function emptyOutsideTrainingFormState(defaultCategoryId: string): OutsideTraini
   };
 }
 
-function isEmsCategoryName(value: string | null | undefined) {
-  return (value ?? "").trim().toLowerCase() === "ems";
-}
 
 function sanitizeFileName(name: string) {
   return name.replace(/[^a-zA-Z0-9._-]/g, "_");
