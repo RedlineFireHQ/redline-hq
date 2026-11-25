@@ -6,13 +6,6 @@
 -- be normalized safely before the final catalog guard is installed.
 drop trigger if exists trg_protect_system_training_categories on public.training_categories;
 
--- Normalize the existing EMS category label without changing its ID.
-update public.training_categories
-set name = 'EMS Continuing Education',
-    compliance_bucket = 'ems_ce',
-    active = true
-where system_key = 'ems_continuing_education';
-
 -- Preserve duplicate legacy EMS categories and their foreign keys, but stop
 -- them being offered for new entries. Historical rows keep their original IDs.
 update public.training_categories
@@ -26,6 +19,13 @@ where system_key is null
     where canonical.department_id = training_categories.department_id
       and canonical.system_key = 'ems_continuing_education'
   );
+
+-- Normalize the existing EMS category label without changing its ID.
+update public.training_categories
+set name = 'EMS Continuing Education',
+    compliance_bucket = 'ems_ce',
+    active = true
+where system_key = 'ems_continuing_education';
 
 -- Adopt existing department categories into the shared product catalog where
 -- names already match a standard. Their IDs are retained.
