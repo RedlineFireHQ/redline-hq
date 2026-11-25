@@ -3332,7 +3332,7 @@ export default function TrainingWorkspace({
                 </label>
 
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Category *</span>
+                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Department Training Category *</span>
                   <select
                     value={homeworkFormState.categoryId}
                     onChange={(event) => setHomeworkFormState((current) => ({ ...current, categoryId: event.target.value }))}
@@ -3668,7 +3668,7 @@ export default function TrainingWorkspace({
                 {isEmsCategoryName(activeCategories.find((category) => category.id === formState.categoryId)?.name) ? (
                   <>
                     <label className="block">
-                      <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">EMS Core Topic</span>
+                      <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">EMS Continuing Education Topic</span>
                       <select
                         value={formState.emsCoreTopic}
                         onChange={(event) => setFormState((current) => ({ ...current, emsCoreTopic: event.target.value as EmsCoreTopicCode }))}
