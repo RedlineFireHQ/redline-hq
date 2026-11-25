@@ -7,7 +7,7 @@ import { ArrowLeft, CalendarDays, Clock3, MapPin, UserRound } from "lucide-react
 import { EMS_CORE_TOPICS, type EmsCoreTopicCode } from "@/lib/ems/requirements";
 import { triggerEmsAllocationRecalculationForMembers } from "@/lib/ems/recalculate-client";
 import { supabase } from "@/lib/supabase";
-import { ISO_FACILITY_TYPES, ISO_TRAINING_CLASSIFICATIONS, type IsoFacilityType, type IsoTrainingClassification } from "@/lib/training/iso-classifications";
+import { ISO_FACILITY_TYPES, ISO_TRAINING_CLASSIFICATIONS, suggestIsoTrainingClassification, type IsoFacilityType, type IsoTrainingClassification } from "@/lib/training/iso-classifications";
 
 type CurrentMemberRole = "firefighter" | "officer" | "administrator";
 
@@ -939,7 +939,7 @@ export default function TrainingEventDetailWorkspace({
                 </select>
               </label>
               <label className="mt-4 flex items-start gap-2 text-sm text-neutral-200">
-                <input type="checkbox" checked={formState.isoQualifyingFacility} onChange={(event) => setFormState((current) => ({ ...current, isoQualifyingFacility: event.target.checked, isoClassification: event.target.checked ? "training_facilities" : current.isoClassification, isoFacilityType: event.target.checked ? current.isoFacilityType : "", isoFacilityAgreement: event.target.checked ? current.isoFacilityAgreement : false }))} className="mt-0.5 h-4 w-4 accent-sky-500" />
+                <input type="checkbox" checked={formState.isoQualifyingFacility} onChange={(event) => setFormState((current) => ({ ...current, isoQualifyingFacility: event.target.checked, isoClassification: event.target.checked ? "training_facilities" : (current.isoClassification === "training_facilities" ? suggestIsoTrainingClassification(categories.find((category) => category.id === current.categoryId)?.name) : current.isoClassification), isoFacilityType: event.target.checked ? current.isoFacilityType : "", isoFacilityAgreement: event.target.checked ? current.isoFacilityAgreement : false }))} className="mt-0.5 h-4 w-4 accent-sky-500" />
                 <span><span className="font-semibold">Qualifying ISO Training Facility</span><span className="mt-1 block text-xs text-neutral-400">Check only for a qualifying tower, burn building, 2+ acre training yard, or qualifying regional facility.</span></span>
               </label>
               {formState.isoQualifyingFacility ? (
