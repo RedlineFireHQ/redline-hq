@@ -123,7 +123,8 @@ type TrainingCategoryRow = {
   id: string;
   name: string;
   active: boolean;
-  compliance_bucket?: string | null;
+  compliance_bucket: string | null;
+  system_key: string | null;
 };
 
 type EmsCourseDefinitionRow = {
@@ -433,7 +434,7 @@ export default async function MyReadinessPage() {
       .single(),
     supabase
       .from("department_roles")
-      .select("id, name, active")
+      .select("id, name, active, compliance_bucket, system_key")
       .eq("department_id", currentMember.departmentId),
     supabase
       .from("qualifications")
@@ -719,7 +720,7 @@ export default async function MyReadinessPage() {
   if (categoryIds.length > 0) {
     const { data: categoryRows, error: categoryError } = await supabase
       .from("training_categories")
-      .select("id, name, compliance_bucket")
+      .select("id, name, compliance_bucket, system_key")
       .eq("department_id", currentMember.departmentId)
       .in("id", categoryIds);
 
@@ -759,6 +760,8 @@ export default async function MyReadinessPage() {
     id: String(row.id),
     name: typeof row.name === "string" ? row.name : "",
     active: typeof row.active === "boolean" ? row.active : true,
+    compliance_bucket: typeof row.compliance_bucket === "string" ? row.compliance_bucket : null,
+    system_key: typeof row.system_key === "string" ? row.system_key : null,
   }));
 
   const emsCourseDefinitions: EmsCourseDefinitionRow[] = (emsCourseDefinitionRows ?? []).map((row) => ({
