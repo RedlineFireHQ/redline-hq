@@ -533,3 +533,20 @@ operator; obtain access through an authorized existing credential path without
 bypassing Keychain. Then verify remaining schema/permission prerequisites and
 Cedar Bluff authorization before release. Do not create another login role,
 expose credentials, or change Production before these gates pass.
+
+
+## ISO training documentation — 2026-11-25
+
+- **Status:** Implemented on Preview and deployed successfully; ready for user testing. Not yet end-to-end verified through the browser.
+- **Scope delivered:**
+  - Added the seven ISO training classifications as a separate layer from each department's normal training categories.
+  - The Log Training screen still creates one training event. The same event retains its regular category (including EMS) and now also stores one ISO classification; no duplicate training entry is required.
+  - Added category-based ISO suggestions for Company, Officer, Driver/Operator, HazMat, Recruit, and Building Familiarization classifications. EMS and administrative categories are left unclassified by default for a deliberate choice.
+  - Added the Qualifying ISO Training Facility checkbox, facility type, and formal-agreement confirmation for regional academy facilities. A qualifying facility record must use the Training Facilities classification and include the facility details; a regional academy requires the agreement checkbox.
+  - Added an ISO Training Documentation report with current-calendar-year person-hours by classification, member breakdown, facility hours, recent classified events, and guide reference targets.
+- **Database:** Applied additive migration `20261125120000_add_iso_training_documentation` to Preview Supabase project `sabgmryatojwtjuiqual`. Verified all four columns and the classification/facility constraints. Production database was not changed.
+- **Code:** Squash-merged PR [#24](https://github.com/RedlineFireHQ/redline-hq/pull/24) into the `preview` branch. Feature branch `feature/iso-training-documentation-preview` was used for implementation.
+- **Deployment:** Vercel Preview deployment `dpl_Dpm1S7fRQv1K6RmjXs9ttwGQq8By` reached READY at `https://redline-hq-red-oak-preview-iq0c5b8wp-redline-fire-hq.vercel.app`. Next.js compile and TypeScript validation passed.
+- **Known limitations / not to overstate:** The initial report currently includes only training events that have an ISO classification and attendance marked attending. It does not yet include member-submitted outside training or assigned-training completions in ISO totals. Officer certification, new-driver initial qualification, recruit first-year start/completion tracking, and historical building visit/crew tracking are not yet calculated automatically. This is an ISO documentation starter, not an ISO compliance determination.
+- **Next action:** User tests Log Training with ordinary Fire Suppression, EMS, Driver/Operator, HazMat, Officer, and qualifying-facility examples; verify the same event still updates the normal training/EMS trackers and appears correctly in the ISO report. Record issues before extending the report to other training sources or adding compliance calculations.
+- **Production:** No Production schema, data, deployment, or merge changes were made.
