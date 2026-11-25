@@ -10,9 +10,10 @@ type Props = {
   onClose: () => void;
 };
 
-type LabelPreset = "1" | "1.5" | "2" | "custom";
+type LabelPreset = "0.75" | "1" | "1.5" | "2" | "custom";
 
 const PRESETS: Array<{ value: LabelPreset; label: string; inches: number }> = [
+  { value: "0.75", label: "¾ × ¾ in", inches: 0.75 },
   { value: "1", label: "1 × 1 in", inches: 1 },
   { value: "1.5", label: "1.5 × 1.5 in", inches: 1.5 },
   { value: "2", label: "2 × 2 in", inches: 2 },
@@ -35,8 +36,8 @@ export default function QrLabelDialog({ title, subtitle, value, onClose }: Props
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [preset, setPreset] = useState<LabelPreset>("1.5");
-  const [customWidth, setCustomWidth] = useState("1.5");
-  const [customHeight, setCustomHeight] = useState("1.5");
+  const [customWidth, setCustomWidth] = useState("1");
+  const [customHeight, setCustomHeight] = useState("1");
 
   const dimensions = useMemo(() => {
     if (preset !== "custom") {
@@ -48,8 +49,8 @@ export default function QrLabelDialog({ title, subtitle, value, onClose }: Props
     const valid =
       Number.isFinite(width) &&
       Number.isFinite(height) &&
-      width >= 1 &&
-      height >= 1 &&
+      width >= 0.5 &&
+      height >= 0.5 &&
       width <= 4 &&
       height <= 4;
     return { width, height, valid };
@@ -99,49 +100,54 @@ export default function QrLabelDialog({ title, subtitle, value, onClose }: Props
 
     const pageWidth = widthInches * 72;
     const pageHeight = heightInches * 72;
-    const content = `q\\n${pageWidth} 0 0 ${pageHeight} 0 0 cm\\n/Im0 Do\\nQ\\n`;
+    const content = \`q\n\${pageWidth} 0 0 \${pageHeight} 0 0 cm\n/Im0 Do\nQ\n\`;
     const encoder = new TextEncoder();
     const objects: Uint8Array[] = [];
     const stream = (header: string, bytes: Uint8Array) => {
-      const prefix = encoder.encode(`${header}\\nstream\\n`);
-      const suffix = encoder.encode("\\nendstream");
+      const prefix = encoder.encode(\`\${header}\nstream\n\`);
+      const suffix = encoder.encode("\nendstream");
       const combined = new Uint8Array(prefix.length + bytes.length + suffix.length);
       combined.set(prefix, 0);
       combined.set(bytes, prefix.length);
       combined.set(suffix, prefix.length + bytes.length);
       return combined;
     };
+
     objects.push(encoder.encode("<< /Type /Catalog /Pages 2 0 R >>"));
     objects.push(encoder.encode("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"));
-    objects.push(encoder.encode(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`));
-    objects.push(stream(`<< /Type /XObject /Subtype /Image /Width ${pixelWidth} /Height ${pixelHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length ${rgb.length} >>`, rgb));
+    objects.push(encoder.encode(\`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 \${pageWidth} \${pageHeight}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>\`));
+    objects.push(stream(\`<< /Type /XObject /Subtype /Image /Width \${pixelWidth} /Height \${pixelHeight} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length \${rgb.length} >>\`, rgb));
     const contentBytes = encoder.encode(content);
-    objects.push(stream(`<< /Length ${contentBytes.length} >>`, contentBytes));
+    objects.push(stream(\`<< /Length \${contentBytes.length} >>\`, contentBytes));
 
-    const chunks: Uint8Array[] = [encoder.encode("%PDF-1.4\\n% RedlineHQ\\n")];
+    const chunks: Uint8Array[] = [encoder.encode("%PDF-1.4\n%RedlineHQ\n")];
     const offsets = [0];
     let length = chunks[0].length;
     objects.forEach((object, index) => {
+      const head = encoder.encode(\`\${index + 1} 0 obj\n\`);
+      const tail = encoder.encode("\nendobj\n");
       offsets.push(length);
-      const chunk = new Uint8Array(encoder.encode(`${index + 1} 0 obj\\n`).length + object.length + encoder.encode("\\nendobj\\n").length);
-      const head = encoder.encode(`${index + 1} 0 obj\\n`);
-      const tail = encoder.encode("\\nendobj\\n");
+      const chunk = new Uint8Array(head.length + object.length + tail.length);
       chunk.set(head, 0);
       chunk.set(object, head.length);
       chunk.set(tail, head.length + object.length);
       chunks.push(chunk);
       length += chunk.length;
     });
-    const xrefOffset = length;
-    let xref = `xref\\n0 ${objects.length + 1}\\n0000000000 65535 f \\n`;
-    for (let index = 1; index < offsets.length; index++) {
-      xref += `${String(offsets[index]).padStart(10, "0")} 00000 n \\n`;
-    }
-    xref += `trailer\\n<< /Size ${objects.length + 1} /Root 1 0 R >>\\nstartxref\\n${xrefOffset}\\n%%EOF`;
-    chunks.push(encoder.encode(xref));
-    return new Blob(chunks.map((chunk) => chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength) as ArrayBuffer), { type: "application/pdf" });
-  }
 
+    const xrefOffset = length;
+    let xref = \`xref\n0 \${objects.length + 1}\n0000000000 65535 f \n\`;
+    for (let index = 1; index < offsets.length; index++) {
+      xref += \`\${String(offsets[index]).padStart(10, "0")} 00000 n \n\`;
+    }
+    xref += \`trailer\n<< /Size \${objects.length + 1} /Root 1 0 R >>\nstartxref\n\${xrefOffset}\n%%EOF\`;
+    chunks.push(encoder.encode(xref));
+
+    return new Blob(
+      chunks.map((chunk) => chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength) as ArrayBuffer),
+      { type: "application/pdf" },
+    );
+  }
   function renderLabelPdf(onReady: (blob: Blob) => void) {
     if (!dataUrl || !dimensions.valid) return;
     const dpi = 300;
@@ -149,68 +155,82 @@ export default function QrLabelDialog({ title, subtitle, value, onClose }: Props
     canvas.width = Math.round(dimensions.width * dpi);
     canvas.height = Math.round(dimensions.height * dpi);
     const context = canvas.getContext("2d", { willReadFrequently: true });
-    if (!context) return;
+    if (!context) {
+      setError("Unable to prepare the label.");
+      return;
+    }
     context.fillStyle = "#fff";
     context.fillRect(0, 0, canvas.width, canvas.height);
     const qr = new Image();
     qr.onload = () => {
+      const minSide = Math.min(canvas.width, canvas.height);
+      const margin = Math.max(5, Math.round(minSide * 0.035));
+      const maxTextWidth = canvas.width - margin * 2;
       context.fillStyle = "#111";
       context.textAlign = "center";
       context.textBaseline = "top";
-      const margin = Math.max(12, Math.round(0.045 * dpi));
-      const maxTextWidth = canvas.width - margin * 2;
-      const titleSize = Math.max(17, Math.min(29, Math.round(dimensions.width * 17)));
-      context.font = `700 ${titleSize}px Arial, sans-serif`;
+
+      const titleSize = Math.max(10, Math.round(minSide * 0.052));
+      context.font = \`700 \${titleSize}px Arial, sans-serif\`;
       let y = margin;
       for (const line of wrapCanvasText(context, title, maxTextWidth)) {
         context.fillText(line, canvas.width / 2, y, maxTextWidth);
-        y += titleSize + 2;
+        y += titleSize + 1;
       }
+
       if (subtitle?.trim()) {
-        const subSize = Math.max(14, Math.round(titleSize * 0.8));
-        context.font = `600 ${subSize}px Arial, sans-serif`;
+        const subSize = Math.max(9, Math.round(titleSize * 0.78));
+        context.font = \`600 \${subSize}px Arial, sans-serif\`;
         for (const line of wrapCanvasText(context, subtitle.trim(), maxTextWidth)) {
           context.fillText(line, canvas.width / 2, y, maxTextWidth);
-          y += subSize + 2;
+          y += subSize + 1;
         }
       }
+
+      const availableHeight = canvas.height - y - margin;
       const qrSize = Math.min(
-        Math.round(Math.min(dimensions.width, dimensions.height) * dpi * 0.66),
+        Math.round(minSide * 0.58),
         canvas.width - margin * 2,
-        canvas.height - y - margin,
+        availableHeight,
       );
-      if (qrSize < Math.round(0.6 * dpi)) return;
+      if (qrSize < Math.round(minSide * 0.28)) {
+        setError("This label is too small for the item name and a reliably scannable QR code. Try a larger size or a shorter item name.");
+        return;
+      }
       context.imageSmoothingEnabled = false;
-      context.drawImage(qr, Math.round((canvas.width - qrSize) / 2), y + Math.max(0, Math.round((canvas.height - y - margin - qrSize) / 2)), qrSize, qrSize);
+      context.drawImage(qr, Math.round((canvas.width - qrSize) / 2), y + Math.max(0, Math.round((availableHeight - qrSize) / 2)), qrSize, qrSize);
       const pdf = createLabelPdf(context.getImageData(0, 0, canvas.width, canvas.height), dimensions.width, dimensions.height);
       onReady(pdf);
     };
     qr.onerror = () => setError("Unable to prepare the QR label PDF.");
     qr.src = dataUrl;
   }
-
   function downloadLabel() {
     renderLabelPdf((blob) => {
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `${title.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${dimensions.width}x${dimensions.height}-label.pdf`;
+      link.download = \`\${title.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-\${dimensions.width}x\${dimensions.height}-label.pdf\`;
+      document.body.appendChild(link);
       link.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
     });
   }
 
   function printLabel() {
+    // Open the tab immediately during the click so Safari does not treat it as a popup.
+    const printWindow = window.open("about:blank", "_blank");
+    if (!printWindow) {
+      setError("Safari blocked the print window. Allow pop-ups for this Preview site, then try Print Label again.");
+      return;
+    }
     renderLabelPdf((blob) => {
       const url = URL.createObjectURL(blob);
-      const printWindow = window.open(url, "_blank");
-      if (!printWindow) {
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `${title.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${dimensions.width}x${dimensions.height}-label.pdf`;
-        link.click();
-      }
-      window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+      printWindow.location.href = url;
+      printWindow.focus();
+      // Keep the object URL alive while the built-in PDF viewer loads.
+      window.setTimeout(() => URL.revokeObjectURL(url), 120000);
     });
   }
 
@@ -253,20 +273,20 @@ export default function QrLabelDialog({ title, subtitle, value, onClose }: Props
             </label>
           </div>
         ) : null}
-        {!dimensions.valid ? <p className="mt-2 text-xs text-red-300">Enter a width and height from 1 to 4 inches.</p> : null}
+        {!dimensions.valid ? <p className="mt-2 text-xs text-red-300">Enter a width and height from 0.5 to 4 inches.</p> : null}
 
         <div className="mt-5 rounded-xl border border-white/10 bg-white p-4">
           <p className="mb-2 text-center text-xs font-semibold uppercase tracking-wide text-neutral-500">Label preview · {dimensions.valid ? `${dimensions.width} × ${dimensions.height} in` : "Invalid size"}</p>
           <div className="mx-auto flex max-w-full flex-col items-center justify-between overflow-hidden bg-white p-2 text-center text-black shadow-sm transition-[width] duration-200"
             style={{
-              width: dimensions.valid ? `${Math.min(280, Math.max(120, dimensions.width * 120))}px` : "180px",
+              width: dimensions.valid ? `${Math.min(320, Math.max(100, dimensions.width * 160))}px` : "160px",
               aspectRatio: dimensions.valid ? `${dimensions.width} / ${dimensions.height}` : "1 / 1",
             }}>
             <div className="w-full leading-tight">
-              <p className="break-words text-sm font-bold">{title}</p>
-              {subtitle?.trim() ? <p className="mt-0.5 break-words text-xs font-semibold">{subtitle}</p> : null}
+              <p className="break-words text-[11px] font-bold leading-tight">{title}</p>
+              {subtitle?.trim() ? <p className="mt-0.5 break-words text-[9px] font-semibold leading-tight">{subtitle}</p> : null}
             </div>
-            {dataUrl ? <img src={dataUrl} alt={`${title} QR code`} className="my-1 aspect-square max-h-[72%] max-w-[72%] object-contain" /> : <p className="text-xs text-neutral-500">Generating QR code...</p>}
+            {dataUrl ? <img src={dataUrl} alt={`${title} QR code`} className="my-1 aspect-square max-h-[64%] max-w-[68%] shrink-0 object-contain" /> : <p className="text-xs text-neutral-500">Generating QR code...</p>}
           </div>
         </div>
         {error ? <p className="mt-3 rounded-xl border border-red-400/25 bg-red-500/10 p-3 text-sm text-red-100">{error}</p> : null}
