@@ -389,7 +389,7 @@ export default function SubmitTrainingModal({
               <option value="">Select category</option>
               {activeCategories.map((category) => (
                 <option key={category.id} value={category.id}>
-                  {category.name}
+                  {isEmsCategoryName(category.name) ? "EMS Continuing Education" : category.name}
                 </option>
               ))}
             </select>
