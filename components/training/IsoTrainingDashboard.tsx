@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { ISO_TRAINING_CLASSIFICATIONS } from "@/lib/training/iso-training";
+import { ISO_TRAINING_CLASSIFICATIONS, calculateIsoMemberHours } from "@/lib/training/iso-training";
 import type { IsoPrePlanOption } from "@/components/training/IsoTrainingFields";
 
 type EventRow = {
@@ -51,6 +51,7 @@ export default function IsoTrainingDashboard({ events, attendanceRows, members, 
       return role.includes("officer") || role.includes("administrator") || /(chief|captain|lieutenant|lieut|battalion)/.test(rank);
     }).map((member) => member.id));
     const totalActiveMembers = Math.max(1, members.length);
+    const recruitIds = new Set(recruitMembers.map((member) => member.id));
     const now = new Date();
     const recruitMembers = members.filter((member) => {
       if (!member.hire_start_date) return false;
@@ -69,6 +70,8 @@ export default function IsoTrainingDashboard({ events, attendanceRows, members, 
       let memberHoursTotal = 0;
       for (const attendance of attendanceRows) {
         if (attendance.attendance_status !== "attending") continue;
+        if (classification.code === "officer_training" && !officerIds.has(attendance.member_id)) continue;
+        if (classification.code === "recruit" && !recruitIds.has(attendance.member_id)) continue;
         const event = eligibleEvents.find((item) => item.id === attendance.training_event_id);
         if (!event) continue;
         participantIds.add(attendance.member_id);
