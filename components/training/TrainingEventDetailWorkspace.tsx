@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, CalendarDays, Clock3, MapPin, UserRound } from "lucide-react";
 import { EMS_CORE_TOPICS, type EmsCoreTopicCode } from "@/lib/ems/requirements";
 import { isEmsCategoryName } from "@/lib/training/is-ems-category";
+import { isEmsCategoryName } from "@/lib/training/is-ems-category";
 import { triggerEmsAllocationRecalculationForMembers } from "@/lib/ems/recalculate-client";
 import { supabase } from "@/lib/supabase";
 import { ISO_FACILITY_TYPES, ISO_TRAINING_CLASSIFICATIONS, suggestIsoTrainingClassification, type IsoFacilityType, type IsoTrainingClassification } from "@/lib/training/iso-classifications";
@@ -924,7 +925,78 @@ export default function TrainingEventDetailWorkspace({
               </select>
             </label>
 
-                            <label className="block">
+            <div className="md:col-span-2 rounded-xl border border-sky-500/20 bg-sky-500/[0.04] p-4">
+              <div className="mb-3">
+                <p className="text-sm font-semibold text-white">ISO Documentation</p>
+                <p className="mt-1 text-xs text-neutral-400">Separate from the regular training category. This same training record is used for ISO documentation.</p>
+              </div>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">ISO Training Classification</span>
+                <select value={formState.isoClassification} onChange={(event) => setFormState((current) => ({ ...current, isoClassification: event.target.value as IsoTrainingClassification | "" }))} className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none">
+                  <option value="">Not classified for ISO</option>
+                  {ISO_TRAINING_CLASSIFICATIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                </select>
+              </label>
+              <label className="mt-4 flex items-start gap-2 text-sm text-neutral-200">
+                <input type="checkbox" checked={formState.isoQualifyingFacility} onChange={(event) => setFormState((current) => ({ ...current, isoQualifyingFacility: event.target.checked, isoClassification: event.target.checked ? "training_facilities" : (current.isoClassification === "training_facilities" ? suggestIsoTrainingClassification(categories.find((category) => category.id === current.categoryId)?.name) : current.isoClassification), isoFacilityType: event.target.checked ? current.isoFacilityType : "", isoFacilityAgreement: event.target.checked ? current.isoFacilityAgreement : false }))} className="mt-0.5 h-4 w-4 accent-sky-500" />
+                <span><span className="font-semibold">Qualifying ISO Training Facility</span><span className="mt-1 block text-xs text-neutral-400">Check only for a qualifying tower, burn building, 2+ acre training yard, or qualifying regional facility.</span></span>
+              </label>
+              {formState.isoQualifyingFacility ? (
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Facility Type *</span>
+                    <select value={formState.isoFacilityType} onChange={(event) => setFormState((current) => ({ ...current, isoFacilityType: event.target.value as IsoFacilityType | "" }))} className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none">
+                      <option value="">Select facility type</option>
+                      {ISO_FACILITY_TYPES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                    </select>
+                  </label>
+                  {formState.isoFacilityType === "regional_academy" ? (
+                    <label className="flex items-center gap-2 text-sm text-neutral-200"><input type="checkbox" checked={formState.isoFacilityAgreement} onChange={(event) => setFormState((current) => ({ ...current, isoFacilityAgreement: event.target.checked }))} className="h-4 w-4 accent-sky-500" />Formal agreement on file</label>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Training Method</span>
+              <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-white/10 bg-[#1b1b1b] p-2">
+                {TRAINING_METHOD_OPTIONS.map((option) => (
+                  <label key={option} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-white hover:bg-white/[0.06]">
+                    <input
+                      type="checkbox"
+                      checked={formState.trainingType.includes(option)}
+                      onChange={(event) =>
+                        setFormState((current) => ({
+                          ...current,
+                          trainingType: event.target.checked
+                            ? [...current.trainingType, option]
+                            : current.trainingType.filter((method) => method !== option),
+                        }))
+                      }
+                      className="h-4 w-4 rounded border-white/20 bg-[#111111] accent-red-600"
+                    />
+                    <span>{option}</span>
+                  </label>
+                ))}
+              </div>
+            </label>
+
+            {isEmsCategoryName(categoryLookup.get(formState.categoryId)?.name) ? (
+              <>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">EMS Core Topic</span>
+                  <select
+                    value={formState.emsCoreTopic}
+                    onChange={(event) => setFormState((current) => ({ ...current, emsCoreTopic: event.target.value as EmsCoreTopicCode }))}
+                    className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
+                  >
+                    {EMS_CORE_TOPICS.map((topic) => (
+                      <option key={topic.code} value={topic.code}>{topic.label}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block">
                   <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">EMS Course / Training</span>
                   <select
                     value={formState.emsCourseDefinitionId}
@@ -1038,77 +1110,6 @@ export default function TrainingEventDetailWorkspace({
                 className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
               />
             </label>
-
-                <div className="md:col-span-2 rounded-xl border border-sky-500/20 bg-sky-500/[0.04] p-4">
-              <div className="mb-3">
-                <p className="text-sm font-semibold text-white">ISO Reporting Classification</p>
-                <p className="mt-1 text-xs text-neutral-400">Separate from the regular training category. This same training record is used for ISO documentation.</p>
-              </div>
-              <label className="block">
-                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">ISO Training Classification</span>
-                <select value={formState.isoClassification} onChange={(event) => setFormState((current) => ({ ...current, isoClassification: event.target.value as IsoTrainingClassification | "" }))} className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none">
-                  <option value="">Not classified for ISO</option>
-                  {ISO_TRAINING_CLASSIFICATIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-                </select>
-              </label>
-              <label className="mt-4 flex items-start gap-2 text-sm text-neutral-200">
-                <input type="checkbox" checked={formState.isoQualifyingFacility} onChange={(event) => setFormState((current) => ({ ...current, isoQualifyingFacility: event.target.checked, isoClassification: event.target.checked ? "training_facilities" : (current.isoClassification === "training_facilities" ? suggestIsoTrainingClassification(categories.find((category) => category.id === current.categoryId)?.name) : current.isoClassification), isoFacilityType: event.target.checked ? current.isoFacilityType : "", isoFacilityAgreement: event.target.checked ? current.isoFacilityAgreement : false }))} className="mt-0.5 h-4 w-4 accent-sky-500" />
-                <span><span className="font-semibold">Does this training location qualify as an ISO training facility?</span><span className="mt-1 block text-xs text-neutral-400">Check only for a qualifying tower, burn building, 2+ acre training yard, or qualifying regional facility.</span></span>
-              </label>
-              {formState.isoQualifyingFacility ? (
-                <div className="mt-3 grid gap-3 md:grid-cols-2">
-                  <label className="block">
-                    <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Facility Type *</span>
-                    <select value={formState.isoFacilityType} onChange={(event) => setFormState((current) => ({ ...current, isoFacilityType: event.target.value as IsoFacilityType | "" }))} className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none">
-                      <option value="">Select facility type</option>
-                      {ISO_FACILITY_TYPES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-                    </select>
-                  </label>
-                  {formState.isoFacilityType === "regional_academy" ? (
-                    <label className="flex items-center gap-2 text-sm text-neutral-200"><input type="checkbox" checked={formState.isoFacilityAgreement} onChange={(event) => setFormState((current) => ({ ...current, isoFacilityAgreement: event.target.checked }))} className="h-4 w-4 accent-sky-500" />Formal agreement on file</label>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
-
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Training Method</span>
-              <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-white/10 bg-[#1b1b1b] p-2">
-                {TRAINING_METHOD_OPTIONS.map((option) => (
-                  <label key={option} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-white hover:bg-white/[0.06]">
-                    <input
-                      type="checkbox"
-                      checked={formState.trainingType.includes(option)}
-                      onChange={(event) =>
-                        setFormState((current) => ({
-                          ...current,
-                          trainingType: event.target.checked
-                            ? [...current.trainingType, option]
-                            : current.trainingType.filter((method) => method !== option),
-                        }))
-                      }
-                      className="h-4 w-4 rounded border-white/20 bg-[#111111] accent-red-600"
-                    />
-                    <span>{option}</span>
-                  </label>
-                ))}
-              </div>
-            </label>
-
-            {isEmsCategoryName(categoryLookup.get(formState.categoryId)?.name) ? (
-              <>
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">EMS Core Topic</span>
-                  <select
-                    value={formState.emsCoreTopic}
-                    onChange={(event) => setFormState((current) => ({ ...current, emsCoreTopic: event.target.value as EmsCoreTopicCode }))}
-                    className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
-                  >
-                    {EMS_CORE_TOPICS.map((topic) => (
-                      <option key={topic.code} value={topic.code}>{topic.label}</option>
-                    ))}
-                  </select>
-                </label>
 
             <label className="block">
               <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Status</span>
