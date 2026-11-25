@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 type CreateSupplyPayload = {
   itemName?: unknown;
+  manufacturer?: unknown;
   itemCategory?: unknown;
   unitOfMeasure?: unknown;
   customUnitOfMeasure?: unknown;
@@ -114,7 +115,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from("ems_supply_items")
       .select(
-        "id, item_name, item_category, unit_of_measure, custom_unit_of_measure, quantity_on_hand, reorder_threshold, critical_threshold, target_quantity, location, notes, status, qr_identifier, created_at, updated_at",
+        "id, item_name, manufacturer, item_category, unit_of_measure, custom_unit_of_measure, quantity_on_hand, reorder_threshold, critical_threshold, target_quantity, location, notes, status, qr_identifier, created_at, updated_at",
       )
       .eq("department_id", currentMember.departmentId)
       .order("status", { ascending: true })
@@ -153,6 +154,7 @@ export async function POST(request: Request) {
     }
 
     const itemName = asTrimmedString(payload.itemName);
+    const manufacturer = asTrimmedString(payload.manufacturer).slice(0, 120) || null;
     const unitOfMeasureRaw = asTrimmedString(payload.unitOfMeasure).toLowerCase() as AllowedUnit;
     const customUnitOfMeasure = asTrimmedString(payload.customUnitOfMeasure) || null;
     const location = asTrimmedString(payload.location) || null;
@@ -194,6 +196,7 @@ export async function POST(request: Request) {
       .insert({
         department_id: currentMember.departmentId,
         item_name: itemName,
+        manufacturer,
         item_category: null,
         unit_of_measure: unitOfMeasureRaw,
         custom_unit_of_measure: unitOfMeasureRaw === "custom" ? customUnitOfMeasure : null,
@@ -208,7 +211,7 @@ export async function POST(request: Request) {
         updated_by_member_id: currentMember.id,
       })
       .select(
-        "id, item_name, item_category, unit_of_measure, custom_unit_of_measure, quantity_on_hand, reorder_threshold, critical_threshold, target_quantity, location, notes, status, qr_identifier, created_at, updated_at",
+        "id, item_name, manufacturer, item_category, unit_of_measure, custom_unit_of_measure, quantity_on_hand, reorder_threshold, critical_threshold, target_quantity, location, notes, status, qr_identifier, created_at, updated_at",
       )
       .single();
 
@@ -251,7 +254,7 @@ export async function POST(request: Request) {
     const { data: finalRow, error: readbackError } = await supabase
       .from("ems_supply_items")
       .select(
-        "id, item_name, item_category, unit_of_measure, custom_unit_of_measure, quantity_on_hand, reorder_threshold, critical_threshold, target_quantity, location, notes, status, qr_identifier, created_at, updated_at",
+        "id, item_name, manufacturer, item_category, unit_of_measure, custom_unit_of_measure, quantity_on_hand, reorder_threshold, critical_threshold, target_quantity, location, notes, status, qr_identifier, created_at, updated_at",
       )
       .eq("id", insertedItem.id)
       .eq("department_id", currentMember.departmentId)
