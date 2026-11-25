@@ -910,7 +910,7 @@ export default function TrainingEventDetailWorkspace({
             </label>
 
             <label className="block">
-              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Category *</span>
+              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Department Training Category *</span>
               <select
                 value={formState.categoryId}
                 onChange={(event) => setFormState((current) => ({ ...current, categoryId: event.target.value }))}
@@ -927,8 +927,8 @@ export default function TrainingEventDetailWorkspace({
 
             <div className="md:col-span-2 rounded-xl border border-sky-500/20 bg-sky-500/[0.04] p-4">
               <div className="mb-3">
-                <p className="text-sm font-semibold text-white">ISO Documentation</p>
-                <p className="mt-1 text-xs text-neutral-400">Separate from the regular training category. This same training record is used for ISO documentation.</p>
+                <p className="text-sm font-semibold text-white">ISO Reporting Classification</p>
+                <p className="mt-1 text-xs text-neutral-400">This is the ISO reporting bucket for this session. Your department training category above stays separate; log the training only once.</p>
               </div>
               <label className="block">
                 <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">ISO Training Classification</span>
@@ -939,7 +939,7 @@ export default function TrainingEventDetailWorkspace({
               </label>
               <label className="mt-4 flex items-start gap-2 text-sm text-neutral-200">
                 <input type="checkbox" checked={formState.isoQualifyingFacility} onChange={(event) => setFormState((current) => ({ ...current, isoQualifyingFacility: event.target.checked, isoClassification: event.target.checked ? "training_facilities" : (current.isoClassification === "training_facilities" ? suggestIsoTrainingClassification(categories.find((category) => category.id === current.categoryId)?.name) : current.isoClassification), isoFacilityType: event.target.checked ? current.isoFacilityType : "", isoFacilityAgreement: event.target.checked ? current.isoFacilityAgreement : false }))} className="mt-0.5 h-4 w-4 accent-sky-500" />
-                <span><span className="font-semibold">Qualifying ISO Training Facility</span><span className="mt-1 block text-xs text-neutral-400">Check only for a qualifying tower, burn building, 2+ acre training yard, or qualifying regional facility.</span></span>
+                <span><span className="font-semibold">Does this training location qualify as an ISO training facility?</span><span className="mt-1 block text-xs text-neutral-400">Check only for a qualifying tower, burn building, 2+ acre training yard, or qualifying regional facility.</span></span>
               </label>
               {formState.isoQualifyingFacility ? (
                 <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -984,7 +984,7 @@ export default function TrainingEventDetailWorkspace({
             {isEmsCategoryName(categoryLookup.get(formState.categoryId)?.name) ? (
               <>
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">EMS Core Topic</span>
+                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">EMS Continuing Education Topic</span>
                   <select
                     value={formState.emsCoreTopic}
                     onChange={(event) => setFormState((current) => ({ ...current, emsCoreTopic: event.target.value as EmsCoreTopicCode }))}
