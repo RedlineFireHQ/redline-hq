@@ -535,6 +535,14 @@ export default function TrainingEventDetailWorkspace({
           typeof data.supporting_document_id === "string"
             ? data.supporting_document_id
             : formState.supportingDocumentId || null,
+        iso_classifications: Array.isArray(data.iso_classifications) ? data.iso_classifications.filter((value): value is string => typeof value === "string") : formState.isoClassifications,
+        iso_classification: typeof data.iso_classification === "string" ? data.iso_classification : formState.isoClassifications[0] ?? null,
+        iso_facility_id: typeof data.iso_facility_id === "string" ? data.iso_facility_id : formState.isoFacilityId || null,
+        iso_pre_plan_id: typeof data.iso_pre_plan_id === "string" ? data.iso_pre_plan_id : formState.isoPrePlanId || null,
+        iso_driver_operator_training_type: typeof data.iso_driver_operator_training_type === "string" ? data.iso_driver_operator_training_type : formState.isoDriverOperatorTrainingType || null,
+        iso_qualifying_facility: data.iso_qualifying_facility === true,
+        iso_facility_credit_level: typeof data.iso_facility_credit_level === "string" ? data.iso_facility_credit_level : "none",
+        iso_facility_stories: typeof data.iso_facility_stories === "number" ? data.iso_facility_stories : null,
       };
 
       setEventState(updatedEvent);
