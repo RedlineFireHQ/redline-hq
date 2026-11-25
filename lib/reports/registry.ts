@@ -907,7 +907,7 @@ export const REPORT_SOURCES: ReportSourceConfig[] = [
 			{ key: "description", label: "Description" },
 			{ key: "related_item", label: "Related Item" },
 		],
-	},,
+	},
 	{
 		key: "red-oak-ems-competency",
 		name: "EMS Skills Competency Verification",
