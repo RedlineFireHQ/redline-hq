@@ -105,8 +105,24 @@ export default function IsoTrainingDashboard({ events, attendanceRows, members, 
     }
     const activePlans = prePlans.filter((plan) => plan.lifecycle_status === "active");
     const plansMeetingVisitTarget = activePlans.filter((plan) => (visitsByPlan.get(plan.id) ?? 0) >= (plan.iso_high_hazard ? 2 : 1)).length;
-    const initialDriverHours = completedEvents.filter((event) => event.iso_classifications.includes("driver_operator") && event.iso_driver_operator_training_type === "initial").reduce((sum, event) => sum + attendanceRows.filter((row) => row.training_event_id === event.id && row.attendance_status === "attending").reduce((eventSum, row) => eventSum + Math.max(0, row.hours_earned ?? event.hours_credit ?? 0), 0), 0);
-    const refresherDriverHours = completedEvents.filter((event) => event.iso_classifications.includes("driver_operator") && event.iso_driver_operator_training_type === "refresher").reduce((sum, event) => sum + attendanceRows.filter((row) => row.training_event_id === event.id && row.attendance_status === "attending").reduce((eventSum, row) => eventSum + Math.max(0, row.hours_earned ?? event.hours_credit ?? 0), 0), 0);
+    const driverHoursByMember = new Map<string, { initial: number; refresher: number }>();
+    for (const attendance of attendanceRows) {
+      if (attendance.attendance_status !== "attending") continue;
+      const event = completedEvents.find((item) => item.id === attendance.training_event_id);
+      if (!event || !event.iso_classifications.includes("driver_operator")) continue;
+      const type = event.iso_driver_operator_training_type;
+      if (type !== "initial" && type !== "refresher") continue;
+      const current = driverHoursByMember.get(attendance.member_id) ?? { initial: 0, refresher: 0 };
+      const earned = Math.max(0, attendance.hours_earned ?? event.hours_credit ?? 0);
+      current[type] += earned;
+      driverHoursByMember.set(attendance.member_id, current);
+    }
+    const initialDriverParticipants = [...driverHoursByMember.values()].filter((value) => value.initial > 0).length;
+    const refresherDriverParticipants = [...driverHoursByMember.values()].filter((value) => value.refresher > 0).length;
+    const initialDriverHours = [...driverHoursByMember.values()].reduce((sum, value) => sum + value.initial, 0);
+    const refresherDriverHours = [...driverHoursByMember.values()].reduce((sum, value) => sum + value.refresher, 0);
+    const initialDriverAverageHours = initialDriverParticipants ? initialDriverHours / initialDriverParticipants : 0;
+    const refresherDriverAverageHours = refresherDriverParticipants ? refresherDriverHours / refresherDriverParticipants : 0;
     const company = rows.find((row) => row.code === "company_training");
     const facility = rows.find((row) => row.code === "training_facilities");
     const hazmat = rows.find((row) => row.code === "hazmat");
@@ -116,7 +132,7 @@ export default function IsoTrainingDashboard({ events, attendanceRows, members, 
     const elapsedMonths = year === now.getFullYear() ? now.getMonth() + 1 : 12;
     const companyAverageMonthlyHours = (company?.averagePerPerson ?? 0) / Math.max(1, elapsedMonths);
     const preplanCoverage = activePlans.length ? Math.round((plansMeetingVisitTarget / activePlans.length) * 100) : 0;
-    return { rows, facility, company, hazmat, officer, recruitAverageHours, recruitCount: recruitMembers.length, companyAverageMonthlyHours, fullFacilityHours, partialFacilityHours, initialDriverHours, refresherDriverHours, activePlans: activePlans.length, plansMeetingVisitTarget, preplanCoverage, totalActiveMembers };
+    return { rows, facility, company, hazmat, officer, recruitAverageHours, recruitCount: recruitMembers.length, companyAverageMonthlyHours, fullFacilityHours, partialFacilityHours, initialDriverHours, refresherDriverHours, initialDriverAverageHours, refresherDriverAverageHours, initialDriverParticipants, refresherDriverParticipants, activePlans: activePlans.length, plansMeetingVisitTarget, preplanCoverage, totalActiveMembers };
   }, [events, attendanceRows, members, prePlans, year]);
 
   return (
@@ -158,7 +174,7 @@ export default function IsoTrainingDashboard({ events, attendanceRows, members, 
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-3">
-        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Driver / Operator</div><div className="mt-2 text-sm text-white">Initial: {hours(summary.initialDriverHours)}</div><div className="mt-1 text-sm text-white">Refresher: {hours(summary.refresherDriverHours)}</div><p className="mt-2 text-xs text-slate-400">60-hour initial benchmark; 12-hour annual refresher benchmark.</p></div>
+        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Driver / Operator</div><div className="mt-2 text-sm text-white">Initial: {hours(summary.initialDriverAverageHours)} average / driver ({summary.initialDriverParticipants}) <span className="text-slate-400">/ 60</span></div><div className="mt-1 text-sm text-white">Refresher: {hours(summary.refresherDriverAverageHours)} average / driver ({summary.refresherDriverParticipants}) <span className="text-slate-400">/ 12</span></div><p className="mt-2 text-xs text-slate-400">Initial qualification benchmark: 60 hours. Annual refresher benchmark: 12 hours.</p></div>
         <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Building familiarization</div><div className="mt-2 text-lg font-bold text-white">{summary.plansMeetingVisitTarget} / {summary.activePlans} properties</div><p className="mt-1 text-xs text-slate-400">{summary.preplanCoverage}% of active pre-plans have the required annual visit count. High-hazard properties require two visits.</p></div>
         <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Recruit training</div><div className="mt-2 text-lg font-bold text-white">{hours(summary.recruitAverageHours)} average · {summary.recruitCount} recruits</div><p className="mt-1 text-xs text-slate-400">240 hours during the first year for recruits without Firefighter I.</p></div>
       </div>
