@@ -18,6 +18,7 @@ export type EmsSupplyUnitOptionValue =
 
 export type EmsSupplyFormValues = {
   itemName: string;
+  manufacturer: string;
   itemCategory: string;
   unitOfMeasure: EmsSupplyUnitOptionValue;
   customUnitOfMeasure: string;
@@ -60,6 +61,7 @@ const UNIT_OPTIONS: Array<{ value: EmsSupplyUnitOptionValue; label: string }> = 
 
 const EMPTY_VALUES: EmsSupplyFormValues = {
   itemName: "",
+  manufacturer: "",
   itemCategory: "",
   unitOfMeasure: "each",
   customUnitOfMeasure: "",
@@ -199,6 +201,19 @@ export default function EmsSupplyFormModal({
               className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
             />
             {formErrors.itemName ? <p className="mt-1 text-xs text-red-300">{formErrors.itemName}</p> : null}
+          </label>
+
+          <label className="block md:col-span-2">
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">
+              Manufacturer (optional)
+            </span>
+            <input
+              value={formValues.manufacturer}
+              onChange={(event) => setFormValues((current) => ({ ...current, manufacturer: event.target.value }))}
+              placeholder="Manufacturer or brand"
+              maxLength={120}
+              className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
+            />
           </label>
 
           <label className="block">
