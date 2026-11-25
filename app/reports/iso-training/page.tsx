@@ -1,5 +1,3 @@
-"use server";
-
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentMember } from "@/lib/current-member";
@@ -131,7 +129,6 @@ export default async function IsoTrainingReportPage() {
             <tbody>
               {members.map((member) => {
                 const byClassification = totals.get(member.id) ?? new Map<string, number>();
-                const memberTotal = Array.from(byClassification.values()).reduce((sum, value) => sum + value, 0);
                 return (
                   <tr key={member.id} className="border-t border-white/5">
                     <td className="px-4 py-3 font-medium text-white">{[member.first_name, member.last_name].filter(Boolean).join(" ") || "Unnamed member"}<span className="block text-xs text-neutral-500">{member.role || "Member"}</span></td>
