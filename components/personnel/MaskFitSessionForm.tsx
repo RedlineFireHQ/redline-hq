@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { FitResult, MaskSize } from "@/lib/scba-mask-fit/status";
 import { isCompleteSession, searchAvailableMembers, type FitEntry, type FitMember } from "@/lib/scba-mask-fit/session";
@@ -32,6 +33,7 @@ function isPendingPayload(value: unknown, departmentId: string): value is SavePa
 }
 
 export default function MaskFitSessionForm({ departmentId, members }: { departmentId: string; members: FitMember[] }) {
+  const router = useRouter();
   const [name, setName] = useState("Annual SCBA Mask Fit Test");
   const [date, setDate] = useState("");
   const [tester, setTester] = useState("");
@@ -129,7 +131,9 @@ export default function MaskFitSessionForm({ departmentId, members }: { departme
         sessionStorage.removeItem(storageKey);
       } catch (caught) {
         setError(`Session saved, but retry information could not be cleared: ${caught instanceof Error ? caught.message : String(caught)}.`);
+        return;
       }
+      router.replace("/personnel");
     } catch (caught) {
       setError(`Unable to confirm the save: ${caught instanceof Error ? caught.message : String(caught)}. Retry the same submission to avoid duplicates.`);
     } finally {
