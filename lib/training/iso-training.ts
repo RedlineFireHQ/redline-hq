@@ -20,29 +20,53 @@ export type IsoFacilityQualificationInput = {
   agreement_reference: string | null;
 };
 
-export function facilityQualifiesForIso(
-  facility: IsoFacilityQualificationInput | null | undefined,
-): boolean {
-  if (!facility) return false;
+export type IsoFacilityCreditLevel = "full" | "partial" | "none";
 
+export function getFacilityIsoCreditLevel(
+  facility: IsoFacilityQualificationInput & {
+    agreement_start_date?: string | null;
+    agreement_end_date?: string | null;
+  } | null | undefined,
+  eventDate?: string | null,
+): IsoFacilityCreditLevel {
+  if (!facility) return "none";
+
+  const date = eventDate ? new Date(`${eventDate.slice(0, 10)}T00:00:00`) : new Date();
+  if (Number.isNaN(date.getTime())) return "none";
+  const dateKey = date.toISOString().slice(0, 10);
   const agreementOkay =
     facility.ownership_type === "department_owned" ||
-    (facility.formal_agreement === true && Boolean(facility.agreement_reference?.trim()));
+    (facility.formal_agreement === true
+      && Boolean(facility.agreement_reference?.trim())
+      && (!facility.agreement_start_date || facility.agreement_start_date <= dateKey)
+      && (!facility.agreement_end_date || facility.agreement_end_date >= dateKey));
 
-  if (!agreementOkay) return false;
+  if (!agreementOkay) return "none";
 
   switch (facility.facility_type) {
     case "drill_tower":
-      return (facility.tower_stories ?? 0) >= 2;
+      if ((facility.tower_stories ?? 0) >= 3) return "full";
+      if ((facility.tower_stories ?? 0) === 2) return "partial";
+      return "none";
     case "live_fire_burn_building":
-      return facility.purpose_built_live_fire === true;
+      return facility.purpose_built_live_fire === true ? "full" : "none";
     case "training_yard":
-      return (facility.yard_acres ?? 0) >= 2;
+      return (facility.yard_acres ?? 0) >= 2 ? "full" : "none";
     case "regional_academy":
-      return facility.formal_agreement === true && Boolean(facility.agreement_reference?.trim());
+      return facility.formal_agreement === true && Boolean(facility.agreement_reference?.trim()) ? "full" : "none";
     default:
-      return false;
+      return "none";
   }
+}
+
+export function facilityQualifiesForIso(
+  facility: IsoFacilityQualificationInput & {
+    agreement_start_date?: string | null;
+    agreement_end_date?: string | null;
+  } | null | undefined,
+  eventDate?: string | null,
+): boolean {
+  return getFacilityIsoCreditLevel(facility, eventDate) !== "none";
 }
 
 export function normalizeIsoClassifications(value: unknown): IsoTrainingClassification[] {
