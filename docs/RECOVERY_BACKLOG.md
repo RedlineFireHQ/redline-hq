@@ -1,5 +1,160 @@
 # SCBA Hydrostatic Production Preflight
 
+## SCBA mask fit testing — local feature work
+
+- Added a Personnel workspace for searching and selecting members, entering
+  pass/fail and mask size, and atomically saving sessions. A session retry uses
+  the same identifier and payload, including after a same-tab reload; a
+  conflicting retry is rejected. History is append-only through the provided
+  application RPC. Personnel managers can see department history; active
+  members can see their own results and session details.
+- Added searchable, paginated history on the Personnel roster and member
+  profile, and a report with latest or historical results, member/date filters,
+  no-test and overdue status, printing, and CSV. Failures are identified as
+  requiring action rather than Current. As requested, the annual due date is
+  shown without introducing a due-soon threshold. Report status and future-date
+  validation use the existing `America/Chicago` convention. This is disclosed
+  in the report; departments in other time zones may see a different local date
+  because there is no department time-zone setting. Records are separate from
+  training.
+- Migration `20261122230000_scba_mask_fit_testing.sql` adds the session and
+  result tables, indexes, composite department relationships, RLS, an atomic
+  idempotent save RPC, and a paged read RPC. No existing policy is changed.
+  It was applied to Production on 2026-11-23; the application release remains
+  incomplete, as detailed below.
+- Files: `app/personnel/page.tsx`, `app/personnel/[id]/page.tsx`,
+  `app/personnel/scba-mask-fit/page.tsx`,
+  `components/personnel/MaskFitSessionForm.tsx`,
+  `components/personnel/MaskFitHistory.tsx`,
+  `components/reports/ReportsWorkspace.tsx`, `lib/scba-mask-fit/`,
+  `lib/reports/scba-mask-fit-report.ts`, `lib/reports/registry.ts`,
+  `lib/reports/server-runner.ts`, `lib/reports/types.ts`, and the migration.
+- Validation: 11 focused fit-test tests and TypeScript passed, including
+  Central Time midnight, year boundary and daylight-saving transitions.
+  Focused lint passed with 13 pre-existing report-runner warnings, and an
+  isolated webpack Production build passed. Repository-wide lint failed with
+  89 errors and 150 warnings, the same totals as the unchanged release
+  baseline. The broad report suite had 46 passes and 13 drug-box/pediatric-bag
+  failures; the same 13 failures occurred on the unchanged release baseline
+  (also 46/59).
+- A separate local Supabase instance restored an existing local schema only,
+  with synthetic members and departments. The migration applied locally and
+  transaction-rolled-back assertions using the restored helpers and RLS
+  confirmed multi-member saves, identical and conflicting retries, historical
+  preservation, duplicate and cross-department rejection, manager access,
+  each member's own history, unauthorized save denial, cross-department read
+  denial, history search and unchanged training-table counts. The fixture
+  required test-only grants, a prerequisite composite index, and foreign-key
+  names matching the app's query hints; it is not proof of Production ACLs or
+  policies.
+- Safari against the isolated app successfully searched and added two members,
+  excluded an already-added member from search, saved one session with a
+  failure/small mask and a pass/large mask, and showed the records in
+  department and individual history. Expanding a result showed its mask size,
+  tester and session reference; the session drill-down showed both members.
+  The latest report showed failed, current, overdue, and untested members; the
+  historical report preserved old and new results, and combined member/date
+  filters worked. A downloaded CSV contained the expected dates, results,
+  sizes, tester, session, due date and status.
+  The isolated member page showed no training and zero training hours after
+  saving; training tables also remained empty.
+- A simulated uncertain response after a successful RPC commit, followed by
+  the same authenticated retry, returned one session and two unique member
+  results while preserving the previous history. On a synthetic 201-member,
+  2,700-result local department, personnel/session filters, six-page retrieval,
+  latest and history reports returned all expected unique records. After
+  optimizing the history RPC to apply explicit manager-or-self access within a
+  narrowly scoped security-definer query, repeated API timings were about
+  65-75 ms for history/report retrieval. The original security-invoker join
+  timed out at the local API's 8-second statement limit against the restored
+  schema; it is superseded by the updated function and reverified locally.
+- A fresh isolated database test applied the complete updated migration and
+  verified manager access, member-only access (including denial when a member
+  searches for someone else), unauthenticated denial, and cross-department
+  isolation. It added 225 synthetic members, 12 sessions and 2,700 results,
+  then verified six-page pagination without missing or duplicate result IDs,
+  the session filter, and the 12-record member filter. No Production database
+  connection or change was used for this test.
+- Earlier Production compatibility check (2026-11-23; superseded by the
+  subsequent inspection below): **not verified**. The installed
+  Supabase CLI is 2.114.0. `supabase db dump --help` offers `--linked` and a
+  default schema dump, but no `--schema-only` flag or guarantee that linked
+  dump avoids login-role initialization; it was not run. The established
+  `db query --linked` route can initialize/update a database login role, so it
+  was not used.
+- Supabase documents a separate Beta Management API endpoint,
+  `POST /v1/projects/{ref}/database/query/read-only`, which executes as
+  `supabase_read_only_user`; the endpoint is intended to enforce read-only
+  access. It requires the `database:read` OAuth scope or a fine-grained token
+  with `database_read`. The installed CLI has no command for this endpoint.
+  `supabase projects list` succeeded using existing CLI authentication but
+  establishes only project-metadata access, not this database-read scope. No
+  authorized direct client or verified token scope was available through the
+  established workflow; the shared Supabase browser pages were at sign-in and
+  browser inspection timed out. No new credential, connection, or tool was
+  set up.
+- At that earlier stage, no Production SQL query had been executed. Production tables, grants, RLS
+  policies, and helper-function definitions remain uninspected, including
+  dependencies on `departments`, `members(id, department_id)`,
+  `can_manage_personnel(uuid)`, and `auth.uid()`. No specific live conflict is
+  established; compatibility was a release blocker at that stage.
+- Follow-up scope check (2026-11-23): `supabase projects list` again
+  succeeded, confirming metadata access only. CLI 2.114.0 has no command for
+  `database/query/read-only`, and the shared Supabase dashboard page could not
+  be inspected (browser bridge timed out). The CLI’s stored credential was not
+  read, copied, or exposed, and no query was sent. Therefore whether the
+  existing account/session has `database:read` / `database_read` is unknown;
+  that permission is not verified for the current session. Stop here rather
+  than requesting broader access or using another credential or connection.
+- Earlier release-plan clarification (2026-11-23): the feature is new, with no
+  historical mask-fit records to import or backfill. The migration creates
+  separate empty mask-fit session/result tables and contains no data
+  backfill; it does not alter SCBA cylinder or hydrostatic testing structures.
+  Existing departments and personnel are referenced, not rewritten. Isolated
+  report tests cover personnel with no recorded test, and the fresh-database
+  migration/security tests begin with empty mask-fit tables. Production had
+  not yet been queried at that stage. Confirm clean empty-history behavior on
+  the deployed feature before customer onboarding.
+- Production release attempt (2026-11-23): the authorized linked CLI catalog
+  inspection found the required `departments` and `members` columns, a unique
+  `(id, department_id)` member index, required helpers and authenticated
+  access; the new table names did not exist. Migration `20261122230000` was
+  applied alone and CLI migration repair reported its version as applied. The
+  subsequent empty-history query found four departments, zero mask-fit
+  sessions and zero results. An independent migration-list verification
+  failed because concurrent CLI invocations rotated the temporary login-role
+  password. A subsequent sequential catalog query confirmed migration version
+  `20261122230000` recorded as `scba_mask_fit_testing`.
+- Release validation after dependency restoration: 11 focused tests and
+  TypeScript passed; focused lint had zero errors and 13 existing warnings.
+  On resuming the interrupted release, no build process was running. One
+  `npm run build` compiled and passed its TypeScript phase but failed during
+  page-data collection for `/apparatus`: this worktree has neither
+  `NEXT_PUBLIC_SUPABASE_URL` nor `NEXT_PUBLIC_SUPABASE_ANON_KEY` set and has no
+  local `.env` file. A subsequent build passed using only the two required
+  values supplied to the build process from the main worktree's existing
+  `.env.local`; the URL was verified to match the Production project. No
+  environment file was added to this worktree. No synthetic Production
+  mask-fit records were created.
+- Production deployment (2026-11-23): feature commit
+  `dc11275aa3f32839f9b6027cf9c03999014348f9` was pushed to
+  `feature/scba-mask-fit-testing`. An exact clean snapshot of that commit was
+  deployed to the existing Vercel Production project as
+  `dpl_DK2hnnUWHCmiT83MeczCjGnoC8dL`; Vercel reports READY and the
+  `redlinefirehq.com` alias. The homepage returned HTTP 200 and the mask-fit
+  workspace redirected an unauthenticated request to login. Authenticated
+  Production workflow, history, reporting, and isolation checks remain
+  unverified; no fake Production records were created.
+- The feature is deployed from its branch snapshot but is not yet in GitHub
+  `main`. A subsequent automatic Production deployment from the older `main`
+  can replace this feature; integrate the reviewed feature branch into `main`
+  through the approved release workflow before the next such deployment.
+- Outstanding: actual print output is intentionally deferred. Verify the
+  Central Time limitation is acceptable for departments outside that zone.
+  Separate browser tabs create independent session identifiers; idempotency
+  protects repeated submissions of the same session, not two independently
+  created sessions.
+
 ## Department training assignments label release
 
 - Renamed the department-wide overview heading from **Assigned Training** to
