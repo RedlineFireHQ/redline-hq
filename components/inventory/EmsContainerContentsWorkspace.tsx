@@ -125,7 +125,7 @@ export default function EmsContainerContentsWorkspace({
           });
         if (saveError) throw new Error(saveError.message);
       }
-      setMessage("Container contents saved. Clearing a previously saved link removes that link while preserving the checklist item.");
+      setMessage("Supply links saved. The original inspection checklist has not been changed.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to save container contents.");
     } finally {
@@ -138,11 +138,22 @@ export default function EmsContainerContentsWorkspace({
   return (
     <div className="space-y-5">
       <section className="rounded-xl border border-neutral-800 bg-[#202020] p-4">
-        <label className="block text-xs font-semibold uppercase tracking-wider text-neutral-400">Choose a bag or drug box</label>
-        <select value={selectedContainerId} onChange={(event) => setSelectedContainerId(event.target.value)} className="mt-2 w-full rounded-lg border border-neutral-700 bg-neutral-900 p-3 text-sm text-white">
-          {containers.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-        </select>
-        <p className="mt-2 text-xs text-neutral-500">Match each checklist item to an EMS inventory item and record how many are physically inside this specific bag or box. This is a setup link only: it does not remove stock from central inventory or assign expiration batches to the container yet.</p>
+        <p className="text-xs font-semibold uppercase tracking-wider text-neutral-400">Optional administrator setup</p>
+        <h2 className="mt-1 text-lg font-bold text-white">Connect checklist supplies to expiration tracking</h2>
+        <p className="mt-2 max-w-3xl text-sm text-neutral-400">This is a one-time setup for items your department wants connected to central EMS inventory. It does not replace or change the normal bag and drug-box inspections. Choose the container below to manage its supply links.</p>
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {containers.map((item) => {
+            const isBag = item.type === "pediatric_bag";
+            const suffix = item.label.replace("Pediatric Bag ", "").replace("Drug Box — Squad ", "");
+            const imagePath = isBag
+              ? ({ A: "/branding/images/Pediatric%20Bag%20A%20Emergency%20Emblem.png", B: "/branding/images/Futuristic%20Pediatric%20Bag%20B%20Emblem.png", C: "/branding/images/Industrial%20Pediatric%20Bag%20C%20Emblem.png", D: "/branding/images/Industrial%20Pediatric%20bag%20d%20EMS%20Emblem.png" } as Record<string, string>)[suffix]
+              : ({ "114": "/branding/images/Cinematic%20EMS%20Case%20114.png", "115": "/branding/images/Futuristic%20Neon%20EMS%20Case%20115.png", "116": "/branding/images/High-Tech%20Emergency%20Medical%20Case%20116.png", "117": "/branding/images/Neon%20Green%20117%20Emergency%20Medical%20Case.png" } as Record<string, string>)[suffix];
+            return <button key={item.id} type="button" onClick={() => setSelectedContainerId(item.id)} aria-pressed={selectedContainerId === item.id} className={`overflow-hidden rounded-xl border text-left transition ${selectedContainerId === item.id ? "border-red-500 ring-2 ring-red-500/30" : "border-neutral-700 hover:border-neutral-500"}`}>
+              {imagePath ? <img src={imagePath} alt="" className="aspect-[4/3] w-full object-cover" /> : null}
+              <span className="block bg-neutral-900 px-3 py-2 text-sm font-bold text-white">{item.label}</span>
+            </button>;
+          })}
+        </div>
       </section>
       {grouped.map(([section, items]) => (
         <section key={section} className="overflow-hidden rounded-xl border border-neutral-800 bg-[#202020]">
@@ -166,7 +177,7 @@ export default function EmsContainerContentsWorkspace({
       ))}
       {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
       {message && <p role="status" className="text-sm text-emerald-300">{message}</p>}
-      <button type="button" onClick={() => void save()} disabled={saving} className="w-full rounded-xl bg-red-700 px-5 py-3 text-sm font-bold text-white disabled:opacity-50">{saving ? "Saving…" : "Save Container Contents"}</button>
+      <button type="button" onClick={() => void save()} disabled={saving} className="w-full rounded-xl bg-red-700 px-5 py-3 text-sm font-bold text-white disabled:opacity-50">{saving ? "Saving…" : "Save Supply Links"}</button>
     </div>
   );
 }
