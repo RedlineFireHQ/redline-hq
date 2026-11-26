@@ -235,7 +235,7 @@ export default async function TrainingPage() {
       supabase
         .from("training_outside_submissions")
         .select(
-          "id, member_id, title, category_id, training_date, hours, is_ems_training, ems_core_topic, ems_course_definition_id, ems_needs_review, ems_provider_name, description, notes, status, review_required, reviewed_by, reviewed_at, review_notes, created_at, updated_at",
+          "id, member_id, title, category_id, training_date, hours, is_ems_training, ems_core_topic, ems_course_definition_id, ems_needs_review, ems_provider_name, description, notes, status, review_required, reviewed_by, reviewed_at, review_notes, created_at, updated_at, iso_classifications, iso_facility_id, iso_pre_plan_id, iso_driver_operator_training_type, iso_facility_credit_level",
         )
         .eq("department_id", currentMember.departmentId)
         .eq("member_id", currentMember.id)
@@ -884,6 +884,11 @@ export default async function TrainingPage() {
     review_notes: typeof row.review_notes === "string" ? row.review_notes : null,
     created_at: typeof row.created_at === "string" ? row.created_at : "",
     updated_at: typeof row.updated_at === "string" ? row.updated_at : "",
+    iso_classifications: Array.isArray(row.iso_classifications) ? row.iso_classifications.filter((value): value is string => typeof value === "string") : [],
+    iso_facility_id: typeof row.iso_facility_id === "string" ? row.iso_facility_id : null,
+    iso_pre_plan_id: typeof row.iso_pre_plan_id === "string" ? row.iso_pre_plan_id : null,
+    iso_driver_operator_training_type: typeof row.iso_driver_operator_training_type === "string" ? row.iso_driver_operator_training_type : null,
+    iso_facility_credit_level: typeof row.iso_facility_credit_level === "string" ? row.iso_facility_credit_level : "none",
   }));
 
   const outsideEvidenceRows: TrainingOutsideEvidenceRow[] = (outsideEvidenceData ?? []).map((row) => ({
@@ -914,7 +919,6 @@ export default async function TrainingPage() {
     iso_facility_id: typeof row.iso_facility_id === "string" ? row.iso_facility_id : null,
     iso_pre_plan_id: typeof row.iso_pre_plan_id === "string" ? row.iso_pre_plan_id : null,
     iso_driver_operator_training_type: typeof row.iso_driver_operator_training_type === "string" ? row.iso_driver_operator_training_type : null,
-    iso_facility_credit_level: typeof row.iso_facility_credit_level === "string" ? row.iso_facility_credit_level : "none",
     updated_at: typeof row.updated_at === "string" ? row.updated_at : "",
   }));
 
