@@ -718,7 +718,6 @@ export default async function TrainingPage() {
       .from("training_facilities")
       .select("id, name, facility_type, ownership_type, address, city, state, zip, tower_stories, yard_acres, purpose_built_live_fire, formal_agreement, agreement_reference, agreement_start_date, agreement_end_date, active")
       .eq("department_id", currentMember.departmentId)
-      .eq("active", true)
       .order("name", { ascending: true }),
     supabase
       .from("pre_plans")
