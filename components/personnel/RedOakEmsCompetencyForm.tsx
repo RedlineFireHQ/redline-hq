@@ -104,22 +104,12 @@ export default function RedOakEmsCompetencyForm({ members, verifications }: Prop
     <div className="space-y-6">
       <section className="rounded-2xl border border-white/10 bg-neutral-900 p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><h2 className="text-xl font-semibold">Saved Verifications</h2><p className="text-sm text-neutral-400">Select a member’s existing year to review or update it.</p></div>
-          <button type="button" onClick={reset} className="rounded-lg border border-white/20 px-3 py-2 text-sm">New Verification</button>
+          <div>
+            <h2 className="text-xl font-semibold">EMS Skills Competency Verification</h2>
+            <p className="mt-1 text-sm text-neutral-400">CQI Policy – Section D: Skill Maintenance · Frequency: Annually</p>
+          </div>
+          {selectedId ? <button type="button" onClick={reset} className="rounded-lg border border-white/20 px-3 py-2 text-sm text-neutral-200 hover:bg-white/5">Clear selection</button> : null}
         </div>
-        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {verifications.map((row) => (
-            <button key={row.id} type="button" onClick={() => load(row)} className={`rounded-xl border p-3 text-left ${selectedId === row.id ? "border-red-500 bg-red-950/30" : "border-white/10 bg-neutral-950 hover:border-white/30"}`}>
-              <span className="block font-semibold">{members.find((member) => member.id === row.member_id)?.name ?? "Member"}</span>
-              <span className="text-sm text-neutral-400">{row.verification_year} · {row.overall_status}</span>
-            </button>
-          ))}
-          {verifications.length === 0 ? <p className="text-sm text-neutral-400">No competency verifications have been saved yet.</p> : null}
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-white/10 bg-neutral-900 p-5">
-        <h2 className="text-xl font-semibold">EMS Skills Competency Verification</h2>
         <p className="mt-1 text-sm text-neutral-400">CQI Policy – Section D: Skill Maintenance · Frequency: Annually</p>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <label className="text-sm">Member Name<select className={field} disabled={Boolean(selectedId)} value={memberId} onChange={(e) => setMemberId(e.target.value)}><option value="">Select member</option>{members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
@@ -171,6 +161,22 @@ export default function RedOakEmsCompetencyForm({ members, verifications }: Prop
         {message ? <p role="status" className="mt-4 text-sm text-red-300">{message}</p> : null}
         <button type="button" disabled={saving} onClick={() => void save()} className="mt-5 rounded-xl bg-red-700 px-5 py-2.5 font-semibold text-white disabled:opacity-50">{saving ? "Saving..." : "Save Verification"}</button>
         {memberName ? <span className="ml-3 text-sm text-neutral-400">Editing: {memberName}</span> : null}
+      </section>
+
+      <section className="rounded-2xl border border-white/10 bg-neutral-900 p-5">
+        <div>
+          <h2 className="text-xl font-semibold">Verification History</h2>
+          <p className="text-sm text-neutral-400">Select a saved member verification to review or update it.</p>
+        </div>
+        <div className="mt-4 max-h-[420px] space-y-2 overflow-y-auto pr-2">
+          {verifications.map((row) => (
+            <button key={row.id} type="button" onClick={() => load(row)} className={`block min-h-[56px] w-full rounded-xl border p-3 text-left ${selectedId === row.id ? "border-red-500 bg-red-950/30" : "border-white/10 bg-neutral-950 hover:border-white/30"}`}>
+              <span className="block font-semibold">{members.find((member) => member.id === row.member_id)?.name ?? "Member"}</span>
+              <span className="text-sm text-neutral-400">{row.verification_year} · {row.overall_status}</span>
+            </button>
+          ))}
+          {verifications.length === 0 ? <p className="py-2 text-sm text-neutral-400">No competency verifications have been saved yet. Completed verifications will appear here.</p> : null}
+        </div>
       </section>
     </div>
   );
