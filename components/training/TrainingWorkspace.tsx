@@ -2207,7 +2207,7 @@ export default function TrainingWorkspace({
     const isEmsTraining = isEmsCategoryName(selectedCategory);
     const suggestedIsoClassification = suggestTrainingIsoClassification(selectedCategory.name, formState.title);
     const isoClassificationsForSave = formState.isoClassifications.includes("none")
-      ? []
+      ? formState.isoClassifications.filter((value) => value !== "none")
       : formState.isoClassifications.length > 0
         ? formState.isoClassifications.filter((value) => value !== "none")
         : suggestedIsoClassification
