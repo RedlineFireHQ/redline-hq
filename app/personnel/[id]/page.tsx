@@ -929,7 +929,7 @@ export default async function PersonnelProfilePage({
   const memberDepartmentRoleId = typeof member.department_role_id === "string" ? member.department_role_id : null;
   const departmentRoleById = new Map(departmentRoles.map((row) => [row.id, row.name]));
 
-  const assignmentById = new Map(trainingAssignments.map((row) => [row.id, row]));
+  const assignmentByIdForCompliance = new Map(trainingAssignments.map((row) => [row.id, row]));
   // Calendar-year boundary shared by every surface labeled annual/"This Year".
   const profileYearPrefix = `${new Date().getUTCFullYear()}-`;
   const inProfileYear = (value: string | null | undefined) => typeof value === "string" && value.startsWith(profileYearPrefix);
