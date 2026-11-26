@@ -67,7 +67,7 @@ begin
       v_facility.ownership_type = 'department_owned'
       or (
         v_facility.formal_agreement = true
-        and (nullif(btrim(v_facility.agreement_reference), '') is not null or v_facility.agreement_document_id is not null)
+        and nullif(btrim(v_facility.agreement_reference), '') is not null
         and (v_facility.agreement_start_date is null or v_facility.agreement_start_date <= new.training_date)
         and (v_facility.agreement_end_date is null or v_facility.agreement_end_date >= new.training_date)
       );
@@ -78,7 +78,7 @@ begin
         when v_facility.facility_type = 'drill_tower' and coalesce(v_facility.tower_stories,0) = 2 then 'partial'
         when v_facility.facility_type = 'live_fire_burn_building' and v_facility.purpose_built_live_fire then 'full'
         when v_facility.facility_type = 'training_yard' and coalesce(v_facility.yard_acres,0) >= 2 then 'full'
-        when v_facility.facility_type = 'regional_academy' and v_facility.formal_agreement then 'full'
+        when v_facility.facility_type = 'regional_academy' and v_facility.formal_agreement and nullif(btrim(v_facility.agreement_reference), '') is not null then 'full'
         else 'none'
       end;
     end if;
