@@ -74,25 +74,36 @@ export default function EmsContainerContentsWorkspace({
     setSaving(true); setError(null); setMessage(null);
     try {
       const rows = template.flatMap((item) => {
-      const storageKey = `${container.id}:${item.key}`;
-      const draft = drafts[storageKey] ?? { supplyItemId: "", quantityOnHand: "0", notes: "" };
-      const qty = Number(draft.quantityOnHand);
-      const alreadyConfigured = existing.some((row) => row.container_id === container.id && row.template_item_key === item.key);
-      if (!draft.supplyItemId && (!Number.isFinite(qty) || qty === 0) && !draft.notes.trim() && !alreadyConfigured) return [];
-      if (!Number.isFinite(qty) || qty < 0) throw new Error(`Enter a valid on-hand quantity for ${item.label}.`);
-      return [{
-        department_id: departmentId,
-        container_type: container.type,
-        container_id: container.id,
-        template_item_key: item.key,
-        section_name: item.section,
-        item_label: item.label,
-        required_quantity: item.required ?? 0,
-        quantity_on_hand: qty,
-        supply_item_id: draft.supplyItemId || null,
-        notes: draft.notes.trim() || null,
-      }];
-    });
+        const storageKey = `${container.id}:${item.key}`;
+        const draft = drafts[storageKey] ?? { supplyItemId: "", quantityOnHand: "0", notes: "" };
+        const qty = Number(draft.quantityOnHand);
+        if (!draft.supplyItemId && (!Number.isFinite(qty) || qty === 0) && !draft.notes.trim()) return [];
+        if (!Number.isFinite(qty) || qty < 0) throw new Error(`Enter a valid on-hand quantity for ${item.label}.`);
+        return [{
+          department_id: departmentId,
+          container_type: container.type,
+          container_id: container.id,
+          template_item_key: item.key,
+          section_name: item.section,
+          item_label: item.label,
+          required_quantity: item.required ?? 0,
+          quantity_on_hand: qty,
+          supply_item_id: draft.supplyItemId || null,
+          notes: draft.notes.trim() || null,
+        }];
+      });
+      const clearedIds = existing
+        .filter((row) => row.container_id === container.id)
+        .filter((row) => {
+          const draft = drafts[`${container.id}:${row.template_item_key}`] ?? { supplyItemId: "", quantityOnHand: "0", notes: "" };
+          return !draft.supplyItemId && Number(draft.quantityOnHand) === 0 && !draft.notes.trim();
+        })
+        .map((row) => row.id);
+      if (clearedIds.length) {
+        const { error: deleteError } = await supabase.from("ems_supply_container_contents")
+          .delete().eq("department_id", departmentId).in("id", clearedIds);
+        if (deleteError) throw new Error(deleteError.message);
+      }
       if (rows.length) {
         const { error: saveError } = await supabase.from("ems_supply_container_contents")
           .upsert(rows, {
