@@ -286,7 +286,7 @@ export default function PediatricBagChecklistWorkspace({
                   type="button"
                   disabled={isSaving}
                   aria-pressed={isPass || isExpired || isMissing}
-                  aria-label={`${item.itemLabel}: ${isPass ? "marked PASS" : isExpired ? "marked EXPIRED" : "mark EXPIRED"}`}
+                  aria-label={`${item.itemLabel}: ${isPass ? "marked PASS" : isExpired ? "marked EXPIRED" : isMissing ? "marked MISSING" : "mark PASS"}`}
                   onClick={() => {
                     toggleItem(item.id);
                   }}
