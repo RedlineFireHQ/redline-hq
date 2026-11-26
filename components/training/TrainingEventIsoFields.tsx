@@ -39,13 +39,13 @@ export function suggestTrainingIsoClassification(categoryName: string, trainingT
   return match?.code ?? (categoryName.trim().toLowerCase() === "fire training" ? "company_training" : null);
 }
 
-const isoOptions: Array<{ code: IsoTrainingClassification; label: string; match: RegExp }> = [
-  { code: "company_training", label: "Company Training", match: /fire|suppression|company|hose|ladder|search|rescue|ventilation|forcible entry/ },
-  { code: "officer_training", label: "Officer Training", match: /officer|leadership|command|ics|size.?up/ },
-  { code: "driver_operator", label: "Driver / Operator", match: /driver|operator|apparatus|pump|hydraulic|water supply/ },
-  { code: "hazmat", label: "Hazardous Materials", match: /hazmat|hazardous material|erg|decontamination/ },
-  { code: "recruit", label: "Recruit Training", match: /recruit|academy|firefighter i|basic training/ },
-  { code: "building_familiarization", label: "Building Familiarization / Pre-Planning", match: /building familiarization|pre.?plan|property visit|building walk.?through|occupancy familiarization/ },
+const isoOptions: Array<{ code: IsoTrainingClassification; label: string }> = [
+  { code: "company_training", label: "Company Training" },
+  { code: "officer_training", label: "Officer Training" },
+  { code: "driver_operator", label: "Driver / Operator" },
+  { code: "hazmat", label: "Hazardous Materials" },
+  { code: "recruit", label: "Recruit Training" },
+  { code: "building_familiarization", label: "Building Familiarization / Pre-Planning" },
 ];
 
 export default function TrainingEventIsoFields({
@@ -55,9 +55,7 @@ export default function TrainingEventIsoFields({
 }: Props) {
   const selectedClassification = classifications.find((item) => item !== "training_facilities" && item !== "none") as IsoTrainingClassification | undefined;
   const isFacilityCreditSelected = classifications.includes("training_facilities");
-  const normalizedInput = (categoryName + " " + trainingTitle).toLowerCase();
-  const suggested = isoOptions.find((item) => item.match.test(normalizedInput))?.code
-    ?? (categoryName.trim().toLowerCase() === "fire training" ? "company_training" : undefined);
+  const suggested = suggestTrainingIsoClassification(categoryName, trainingTitle) ?? undefined;
   const selectedFacility = facilities.find((item) => item.id === facilityId) ?? null;
   const selectedPrePlan = prePlans.find((item) => item.id === prePlanId) ?? null;
   const facilityCredit = selectedFacility ? getFacilityIsoCreditLevel(selectedFacility, eventDate) : "none";
@@ -67,11 +65,13 @@ export default function TrainingEventIsoFields({
   function setClassification(value: string) {
     const next = classifications.filter((item) => item === "training_facilities");
     if (value) next.unshift(value);
+    else next.unshift("none");
     onClassificationsChange(next);
   }
   function setFacilityCredit(checked: boolean) {
     const next = classifications.filter((item) => item !== "training_facilities" && item !== selectedClassification);
     if (selectedClassification) next.unshift(selectedClassification);
+    else if (classifications.includes("none")) next.unshift("none");
     if (checked) next.push("training_facilities");
     onClassificationsChange(next);
   }
