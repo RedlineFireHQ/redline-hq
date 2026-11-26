@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import QRCode from "qrcode";
 import ScbaPackFormModal, {
 	ScbaPackFormValues,
 	ScbaPackInitialFlowTestValues,
@@ -28,6 +29,7 @@ type ScbaPackRecord = {
 	status: string;
 	notes: string | null;
 	created_at: string;
+	qr_identifier?: string | null;
 };
 
 interface ScbaPackWorkspaceProps {
@@ -283,6 +285,7 @@ export default function ScbaPackWorkspace({
 	const [sessionFlowTestErrorMessage, setSessionFlowTestErrorMessage] = useState<string | null>(null);
 	const [flowTestTesterOptions, setFlowTestTesterOptions] = useState<ScbaPackFlowTestTesterOption[]>([]);
 	const [isSavingSessionFlowTest, setIsSavingSessionFlowTest] = useState(false);
+	const [qrModal, setQrModal] = useState<{ packNumber: string; dataUrl: string; url: string } | null>(null);
 
 	useEffect(() => {
 		setDepartmentId(initialDepartmentId);
@@ -445,7 +448,7 @@ export default function ScbaPackWorkspace({
 		const { data, error } = await supabase
 			.from("scba_packs")
 			.select(
-				"id, department_id, pack_number, manufacturer, model, serial_number, in_service_date, last_flow_test_date, next_flow_test_due_date, status, notes, created_at",
+				"id, department_id, pack_number, manufacturer, model, serial_number, in_service_date, last_flow_test_date, next_flow_test_due_date, status, notes, created_at, qr_identifier",
 			)
 			.eq("department_id", departmentId)
 			.order("created_at", { ascending: false });
@@ -587,6 +590,13 @@ export default function ScbaPackWorkspace({
 
 	const viewInspectionHistoryForRow = (row: ScbaPackRecord) => {
 		router.push(`/inventory/scba-packs/inspection-history?packId=${encodeURIComponent(row.id)}`);
+	};
+
+	const showPackQr = async (row: ScbaPackRecord) => {
+		const identifier = row.qr_identifier || `scba-pack:${row.id}`;
+		const url = `${window.location.origin}/mobile/scba-inspections?qr=${encodeURIComponent(identifier)}&returnTo=%2Finventory%2Fscba-packs`;
+		const dataUrl = await QRCode.toDataURL(url, { width: 360, margin: 2, errorCorrectionLevel: "H" });
+		setQrModal({ packNumber: row.pack_number, dataUrl, url });
 	};
 
 	const viewFlowTestHistoryForRow = (row: ScbaPackRecord) => {
@@ -1160,7 +1170,8 @@ export default function ScbaPackWorkspace({
 																		}}
 																		className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800 whitespace-nowrap"
 																	>
-																		Inspection History
+																		<button type="button" onClick={(event) => { event.stopPropagation(); void showPackQr(row); }} className="rounded-lg border border-red-500/30 bg-red-900/20 px-3 py-1.5 text-xs font-semibold text-red-100 whitespace-nowrap">QR Code</button>
+																	Inspection History
 																	</button>
 
 																	<button
@@ -1196,6 +1207,18 @@ export default function ScbaPackWorkspace({
 					</table>
 				</div>
 			</section>
+
+			{qrModal ? (
+				<div role="dialog" aria-modal="true" aria-label={`QR code for SCBA pack ${qrModal.packNumber}`} className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4">
+					<section className="w-full max-w-sm rounded-2xl border border-white/15 bg-[#242424] p-5 text-center">
+						<h2 className="text-xl font-black text-white">SCBA Pack {qrModal.packNumber}</h2>
+						<p className="mt-1 text-sm text-neutral-400">Print or save this QR label and attach it to the matching pack</p>
+						<img src={qrModal.dataUrl} alt={`QR code for SCBA pack ${qrModal.packNumber}`} className="mx-auto mt-4 h-64 w-64 rounded-lg bg-white p-2" />
+						<div className="mt-4 flex gap-2"><button type="button" onClick={() => window.print()} className="min-h-11 flex-1 rounded-xl bg-red-600 px-3 font-bold text-white">Print QR</button><button type="button" onClick={() => setQrModal(null)} className="min-h-11 flex-1 rounded-xl border border-white/15 px-3 font-bold text-white">Close</button></div>
+						<p className="mt-3 break-all text-[10px] text-neutral-500">{qrModal.url}</p>
+					</section>
+				</div>
+			) : null}
 
 			<ScbaPackFormModal
 				isOpen={isModalOpen}
