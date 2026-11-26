@@ -2197,6 +2197,9 @@ export default function TrainingWorkspace({
     }
 
     const startsAt = toIsoDateTime(formState.date, formState.startTime);
+    // Historical training entered after it occurred should be eligible for ISO/PPC
+    // reporting immediately; future-dated events remain scheduled until completed.
+    const eventStatus = new Date(startsAt).getTime() <= Date.now() ? "completed" : "scheduled";
 
     const selectedCategory = activeCategories.find((category) => category.id === formState.categoryId);
     if (!selectedCategory) {
@@ -2282,7 +2285,7 @@ export default function TrainingWorkspace({
           ends_at: null,
           duration_minutes: null,
           hours_credit: hoursCredit,
-          status: "scheduled",
+          status: eventStatus,
           supporting_document_id: null,
           created_by: currentMemberId,
           updated_by: currentMemberId,
