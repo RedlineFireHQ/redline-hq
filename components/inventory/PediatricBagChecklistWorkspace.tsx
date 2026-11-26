@@ -244,7 +244,7 @@ export default function PediatricBagChecklistWorkspace({
         </Link>
       </div>
 
-      <EmsContainerInspectionContents departmentId={departmentId} containerId={bagId} containerType="pediatric_bag" />
+      <EmsContainerInspectionContents departmentId={departmentId} containerId={bagId} containerType="pediatric_bag" onOverridePass={(itemLabel) => { const item = items.find((candidate) => candidate.itemLabel === itemLabel); if (item) void saveItemStatus(item.id, "checked"); }} />
 
 
       {unresolvedQuantityCount > 0 ? (
