@@ -18,5 +18,6 @@ export default async function MobileScbaInspectionPage({ searchParams }: { searc
     supabase.from("scba_packs").select("id, pack_number, manufacturer, model, serial_number, status, qr_identifier").eq("department_id", member.departmentId).neq("status", "Retired").order("pack_number", { ascending: true }),
     supabase.from("departments").select("name").eq("id", member.departmentId).maybeSingle(),
   ]);
-  const qrPack = params.qr ? (packs ?? []).find((pack: { qr_identifier?: string | null }) => pack.qr_identifier === params.qr || pack.id === params.qr) : null;\n  return <MobileScbaInspection qrPackId={qrPack?.id ?? null} departmentId={member.departmentId} memberId={member.id} memberName={member.name} departmentName={department?.name ?? "Department"} packs={(packs ?? []) as Pack[]} initialError={error?.message ?? null} returnTo={returnTo} />;
+  const qrPack = params.qr ? (packs ?? []).find((pack: { qr_identifier?: string | null; id: string }) => pack.qr_identifier === params.qr || pack.id === params.qr) : null;
+  return <MobileScbaInspection qrPackId={qrPack?.id ?? null} departmentId={member.departmentId} memberId={member.id} memberName={member.name} departmentName={department?.name ?? "Department"} packs={(packs ?? []) as Pack[]} initialError={error?.message ?? null} returnTo={returnTo} />;
 }
