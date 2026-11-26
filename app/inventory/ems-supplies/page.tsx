@@ -87,7 +87,7 @@ export default async function EmsSuppliesInventoryPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap justify-end gap-2"><Link href="/inventory/ems-pediatric-bags" className="inline-flex min-h-10 items-center rounded-lg border border-white/15 bg-neutral-900 px-4 text-sm font-bold text-white hover:bg-neutral-800">Pediatric Bags →</Link><Link href="/inventory/ems-drug-box" className="inline-flex min-h-10 items-center rounded-lg border border-white/15 bg-neutral-900 px-4 text-sm font-bold text-white hover:bg-neutral-800">Drug Boxes →</Link><Link href="/inventory/ems-container-contents" className="inline-flex min-h-10 items-center rounded-lg border border-white/15 bg-neutral-900 px-4 text-sm font-bold text-white hover:bg-neutral-800">Manage Bag & Drug Box Contents →</Link><Link href="/inventory/ems-expirations" className="inline-flex min-h-10 items-center rounded-lg border border-red-500/30 bg-red-950/20 px-4 text-sm font-bold text-red-200 hover:bg-red-950/40">Track Expiration Dates →</Link></div>
+      <div className="flex justify-end"><Link href="/inventory/ems-expirations" className="inline-flex min-h-10 items-center rounded-lg border border-red-500/30 bg-red-950/20 px-4 text-sm font-bold text-red-200 hover:bg-red-950/40">Manage Expiration Dates →</Link></div>
       <EmsSupplyWorkspace
         departmentName={departmentName}
         checkedOutByName={checkedOutByName}
