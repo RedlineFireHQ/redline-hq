@@ -113,7 +113,7 @@ export type PediatricTemplateItemRow = {
   displayOrder: number;
 };
 
-export type PediatricItemStatus = "checked" | "expired";
+export type PediatricItemStatus = "checked" | "expired" | "missing";
 
 export type PediatricProgressRow = {
   checklistItemId: string;
