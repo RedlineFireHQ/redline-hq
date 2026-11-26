@@ -19,6 +19,7 @@ export type EmsSupplyUnitOptionValue =
 export type EmsSupplyFormValues = {
   itemName: string;
   manufacturer: string;
+  referenceNumber: string;
   itemCategory: string;
   unitOfMeasure: EmsSupplyUnitOptionValue;
   customUnitOfMeasure: string;
@@ -62,6 +63,7 @@ const UNIT_OPTIONS: Array<{ value: EmsSupplyUnitOptionValue; label: string }> = 
 const EMPTY_VALUES: EmsSupplyFormValues = {
   itemName: "",
   manufacturer: "",
+  referenceNumber: "",
   itemCategory: "",
   unitOfMeasure: "each",
   customUnitOfMeasure: "",
@@ -211,6 +213,18 @@ export default function EmsSupplyFormModal({
               value={formValues.manufacturer}
               onChange={(event) => setFormValues((current) => ({ ...current, manufacturer: event.target.value }))}
               placeholder="e.g. BD, Medline, Teleflex"
+              className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
+            />
+          </label>
+          <label className="block md:col-span-2">
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">
+              Reference Number (optional)
+            </span>
+            <input
+              value={formValues.referenceNumber}
+              onChange={(event) => setFormValues((current) => ({ ...current, referenceNumber: event.target.value }))}
+              placeholder="Manufacturer part number or catalog number"
+              maxLength={120}
               className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white focus:border-red-500/50 focus:outline-none"
             />
           </label>

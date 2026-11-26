@@ -5,6 +5,7 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 type CreateSupplyPayload = {
   itemName?: unknown;
   manufacturer?: unknown;
+  referenceNumber?: unknown;
   itemCategory?: unknown;
   unitOfMeasure?: unknown;
   customUnitOfMeasure?: unknown;
@@ -115,7 +116,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from("ems_supply_items")
       .select(
-        "id, item_name, manufacturer, item_category, unit_of_measure, custom_unit_of_measure, quantity_on_hand, reorder_threshold, critical_threshold, target_quantity, location, notes, status, qr_identifier, created_at, updated_at",
+        "id, item_name, manufacturer, reference_number, item_category, unit_of_measure, custom_unit_of_measure, quantity_on_hand, reorder_threshold, critical_threshold, target_quantity, location, notes, status, qr_identifier, created_at, updated_at",
       )
       .eq("department_id", currentMember.departmentId)
       .order("status", { ascending: true })
@@ -155,6 +156,7 @@ export async function POST(request: Request) {
 
     const itemName = asTrimmedString(payload.itemName);
     const manufacturer = asTrimmedString(payload.manufacturer).slice(0, 120) || null;
+    const referenceNumber = asTrimmedString(payload.referenceNumber).slice(0, 120) || null;
     const unitOfMeasureRaw = asTrimmedString(payload.unitOfMeasure).toLowerCase() as AllowedUnit;
     const customUnitOfMeasure = asTrimmedString(payload.customUnitOfMeasure) || null;
     const location = asTrimmedString(payload.location) || null;
@@ -197,6 +199,7 @@ export async function POST(request: Request) {
         department_id: currentMember.departmentId,
         item_name: itemName,
         manufacturer,
+        reference_number: referenceNumber,
         item_category: null,
         unit_of_measure: unitOfMeasureRaw,
         custom_unit_of_measure: unitOfMeasureRaw === "custom" ? customUnitOfMeasure : null,
