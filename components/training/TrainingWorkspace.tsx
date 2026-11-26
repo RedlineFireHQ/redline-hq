@@ -9,7 +9,7 @@ import { EMS_CORE_TOPICS, type EmsCoreTopicCode } from "@/lib/ems/requirements";
 import { triggerEmsAllocationRecalculation, triggerEmsAllocationRecalculationForMembers } from "@/lib/ems/recalculate-client";
 import { supabase } from "@/lib/supabase";
 import SubmitTrainingModal from "@/components/training/SubmitTrainingModal";
-import TrainingEventIsoFields, { type IsoTrainingFacilityOption, type IsoPrePlanOption } from "@/components/training/TrainingEventIsoFields";
+import TrainingEventIsoFields, { suggestTrainingIsoClassification, type IsoTrainingFacilityOption, type IsoPrePlanOption } from "@/components/training/TrainingEventIsoFields";
 import IsoTrainingDashboard from "@/components/training/IsoTrainingDashboard";
 import { facilityQualifiesForIso } from "@/lib/training/iso-training";
 import type { SelfReportedTraining } from "@/components/training/TrainingDepartmentOverview";
@@ -2205,6 +2205,14 @@ export default function TrainingWorkspace({
     }
 
     const isEmsTraining = isEmsCategoryName(selectedCategory);
+    const suggestedIsoClassification = suggestTrainingIsoClassification(selectedCategory.name, formState.title);
+    const isoClassificationsForSave = formState.isoClassifications.includes("none")
+      ? []
+      : formState.isoClassifications.length > 0
+        ? formState.isoClassifications.filter((value) => value !== "none")
+        : suggestedIsoClassification
+          ? [suggestedIsoClassification]
+          : [];
     const emsCourseDefinitionId = isEmsTraining ? (formState.emsCourseDefinitionId || null) : null;
     const emsCoreTopic = isEmsTraining ? formState.emsCoreTopic : null;
     const emsNeedsReview =
@@ -2258,8 +2266,8 @@ export default function TrainingWorkspace({
           topic: isEmsTraining ? emsCoreTopic : null,
           training_type: trainingMethod || null,
           is_ems_training: isEmsTraining,
-          iso_classifications: formState.isoClassifications,
-          iso_classification: formState.isoClassifications[0] ?? null,
+          iso_classifications: isoClassificationsForSave,
+          iso_classification: isoClassificationsForSave[0] ?? null,
           iso_facility_id: formState.isoFacilityId || null,
           iso_pre_plan_id: formState.isoPrePlanId || null,
           iso_driver_operator_training_type: formState.isoDriverOperatorTrainingType || null,
@@ -2345,8 +2353,8 @@ export default function TrainingWorkspace({
             : hoursCredit,
         status: typeof data.status === "string" ? data.status : "scheduled",
         supporting_document_id: typeof data.supporting_document_id === "string" ? data.supporting_document_id : null,
-        iso_classifications: Array.isArray(data.iso_classifications) ? data.iso_classifications.filter((value): value is string => typeof value === "string") : formState.isoClassifications,
-        iso_classification: typeof data.iso_classification === "string" ? data.iso_classification : formState.isoClassifications[0] ?? null,
+        iso_classifications: Array.isArray(data.iso_classifications) ? data.iso_classifications.filter((value): value is string => typeof value === "string") : isoClassificationsForSave,
+        iso_classification: typeof data.iso_classification === "string" ? data.iso_classification : isoClassificationsForSave[0] ?? null,
         iso_facility_id: typeof data.iso_facility_id === "string" ? data.iso_facility_id : formState.isoFacilityId || null,
         iso_pre_plan_id: typeof data.iso_pre_plan_id === "string" ? data.iso_pre_plan_id : formState.isoPrePlanId || null,
         iso_driver_operator_training_type: typeof data.iso_driver_operator_training_type === "string" ? data.iso_driver_operator_training_type : formState.isoDriverOperatorTrainingType || null,
