@@ -84,8 +84,8 @@ export default function EmsExpirationWorkspace({ supplies, canManage }: { suppli
     </section>
 
     {canManage && supplies.length > 0 ? <form onSubmit={addBatch} className="rounded-xl border border-white/10 bg-[#242424] p-5">
-      <h2 className="text-lg font-black text-white">Record a supply batch</h2>
-      <p className="mt-1 text-sm text-neutral-400">Record each received batch separately so different expiration dates are not combined.</p>
+      <h2 className="text-lg font-black text-white">Receive EMS supply batch</h2>
+      <p className="mt-1 text-sm text-neutral-400">Receiving a batch increases the department's on-hand inventory and records its lot and expiration details in the stock transaction history.</p>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <label className="text-sm text-neutral-300 sm:col-span-2 lg:col-span-3">Supply item
           <select value={supplyItemId} onChange={e=>setSupplyItemId(e.target.value)} required className="mt-1 min-h-11 w-full rounded-lg border border-white/10 bg-[#171717] px-3 text-white">
@@ -98,7 +98,7 @@ export default function EmsExpirationWorkspace({ supplies, canManage }: { suppli
         <label className="text-sm text-neutral-300">Storage location<input value={storageLocation} onChange={e=>setStorageLocation(e.target.value)} placeholder="Station, cabinet, bag..." className="mt-1 min-h-11 w-full rounded-lg border border-white/10 bg-[#171717] px-3 text-white"/></label>
         <label className="text-sm text-neutral-300 sm:col-span-2">Notes<input value={notes} onChange={e=>setNotes(e.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-white/10 bg-[#171717] px-3 text-white"/></label>
       </div>
-      <button disabled={saving} className="mt-4 min-h-11 rounded-lg bg-red-600 px-5 font-bold text-white disabled:opacity-50">{saving ? "Saving..." : "Save batch"}</button>
+      <button disabled={saving} className="mt-4 min-h-11 rounded-lg bg-red-600 px-5 font-bold text-white disabled:opacity-50">{saving ? "Saving..." : "Receive batch"}</button>
     </form> : null}
 
     {error ? <p role="alert" className="rounded-lg border border-red-500/30 bg-red-950/20 p-3 text-sm text-red-200">{error}</p> : null}
