@@ -8,7 +8,7 @@ import { triggerEmsAllocationRecalculationForMembers } from "@/lib/ems/recalcula
 import { supabase } from "@/lib/supabase";
 import { buildOutsideSubmissionNotes } from "@/lib/training/outside-submission-notes";
 
-type Category = { id: string; name: string; active: boolean };
+type Category = { id: string; name: string; active: boolean; system_key: string | null; compliance_bucket: string | null };
 type EmsCourse = { id: string; course_name: string; active: boolean };
 type Member = {
   id: string;
@@ -88,14 +88,11 @@ export default function MobileTrainingForm({
   const [participants, setParticipants] = useState<string[]>([memberId]);
   const [participantSearch, setParticipantSearch] = useState("");
   const activeCategories = useMemo(
-    () => categories.filter((category) => category.active),
+    () => categories.filter((category) => category.active && category.name.trim().toLowerCase() !== "fire suppression"),
     [categories],
   );
-  const isEms =
-    activeCategories
-      .find((category) => category.id === categoryId)
-      ?.name.trim()
-      .toLowerCase() === "ems";
+  const selectedCategory = activeCategories.find((category) => category.id === categoryId);
+  const isEms = selectedCategory?.system_key === "ems_continuing_education" || selectedCategory?.compliance_bucket === "ems_ce" || selectedCategory?.name.trim().toLowerCase() === "ems";
   const visibleMembers = members.filter((member) =>
     `${member.first_name ?? ""} ${member.last_name ?? ""}`
       .toLowerCase()
@@ -144,8 +141,8 @@ export default function MobileTrainingForm({
           p_hours: parsedHours,
           p_is_ems_training: isEms,
           p_ems_core_topic: isEms ? emsTopic : null,
-          p_ems_course_definition_id: isEms ? emsCourseId || null : null,
-          p_ems_needs_review: isEms && (emsNeedsReview || emsTopic === "other"),
+          p_ems_course_definition_id: null,
+          p_ems_needs_review: false,
           p_ems_provider_name: isEms ? provider.trim() || null : null,
           p_description: details.trim() || null,
           p_notes: buildOutsideSubmissionNotes({
@@ -369,7 +366,7 @@ export default function MobileTrainingForm({
                       EMS Details
                     </p>
                     <label className="block text-sm font-bold">
-                      EMS Core Topic
+                      EMS Subject Area
                       <select
                         value={emsTopic}
                         onChange={(event) =>
@@ -383,34 +380,6 @@ export default function MobileTrainingForm({
                           </option>
                         ))}
                       </select>
-                    </label>
-                    <label className="block text-sm font-bold">
-                      EMS Course / Training
-                      <select
-                        value={emsCourseId}
-                        onChange={(event) => setEmsCourseId(event.target.value)}
-                        className="mt-2 min-h-12 w-full rounded-xl border border-white/15 bg-[#101010] px-3 text-white"
-                      >
-                        <option value="">Unlisted / Other</option>
-                        {emsCourses
-                          .filter((course) => course.active)
-                          .map((course) => (
-                            <option key={course.id} value={course.id}>
-                              {course.course_name}
-                            </option>
-                          ))}
-                      </select>
-                    </label>
-                    <label className="flex min-h-12 items-center gap-3 text-sm font-bold">
-                      <input
-                        type="checkbox"
-                        checked={emsNeedsReview}
-                        onChange={(event) =>
-                          setEmsNeedsReview(event.target.checked)
-                        }
-                        className="h-5 w-5 accent-red-600"
-                      />
-                      Mark as Needs Review
                     </label>
                   </div>
                 ) : null}

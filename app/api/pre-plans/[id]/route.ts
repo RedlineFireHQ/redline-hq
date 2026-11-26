@@ -5,6 +5,7 @@ import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 type UpdatePrePlanPayload = {
   businessName?: unknown;
+  isoHighHazard?: unknown;
   address?: unknown;
   city?: unknown;
   state?: unknown;
@@ -487,6 +488,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       .from("pre_plans")
       .update({
         business_name: businessName,
+        iso_high_hazard: payload.isoHighHazard === true,
         address,
         city,
         state,

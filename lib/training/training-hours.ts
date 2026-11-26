@@ -276,6 +276,7 @@ export function summarizeTrainingHours(records: TrainingHoursRecord[]): Training
     if (record.bucket === "fire_annual") {
       summary.fireHours += record.hours;
     } else if (record.bucket === "ems_ce") {
+      // EMS CE remains separate from the department's annual Fire Training requirement.
       summary.emsHours += record.hours;
     } else {
       summary.otherHours += record.hours;

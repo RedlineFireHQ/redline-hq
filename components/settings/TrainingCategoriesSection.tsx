@@ -11,6 +11,7 @@ type TrainingCategoryRow = {
   description: string | null;
   active: boolean;
   compliance_bucket: string | null;
+  system_key: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -24,7 +25,6 @@ type TrainingCategoryFormState = {
 
 const COMPLIANCE_BUCKET_OPTIONS: Array<{ value: TrainingComplianceBucket; label: string; description: string }> = [
   { value: "fire_annual", label: "Fire Training", description: "Counts toward annual/ISO Fire Training hours." },
-  { value: "ems_ce", label: "EMS Training", description: "Counts toward EMS continuing education hours." },
   { value: "other", label: "Other Training", description: "Counts toward total training hours only." },
 ];
 
@@ -45,6 +45,10 @@ function emptyFormState(): TrainingCategoryFormState {
 
 function normalizeCategoryName(value: string) {
   return value.trim().toLowerCase();
+}
+
+function isSystemTrainingCategory(category: TrainingCategoryRow) {
+  return Boolean(category.system_key);
 }
 
 export default function TrainingCategoriesSection({
@@ -177,7 +181,7 @@ export default function TrainingCategoriesSection({
             created_by: currentMemberId,
             updated_by: currentMemberId,
           })
-          .select("id, name, description, active, compliance_bucket, created_at, updated_at")
+          .select("id, name, description, active, compliance_bucket, system_key, created_at, updated_at")
           .single();
 
         if (error || !data) {
@@ -196,6 +200,7 @@ export default function TrainingCategoriesSection({
           description: typeof data.description === "string" ? data.description : null,
           active: typeof data.active === "boolean" ? data.active : formState.active,
           compliance_bucket: typeof data.compliance_bucket === "string" ? data.compliance_bucket : formState.complianceBucket,
+          system_key: typeof data.system_key === "string" ? data.system_key : null,
           created_at: typeof data.created_at === "string" ? data.created_at : new Date().toISOString(),
           updated_at: typeof data.updated_at === "string" ? data.updated_at : new Date().toISOString(),
         };
@@ -220,7 +225,7 @@ export default function TrainingCategoriesSection({
         <div>
           <h2 className="text-2xl font-semibold text-white">Training Categories</h2>
           <p className="mt-2 max-w-3xl text-sm text-neutral-400">
-            Define the training categories used by your department when logging training.
+            Redline HQ provides the same standard training catalog to every department, including EMS Continuing Education. You can add department-specific categories, but system categories and their compliance classifications cannot be changed or removed.
           </p>
         </div>
 
@@ -276,13 +281,17 @@ export default function TrainingCategoriesSection({
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() => openEditModal(category)}
-                        className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-zinc-200 transition hover:bg-white/[0.08]"
-                      >
-                        Edit
-                      </button>
+                      {isSystemTrainingCategory(category) ? (
+                        <span className="text-xs font-semibold uppercase tracking-wide text-red-300">Redline HQ Standard</span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(category)}
+                          className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-zinc-200 transition hover:bg-white/[0.08]"
+                        >
+                          Edit
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

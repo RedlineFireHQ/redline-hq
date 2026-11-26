@@ -12,7 +12,7 @@ export default async function MobileTrainingPage() {
   if (!currentMember?.departmentId) redirect("/login");
 
   const [{ data: categories }, { data: emsCourses }, { data: members }] = await Promise.all([
-    supabase.from("training_categories").select("id, name, active").eq("department_id", currentMember.departmentId).order("name", { ascending: true }),
+    supabase.from("training_categories").select("id, name, active, system_key, compliance_bucket").eq("department_id", currentMember.departmentId).order("name", { ascending: true }),
     supabase.from("ems_course_definitions").select("id, course_name, active").eq("department_id", currentMember.departmentId).order("course_name", { ascending: true }),
     supabase.rpc("get_active_department_training_members", { p_department_id: currentMember.departmentId }),
   ]);

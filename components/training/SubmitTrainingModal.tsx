@@ -12,6 +12,8 @@ type TrainingCategoryRow = {
   id: string;
   name: string;
   active: boolean;
+  system_key: string | null;
+  compliance_bucket: string | null;
 };
 
 type EmsCourseDefinitionRow = {
@@ -102,8 +104,8 @@ function emptyOutsideTrainingFormState(defaultCategoryId: string): OutsideTraini
   };
 }
 
-function isEmsCategoryName(value: string | null | undefined) {
-  return (value ?? "").trim().toLowerCase() === "ems";
+function isEmsCategoryName(category: TrainingCategoryRow | null | undefined) {
+  return category?.system_key === "ems_continuing_education" || category?.compliance_bucket === "ems_ce" || (category?.name ?? "").trim().toLowerCase() === "ems";
 }
 
 function sanitizeFileName(name: string) {
@@ -134,7 +136,7 @@ export default function SubmitTrainingModal({
   const router = useRouter();
 
   const activeCategories = useMemo(
-    () => categories.filter((category) => category.active),
+    () => categories.filter((category) => category.active && category.name.trim().toLowerCase() !== "fire suppression"),
     [categories],
   );
 
@@ -167,7 +169,7 @@ export default function SubmitTrainingModal({
     const details = outsideFormState.details.trim();
     const emsProviderName = outsideFormState.emsProviderName.trim();
     const selectedCategoryForEms = activeCategories.find((category) => category.id === outsideFormState.categoryId);
-    const isEmsTraining = isEmsCategoryName(selectedCategoryForEms?.name);
+    const isEmsTraining = isEmsCategoryName(selectedCategoryForEms);
     const emsCourseDefinitionId = isEmsTraining ? (outsideFormState.emsCourseDefinitionId || null) : null;
     const emsCoreTopic = isEmsTraining ? outsideFormState.emsCoreTopic : null;
     const emsNeedsReview =
@@ -389,7 +391,7 @@ export default function SubmitTrainingModal({
               <option value="">Select category</option>
               {activeCategories.map((category) => (
                 <option key={category.id} value={category.id}>
-                  {category.name}
+                  {isEmsCategoryName(category) ? "EMS Continuing Education" : category.name}
                 </option>
               ))}
             </select>
@@ -441,10 +443,10 @@ export default function SubmitTrainingModal({
             </div>
           </label>
 
-          {isEmsCategoryName(activeCategories.find((category) => category.id === outsideFormState.categoryId)?.name) ? (
+          {isEmsCategoryName(activeCategories.find((category) => category.id === outsideFormState.categoryId)) ? (
             <>
               <label className="block">
-                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">EMS Core Topic</span>
+                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">EMS Subject Area</span>
                 <select
                   value={outsideFormState.emsCoreTopic}
                   onChange={(event) => setOutsideFormState((current) => ({ ...current, emsCoreTopic: event.target.value as EmsCoreTopicCode }))}
@@ -455,21 +457,6 @@ export default function SubmitTrainingModal({
                   ))}
                 </select>
               </label>
-
-              <label className="block">
-                <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">EMS Course / Training</span>
-                <select
-                  value={outsideFormState.emsCourseDefinitionId}
-                  onChange={(event) => setOutsideFormState((current) => ({ ...current, emsCourseDefinitionId: event.target.value }))}
-                  className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
-                >
-                  <option value="">Unlisted / Other (Needs Review)</option>
-                  {activeEmsCourseDefinitions.map((course) => (
-                    <option key={course.id} value={course.id}>{course.course_name}</option>
-                  ))}
-                </select>
-              </label>
-
               <label className="block">
                 <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Training Provider / Sponsor</span>
                 <input
@@ -477,15 +464,6 @@ export default function SubmitTrainingModal({
                   onChange={(event) => setOutsideFormState((current) => ({ ...current, emsProviderName: event.target.value }))}
                   className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
                 />
-              </label>
-
-              <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300 md:col-span-2">
-                <input
-                  type="checkbox"
-                  checked={outsideFormState.emsNeedsReview}
-                  onChange={(event) => setOutsideFormState((current) => ({ ...current, emsNeedsReview: event.target.checked }))}
-                />
-                Mark as NEEDS REVIEW
               </label>
             </>
           ) : null}

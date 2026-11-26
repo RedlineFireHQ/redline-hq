@@ -95,6 +95,7 @@ type TrainingEventRow = {
   ems_needs_review: boolean;
   ems_provider_name: string | null;
   ems_course_definition_id: string | null;
+  status: string;
 };
 
 type OutsideSubmissionRow = {
@@ -584,7 +585,7 @@ async function loadMemberEmsSources(
     const { data: eventsData, error: eventsError } = await supabase
       .from("training_events")
       .select(
-        "id, title, starts_at, hours_credit, category_id, is_ems_training, ems_core_topic, ems_needs_review, ems_provider_name, ems_course_definition_id",
+        "id, title, starts_at, hours_credit, category_id, is_ems_training, ems_core_topic, ems_needs_review, ems_provider_name, ems_course_definition_id, status",
       )
       .eq("department_id", departmentId)
       .in("id", eventIds);
@@ -605,6 +606,7 @@ async function loadMemberEmsSources(
       ems_provider_name: typeof row.ems_provider_name === "string" ? row.ems_provider_name : null,
       ems_course_definition_id:
         typeof row.ems_course_definition_id === "string" ? row.ems_course_definition_id : null,
+      status: typeof row.status === "string" ? row.status : "scheduled",
     }));
   }
 
@@ -613,7 +615,7 @@ async function loadMemberEmsSources(
   const attendanceSources: AllocationSource[] = [];
   for (const attendance of attendanceRows) {
     const event = eventById.get(attendance.training_event_id);
-    if (!event || event.is_ems_training !== true) {
+    if (!event || event.is_ems_training !== true || event.status !== "completed") {
       continue;
     }
 
