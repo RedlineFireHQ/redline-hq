@@ -9,7 +9,7 @@ import { EMS_CORE_TOPICS, type EmsCoreTopicCode } from "@/lib/ems/requirements";
 import { triggerEmsAllocationRecalculation, triggerEmsAllocationRecalculationForMembers } from "@/lib/ems/recalculate-client";
 import { supabase } from "@/lib/supabase";
 import SubmitTrainingModal from "@/components/training/SubmitTrainingModal";
-import IsoTrainingFields, { type IsoTrainingFacilityOption, type IsoPrePlanOption } from "@/components/training/IsoTrainingFields";
+import TrainingEventIsoFields, { type IsoTrainingFacilityOption, type IsoPrePlanOption } from "@/components/training/TrainingEventIsoFields";
 import IsoTrainingDashboard from "@/components/training/IsoTrainingDashboard";
 import { facilityQualifiesForIso } from "@/lib/training/iso-training";
 import type { SelfReportedTraining } from "@/components/training/TrainingDepartmentOverview";
@@ -3721,7 +3721,7 @@ export default function TrainingWorkspace({
                 ) : null}
 
                 <div className="md:col-span-2">
-                  <IsoTrainingFields
+                  <TrainingEventIsoFields
                     classifications={formState.isoClassifications}
                     onClassificationsChange={(next) => setFormState((current) => ({ ...current, isoClassifications: next }))}
                     facilityId={formState.isoFacilityId}
