@@ -17,7 +17,7 @@ type ExistingContent = {
   quantity_on_hand: number;
   notes: string | null;
 };
-type TemplateItem = { key: string; section: string; label: string; required: number | null };
+type TemplateItem = { key: string; section: string; label: string; required: number | null; sourceQuantityText: string };
 type Draft = { supplyItemId: string; quantityOnHand: string; notes: string };
 
 export default function EmsContainerContentsWorkspace({
@@ -49,10 +49,10 @@ export default function EmsContainerContentsWorkspace({
   const template: TemplateItem[] = useMemo(() => {
     if (!container) return [];
     if (container.type === "pediatric_bag") return PEDIATRIC_INVENTORY.map((item, index) => ({
-      key: `pediatric-${index}`, section: item[0], label: item[1], required: item[2],
+      key: `pediatric-${index}`, section: item[0], label: item[1], required: item[2], sourceQuantityText: item[3],
     }));
     return DRUG_BOX_INVENTORY.map((item, index) => ({
-      key: `drug-${index}`, section: item[0], label: item[1], required: item[2],
+      key: `drug-${index}`, section: item[0], label: item[1], required: item[2], sourceQuantityText: item[3],
     }));
   }, [container]);
 
@@ -77,7 +77,7 @@ export default function EmsContainerContentsWorkspace({
       const storageKey = `${container.id}:${item.key}`;
       const draft = drafts[storageKey] ?? { supplyItemId: "", quantityOnHand: "0", notes: "" };
       const qty = Number(draft.quantityOnHand);
-      if (!draft.supplyItemId && (!Number.isFinite(qty) || qty === 0) && !draft.notes.trim()) return [];
+      const alreadyConfigured = existing.some((row) => row.container_id === container.id && row.template_item_key === item.key);\n      if (!draft.supplyItemId && (!Number.isFinite(qty) || qty === 0) && !draft.notes.trim() && !alreadyConfigured) return [];
       if (!Number.isFinite(qty) || qty < 0) throw new Error(`Enter a valid on-hand quantity for ${item.label}.`);
       return [{
         department_id: departmentId,
@@ -99,7 +99,7 @@ export default function EmsContainerContentsWorkspace({
           });
         if (saveError) throw new Error(saveError.message);
       }
-      setMessage("Container contents saved.");
+      setMessage("Container contents saved. Clearing a previously saved link removes that link while preserving the checklist item.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to save container contents.");
     } finally {
@@ -116,7 +116,7 @@ export default function EmsContainerContentsWorkspace({
         <select value={selectedContainerId} onChange={(event) => setSelectedContainerId(event.target.value)} className="mt-2 w-full rounded-lg border border-neutral-700 bg-neutral-900 p-3 text-sm text-white">
           {containers.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
         </select>
-        <p className="mt-2 text-xs text-neutral-500">Connect checklist items to department EMS inventory and record the quantity currently inside this container. This setup does not change central inventory totals yet.</p>
+        <p className="mt-2 text-xs text-neutral-500">Match each checklist item to an EMS inventory item and record how many are physically inside this specific bag or box. This is a setup link only: it does not remove stock from central inventory or assign expiration batches to the container yet.</p>
       </section>
       {grouped.map(([section, items]) => (
         <section key={section} className="overflow-hidden rounded-xl border border-neutral-800 bg-[#202020]">
@@ -126,7 +126,7 @@ export default function EmsContainerContentsWorkspace({
               const storageKey = `${container?.id ?? ""}:${item.key}`;
               const draft = drafts[storageKey] ?? { supplyItemId: "", quantityOnHand: "0", notes: "" };
               return <div key={item.key} className="grid gap-2 p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_100px]">
-                <div><p className="text-sm font-medium text-white">{item.label}</p><p className="text-xs text-neutral-500">Required: {item.required ?? "Not specified"}</p></div>
+                <div><p className="text-sm font-medium text-white">{item.label}</p><p className="text-xs text-neutral-500">Required: {item.required ?? "Not specified"}{item.sourceQuantityText ? ` · Source: ${item.sourceQuantityText}` : ""}</p></div>
                 <select value={draft.supplyItemId} onChange={(event) => update(storageKey, { supplyItemId: event.target.value })} className="min-w-0 rounded-lg border border-neutral-700 bg-neutral-900 p-2 text-sm text-white">
                   <option value="">Not linked to EMS inventory</option>
                   {supplies.map((supply) => <option key={supply.id} value={supply.id}>{supply.item_name} ({supply.unit_of_measure})</option>)}
