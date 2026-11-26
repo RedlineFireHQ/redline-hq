@@ -187,12 +187,6 @@ export default function IsoTrainingDashboard({ events, attendanceRows, members, 
         </table>
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-3">
-        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Driver / Operator</div><div className="mt-2 text-sm text-white">Initial: {hours(summary.initialDriverAverageHours)} average / driver ({summary.initialDriverParticipants}) <span className="text-slate-400">/ 60</span></div><div className="mt-1 text-sm text-white">Refresher: {hours(summary.refresherDriverAverageHours)} average / driver ({summary.refresherDriverParticipants}) <span className="text-slate-400">/ 12</span></div><p className="mt-2 text-xs text-slate-400">Initial qualification benchmark: 60 hours. Annual refresher benchmark: 12 hours.</p></div>
-        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Building familiarization</div><div className="mt-2 text-lg font-bold text-white">{summary.plansMeetingVisitTarget} / {summary.activePlans} properties</div><p className="mt-1 text-xs text-slate-400">{summary.preplanCoverage}% of active pre-plans have the required annual visit count. High-hazard properties require two visits.</p></div>
-        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3"><div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Recruit training</div><div className="mt-2 text-lg font-bold text-white">{hours(summary.recruitAverageHours)} average · {summary.recruitCount} recruits</div><p className="mt-1 text-xs text-slate-400">240 hours during the first year for recruits without Firefighter I.</p></div>
-      </div>
-
       <div className="mt-5">
         <div className="mb-3">
           <h3 className="text-base font-bold text-white">Individual Personnel ISO Progress</h3>
