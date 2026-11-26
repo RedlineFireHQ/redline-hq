@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import EmsContainerInspectionContents from "@/components/inventory/EmsContainerInspectionContents";
 import PediatricParticipantsPanel, {
   type PediatricParticipant,
 } from "@/components/inventory/PediatricParticipantsPanel";
@@ -246,6 +247,8 @@ export default function PediatricBagChecklistWorkspace({
           Back to Pediatric Bags
         </Link>
       </div>
+
+      <EmsContainerInspectionContents departmentId={departmentId} containerId={bagId} containerType="pediatric_bag" />
 
       <EmsContainerInspectionContents departmentId={departmentId} containerId={bagId} containerType="pediatric_bag" />
 
