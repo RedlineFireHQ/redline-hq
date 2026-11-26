@@ -63,10 +63,10 @@ export default function EmsContainerContentsWorkspace({
   }, [template]);
 
   function update(key: string, patch: Partial<Draft>) {
-    setDrafts((current) => ({
-      ...current,
-      [key]: { supplyItemId: "", quantityOnHand: "0", notes: "", ...current[key], ...patch },
-    }));
+    setDrafts((current) => {
+      const previous = current[key] ?? { supplyItemId: "", quantityOnHand: "0", notes: "" };
+      return { ...current, [key]: { ...previous, ...patch } };
+    });
   }
 
   async function save() {
