@@ -39,20 +39,30 @@ export async function POST(request: Request) {
   const lotNumber = typeof payload.lotNumber === "string" ? payload.lotNumber.trim() || null : null;
   const storageLocation = typeof payload.storageLocation === "string" ? payload.storageLocation.trim() || null : null;
   const notes = typeof payload.notes === "string" ? payload.notes.trim() || null : null;
+  const entryMode = payload.entryMode === "existing" ? "existing" : "receive";
 
   if (!supplyItemId) return json({ error: "Choose an EMS supply item." }, 400);
   if (!Number.isFinite(quantity) || quantity <= 0) return json({ error: "Quantity must be greater than zero." }, 400);
 
-  const { data, error } = await supabase.rpc("receive_ems_supply_batch", {
-    p_supply_item_id: supplyItemId,
-    p_quantity: quantity,
-    p_expiration_date: expirationDate,
-    p_lot_number: lotNumber,
-    p_storage_location: storageLocation,
-    p_notes: notes,
-  });
+  const { data, error } = entryMode === "existing"
+    ? await supabase.rpc("record_existing_ems_supply_batch", {
+        p_supply_item_id: supplyItemId,
+        p_quantity: quantity,
+        p_expiration_date: expirationDate,
+        p_lot_number: lotNumber,
+        p_storage_location: storageLocation,
+        p_notes: notes,
+      })
+    : await supabase.rpc("receive_ems_supply_batch", {
+        p_supply_item_id: supplyItemId,
+        p_quantity: quantity,
+        p_expiration_date: expirationDate,
+        p_lot_number: lotNumber,
+        p_storage_location: storageLocation,
+        p_notes: notes,
+      });
 
   if (error) return json({ error: error.message }, 400);
   const row = Array.isArray(data) ? data[0] : data;
-  return json({ ok: true, batchId: row?.batch_id, transactionId: row?.transaction_id, quantityOnHand: row?.quantity_after }, 201);
+  return json({ ok: true, batchId: row?.batch_id, transactionId: row?.transaction_id, quantityOnHand: row?.quantity_after, quantityUntracked: row?.quantity_untracked, entryMode }, 201);
 }
