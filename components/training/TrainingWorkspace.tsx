@@ -3726,8 +3726,7 @@ export default function TrainingWorkspace({
                     onClassificationsChange={(next) => setFormState((current) => ({ ...current, isoClassifications: next }))}
                     facilityId={formState.isoFacilityId}
                     onFacilityChange={(next) => setFormState((current) => ({ ...current, isoFacilityId: next }))}
-                    categoryName={categories.find((category) => category.id === formState.categoryId)?.name ?? ""}
-                    trainingTitle={formState.title}\n                    facilities={facilities}
+                    facilities={facilities}
                     eventDate={formState.date}
                     prePlanId={formState.isoPrePlanId}
                     onPrePlanChange={(next) => setFormState((current) => ({ ...current, isoPrePlanId: next }))}
