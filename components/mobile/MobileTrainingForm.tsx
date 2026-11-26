@@ -7,6 +7,8 @@ import { EMS_CORE_TOPICS, type EmsCoreTopicCode } from "@/lib/ems/requirements";
 import { triggerEmsAllocationRecalculationForMembers } from "@/lib/ems/recalculate-client";
 import { supabase } from "@/lib/supabase";
 import { buildOutsideSubmissionNotes } from "@/lib/training/outside-submission-notes";
+import TrainingEventIsoFields, { suggestTrainingIsoClassification, type IsoTrainingFacilityOption, type IsoPrePlanOption } from "@/components/training/TrainingEventIsoFields";
+import { facilityQualifiesForIso } from "@/lib/training/iso-training";
 
 type Category = { id: string; name: string; active: boolean; system_key: string | null; compliance_bucket: string | null };
 type EmsCourse = { id: string; course_name: string; active: boolean };
@@ -79,7 +81,7 @@ export default function MobileTrainingForm({
   const [details, setDetails] = useState("");
   const [emsTopic, setEmsTopic] = useState<EmsCoreTopicCode>("other");
   const [emsCourseId, setEmsCourseId] = useState("");
-  const [emsNeedsReview, setEmsNeedsReview] = useState(false);
+  const [emsNeedsReview, setEmsNeedsReview] = useState(false);\n  const [isoClassifications, setIsoClassifications] = useState<string[]>([]);\n  const [isoFacilityId, setIsoFacilityId] = useState("");\n  const [isoPrePlanId, setIsoPrePlanId] = useState("");\n  const [isoDriverOperatorTrainingType, setIsoDriverOperatorTrainingType] = useState("");
   const [evidence, setEvidence] = useState<File | null>(null);
   const [openDetails, setOpenDetails] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -150,7 +152,7 @@ export default function MobileTrainingForm({
             instructorName: isEms ? "" : provider,
             location,
           }),
-          p_participant_ids: Array.from(new Set(participants)),
+          p_participant_ids: Array.from(new Set(participants)),\n          p_iso_classifications: isoClassifications,\n          p_iso_facility_id: isoFacilityId || null,\n          p_iso_pre_plan_id: isoPrePlanId || null,\n          p_iso_driver_operator_training_type: isoDriverOperatorTrainingType || null,
         },
       );
       const submissionId =
