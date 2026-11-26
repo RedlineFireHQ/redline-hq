@@ -25,6 +25,6 @@ export default async function EmsContainerContentsPage() {
   ];
   return <div className="mx-auto max-w-5xl space-y-4 p-4">
     <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-widest text-red-400">EMS Inventory</p><h1 className="mt-1 text-2xl font-black text-white">Bag &amp; Drug Box Contents</h1><p className="mt-1 text-sm text-neutral-400">Connect checklist items to your EMS supply inventory.</p></div><Link href="/inventory/ems-supplies" className="text-sm font-semibold text-red-300">Back to Supplies</Link></div>
-    <EmsContainerContentsWorkspace containers={containers} supplies={(supplies ?? []) as Array<{id:string;item_name:string;unit_of_measure:string}>} existing={(existing ?? []) as never[]} />
+    <EmsContainerContentsWorkspace departmentId={departmentId} containers={containers} supplies={(supplies ?? []) as Array<{id:string;item_name:string;unit_of_measure:string}>} existing={(existing ?? []) as never[]} />
   </div>;
 }
