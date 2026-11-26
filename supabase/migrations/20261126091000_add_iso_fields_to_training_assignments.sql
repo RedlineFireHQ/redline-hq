@@ -31,16 +31,8 @@ begin
     if new.iso_facility_id is null or not exists (
       select 1 from public.training_facilities f
       where f.id = new.iso_facility_id and f.department_id = new.department_id and f.active = true
-        and (
-          (f.ownership_type = 'department_owned' and (
-            (f.facility_type = 'drill_tower' and coalesce(f.tower_stories,0) >= 2)
-            or (f.facility_type = 'live_fire_burn_building' and f.purpose_built_live_fire)
-            or (f.facility_type = 'training_yard' and coalesce(f.yard_acres,0) >= 2)
-          ))
-          or (f.ownership_type <> 'department_owned' and f.formal_agreement = true)
-        )
     ) then
-      raise exception 'Training Facilities classification requires a configured qualifying facility in this department.';
+      raise exception 'Training Facilities classification requires an active facility belonging to this department.';
     end if;
   end if;
   if 'driver_operator' = any(coalesce(new.iso_classifications,'{}'::text[]))
