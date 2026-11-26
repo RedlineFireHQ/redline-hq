@@ -66,18 +66,12 @@ export default function IsoTrainingFields({
   const selectedPrePlan = prePlans.find((plan) => plan.id === prePlanId) ?? null;
   const has = (code: IsoTrainingClassification) => classifications.includes(code);
 
-  function toggle(code: IsoTrainingClassification, checked: boolean) {
-    onClassificationsChange(checked
-      ? Array.from(new Set([...classifications, code]))
-      : classifications.filter((item) => item !== code));
-  }
-
   return (
     <section className="rounded-2xl border border-sky-500/20 bg-sky-500/[0.04] p-4 md:p-5">
       <div className="flex flex-col gap-1">
         <div className="text-xs font-bold uppercase tracking-[0.16em] text-sky-200">ISO Training Documentation</div>
         <h3 className="text-lg font-semibold text-white">How does this training qualify?</h3>
-        <p className="text-sm text-neutral-400">Choose every applicable ISO training category. This is separate from the training subject category above, so one event can be Fire Suppression training and also qualify for Company Training or Training Facilities.</p>
+        <p className="text-sm text-neutral-400">Choose the ISO classification for this training record. This is separate from the regular training subject category above, so Fire Suppression remains the subject while ISO identifies the applicable credit.</p>
       </div>
 
       <label className="mt-4 block">
