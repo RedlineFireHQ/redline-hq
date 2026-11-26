@@ -534,6 +534,7 @@ export default function TrainingWorkspace({
   const [assignmentMemberRows, setAssignmentMemberRows] = useState(assignmentMembers);
   const [assignmentEvidenceState, setAssignmentEvidenceState] = useState(assignmentEvidenceRows);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [facilityOptions, setFacilityOptions] = useState<IsoTrainingFacilityOption[]>(facilities);
   const [isHomeworkModalOpen, setIsHomeworkModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSavingHomework, setIsSavingHomework] = useState(false);
@@ -843,7 +844,7 @@ export default function TrainingWorkspace({
     });
   }, [completedTogetherCandidates, completedTogetherMemberSearch]);
 
-  const openModal = useCallback(() => {
+  const openModal = useCallback(async () => {
     if (!canManageTraining) {
       return;
     }
@@ -854,7 +855,38 @@ export default function TrainingWorkspace({
     setMemberSearch("");
     setSelectedMemberIds(new Set());
     setIsModalOpen(true);
-  }, [activeCategories, canManageTraining]);
+
+    // Refresh department-owned facilities whenever Add Training opens. This keeps
+    // newly configured facilities available without requiring a page reload or
+    // re-entering the facility after unrelated deployments.
+    const { data: latestFacilities, error: latestFacilitiesError } = await supabase
+      .from("training_facilities")
+      .select("id, name, facility_type, ownership_type, address, city, state, zip, tower_stories, yard_acres, purpose_built_live_fire, formal_agreement, agreement_reference, agreement_start_date, agreement_end_date, active")
+      .eq("department_id", departmentId)
+      .eq("active", true)
+      .order("name", { ascending: true });
+
+    if (!latestFacilitiesError && latestFacilities) {
+      setFacilityOptions(latestFacilities.map((row) => ({
+        id: String(row.id),
+        name: typeof row.name === "string" ? row.name : "",
+        facility_type: typeof row.facility_type === "string" ? row.facility_type : "other",
+        ownership_type: typeof row.ownership_type === "string" ? row.ownership_type : "department_owned",
+        address: typeof row.address === "string" ? row.address : null,
+        city: typeof row.city === "string" ? row.city : null,
+        state: typeof row.state === "string" ? row.state : null,
+        zip: typeof row.zip === "string" ? row.zip : null,
+        tower_stories: typeof row.tower_stories === "number" ? row.tower_stories : null,
+        yard_acres: typeof row.yard_acres === "number" ? row.yard_acres : null,
+        purpose_built_live_fire: row.purpose_built_live_fire === true,
+        formal_agreement: row.formal_agreement === true,
+        agreement_reference: typeof row.agreement_reference === "string" ? row.agreement_reference : null,
+        agreement_start_date: typeof row.agreement_start_date === "string" ? row.agreement_start_date : null,
+        agreement_end_date: typeof row.agreement_end_date === "string" ? row.agreement_end_date : null,
+        active: row.active === true,
+      })));
+    }
+  }, [activeCategories, canManageTraining, departmentId]);
 
   useEffect(() => {
     function handleOpenAddTrainingEvent() {
@@ -3739,7 +3771,7 @@ export default function TrainingWorkspace({
                     onFacilityChange={(next) => setFormState((current) => ({ ...current, isoFacilityId: next }))}
                     categoryName={categories.find((category) => category.id === formState.categoryId)?.name ?? ""}
                     trainingTitle={formState.title}
-                    facilities={facilities}
+                    facilities={facilityOptions}
                     eventDate={formState.date}
                     prePlanId={formState.isoPrePlanId}
                     onPrePlanChange={(next) => setFormState((current) => ({ ...current, isoPrePlanId: next }))}
