@@ -116,7 +116,7 @@ export default function EmsContainerContentsWorkspace({
         <select value={selectedContainerId} onChange={(event) => setSelectedContainerId(event.target.value)} className="mt-2 w-full rounded-lg border border-neutral-700 bg-neutral-900 p-3 text-sm text-white">
           {containers.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
         </select>
-        <p className="mt-2 text-xs text-neutral-500">Connect checklist items to department EMS inventory and record the quantity currently inside this container.</p>
+        <p className="mt-2 text-xs text-neutral-500">Connect checklist items to department EMS inventory and record the quantity currently inside this container. This setup does not change central inventory totals yet.</p>
       </section>
       {grouped.map(([section, items]) => (
         <section key={section} className="overflow-hidden rounded-xl border border-neutral-800 bg-[#202020]">
