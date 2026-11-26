@@ -250,7 +250,6 @@ export default function PediatricBagChecklistWorkspace({
 
       <EmsContainerInspectionContents departmentId={departmentId} containerId={bagId} containerType="pediatric_bag" />
 
-      <EmsContainerInspectionContents departmentId={departmentId} containerId={bagId} containerType="pediatric_bag" />
 
       {unresolvedQuantityCount > 0 ? (
         <div className="rounded-xl border border-orange-500/40 bg-orange-950/20 px-4 py-3">
