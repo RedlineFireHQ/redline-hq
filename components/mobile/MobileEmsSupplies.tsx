@@ -9,6 +9,8 @@ type StockStatus = "Out of Stock" | "Critical" | "Low" | "Normal";
 type SupplyItem = {
   id: string;
   item_name: string;
+  manufacturer: string | null;
+  reference_number: string | null;
   item_category: string | null;
   unit_of_measure: string;
   custom_unit_of_measure: string | null;
@@ -122,7 +124,7 @@ export default function MobileEmsSupplies() {
     const normalizedQuery = query.trim().toLowerCase();
     return items.filter((item) => {
       const matchesFilter = filter === "All" || stockStatus(item) === filter;
-      const haystack = `${item.item_name} ${item.item_category || ""}`.toLowerCase();
+      const haystack = `${item.item_name} ${item.manufacturer || ""} ${item.reference_number || ""} ${item.item_category || ""}`.toLowerCase();
       return matchesFilter && (!normalizedQuery || haystack.includes(normalizedQuery));
     });
   }, [filter, items, query]);
