@@ -135,11 +135,11 @@ export default function IsoTrainingDashboard({ events, attendanceRows, members, 
     const elapsedMonths = year === now.getFullYear() ? now.getMonth() + 1 : 12;
     const companyAverageMonthlyHours = (company?.averagePerPerson ?? 0) / Math.max(1, elapsedMonths);
     const preplanCoverage = activePlans.length ? Math.round((plansMeetingVisitTarget / activePlans.length) * 100) : 0;
-    return { rows, facility, company, hazmat, officer, recruitAverageHours, recruitCount: recruitMembers.length, companyAverageMonthlyHours, fullFacilityHours, partialFacilityHours, initialDriverHours, refresherDriverHours, initialDriverAverageHours, refresherDriverAverageHours, initialDriverParticipants, refresherDriverParticipants, activePlans: activePlans.length, plansMeetingVisitTarget, preplanCoverage, totalActiveMembers };
+    return { rows, facility, company, hazmat, officer, recruitAverageHours, recruitCount: recruitMembers.length, companyAverageMonthlyHours, fullFacilityHours, partialFacilityHours, initialDriverHours, refresherDriverHours, initialDriverAverageHours, refresherDriverAverageHours, initialDriverParticipants, refresherDriverParticipants, activePlans: activePlans.length, plansMeetingVisitTarget, preplanCoverage, totalActiveMembers, memberHours };
   }, [events, attendanceRows, members, prePlans, year]);
 
   const memberRows = members.map((member) => {
-    const totals = memberHours.get(member.id);
+    const totals = summary.memberHours.get(member.id);
     const fullName = [member.first_name, member.last_name].filter(Boolean).join(" ").trim() || "Unnamed member";
     return { id: member.id, name: fullName, totals: totals ?? { training_facilities: 0, company_training: 0, officer_training: 0, driver_operator: 0, hazmat: 0, recruit: 0, building_familiarization: 0 } };
   }).sort((a, b) => a.name.localeCompare(b.name));
