@@ -20,11 +20,11 @@ const INSPECTION_STEPS = [
 ] as const;
 const INSPECTION_TYPES = ["Daily Inspection", "Post-Fire Inspection", "Post-Training Inspection", "Miscellaneous Use Inspection"] as const;
 
-export default function MobileScbaInspection({ departmentId, memberId, memberName, departmentName, packs, initialError, returnTo }: {
-  departmentId: string; memberId: string; memberName: string; departmentName: string; packs: Pack[]; initialError: string | null; returnTo: string;
+export default function MobileScbaInspection({ departmentId, memberId, memberName, departmentName, packs, initialError, returnTo, qrPackId = null }: {
+  departmentId: string; memberId: string; memberName: string; departmentName: string; packs: Pack[]; initialError: string | null; returnTo: string; qrPackId?: string | null;
 }) {
   const router = useRouter();
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string[]>(() => qrPackId ? [qrPackId] : []);
   const [inspectionType, setInspectionType] = useState<(typeof INSPECTION_TYPES)[number]>("Daily Inspection");
   const [confirmed, setConfirmed] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
@@ -66,7 +66,7 @@ export default function MobileScbaInspection({ departmentId, memberId, memberNam
   return <main className="min-h-screen bg-[#0b0c0e] px-4 pb-12 pt-4 text-white sm:px-6">
     <div className="mx-auto max-w-3xl">
       <Link href="/mobile" className="inline-flex min-h-12 items-center text-sm font-bold text-white/65">Back to Field Actions</Link>
-      <header className="mt-4 border-b border-white/10 pb-5"><p className="text-xs font-bold uppercase tracking-[0.22em] text-[#ef2b2d]">Field Action · {departmentName}</p><h1 className="mt-2 text-3xl font-black">SCBA Inspection</h1><p className="mt-2 text-sm text-white/60">Record an inspection for one or more SCBA packs. Follow your department SOP and the manufacturer's instructions.</p></header>
+      <header className="mt-4 border-b border-white/10 pb-5"><p className="text-xs font-bold uppercase tracking-[0.22em] text-[#ef2b2d]">Field Action · {departmentName}</p><h1 className="mt-2 text-3xl font-black">SCBA Inspection</h1>{qrPackId ? <p className="mt-2 rounded-lg border border-emerald-400/30 bg-emerald-500/10 p-3 text-sm font-bold text-emerald-100">QR scan recognized. The matching SCBA pack is selected below.</p> : null}<p className="mt-2 text-sm text-white/60">Record an inspection for one or more SCBA packs. Follow your department SOP and the manufacturer's instructions.</p></header>
       {error ? <p role="alert" className="mt-4 rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-100">{error}</p> : null}
       {success ? <p className="mt-4 rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-3 text-sm text-emerald-100">{success}</p> : null}
       <section className="mt-5 rounded-2xl border border-white/10 bg-[#17181b] p-4">
