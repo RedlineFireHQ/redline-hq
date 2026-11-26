@@ -14,7 +14,8 @@ type ScbaPackRecord = {
 	next_flow_test_due_date: string | null;
 	status: string;
 	notes: string | null;
-	created_at: string;\n\tqr_identifier: string;
+	created_at: string;
+	qr_identifier: string;
 };
 
 function comparePackNumbers(left: string | null | undefined, right: string | null | undefined) {
