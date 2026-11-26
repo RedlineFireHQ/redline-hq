@@ -60,12 +60,16 @@ export default function MobileTrainingForm({
   categories,
   emsCourses,
   members,
+  facilities,
+  prePlans,
 }: {
   departmentId: string;
   memberId: string;
   categories: Category[];
   emsCourses: EmsCourse[];
   members: Member[];
+  facilities: IsoTrainingFacilityOption[];
+  prePlans: IsoPrePlanOption[];
 }) {
   const router = useRouter();
   const evidenceRef = useRef<HTMLInputElement | null>(null);
@@ -81,7 +85,11 @@ export default function MobileTrainingForm({
   const [details, setDetails] = useState("");
   const [emsTopic, setEmsTopic] = useState<EmsCoreTopicCode>("other");
   const [emsCourseId, setEmsCourseId] = useState("");
-  const [emsNeedsReview, setEmsNeedsReview] = useState(false);\n  const [isoClassifications, setIsoClassifications] = useState<string[]>([]);\n  const [isoFacilityId, setIsoFacilityId] = useState("");\n  const [isoPrePlanId, setIsoPrePlanId] = useState("");\n  const [isoDriverOperatorTrainingType, setIsoDriverOperatorTrainingType] = useState("");
+  const [emsNeedsReview, setEmsNeedsReview] = useState(false);
+  const [isoClassifications, setIsoClassifications] = useState<string[]>([]);
+  const [isoFacilityId, setIsoFacilityId] = useState("");
+  const [isoPrePlanId, setIsoPrePlanId] = useState("");
+  const [isoDriverOperatorTrainingType, setIsoDriverOperatorTrainingType] = useState("");
   const [evidence, setEvidence] = useState<File | null>(null);
   const [openDetails, setOpenDetails] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -118,6 +126,21 @@ export default function MobileTrainingForm({
       );
       return;
     }
+    if (isoClassifications.includes("training_facilities")) {
+      const facility = facilities.find((item) => item.id === isoFacilityId);
+      if (!facility || !facilityQualifiesForIso(facility, dateCompleted)) {
+        setError("Select a qualifying ISO training facility for the training date.");
+        return;
+      }
+    }
+    if (isoClassifications.includes("driver_operator") && !["initial", "refresher"].includes(isoDriverOperatorTrainingType)) {
+      setError("Select initial or refresher for ISO Driver / Operator training.");
+      return;
+    }
+    if (isoClassifications.includes("building_familiarization") && !prePlans.some((item) => item.id === isoPrePlanId && item.lifecycle_status === "active")) {
+      setError("Select an active building pre-plan for ISO Building Familiarization.");
+      return;
+    }
     if (
       methods.length === 0 ||
       !provider.trim() ||
@@ -152,7 +175,11 @@ export default function MobileTrainingForm({
             instructorName: isEms ? "" : provider,
             location,
           }),
-          p_participant_ids: Array.from(new Set(participants)),\n          p_iso_classifications: isoClassifications,\n          p_iso_facility_id: isoFacilityId || null,\n          p_iso_pre_plan_id: isoPrePlanId || null,\n          p_iso_driver_operator_training_type: isoDriverOperatorTrainingType || null,
+          p_participant_ids: Array.from(new Set(participants)),
+          p_iso_classifications: isoClassifications,
+          p_iso_facility_id: isoFacilityId || null,
+          p_iso_pre_plan_id: isoPrePlanId || null,
+          p_iso_driver_operator_training_type: isoDriverOperatorTrainingType || null,
         },
       );
       const submissionId =
