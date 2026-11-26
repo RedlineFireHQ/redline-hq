@@ -99,11 +99,11 @@ type TrainingOutsideSubmissionRow = {
   review_notes: string | null;
   created_at: string;
   updated_at: string;
-  iso_classifications: string[];
-  iso_facility_id: string | null;
-  iso_pre_plan_id: string | null;
-  iso_driver_operator_training_type: string | null;
-  iso_facility_credit_level: string;
+  iso_classifications?: string[];
+  iso_facility_id?: string | null;
+  iso_pre_plan_id?: string | null;
+  iso_driver_operator_training_type?: string | null;
+  iso_facility_credit_level?: string;
 };
 
 type TrainingOutsideEvidenceRow = {
@@ -129,10 +129,10 @@ type TrainingAssignmentRow = {
   external_video_url: string | null;
   external_audio_url: string | null;
   supporting_document_id: string | null;
-  iso_classifications: string[];
-  iso_facility_id: string | null;
-  iso_pre_plan_id: string | null;
-  iso_driver_operator_training_type: string | null;
+  iso_classifications?: string[];
+  iso_facility_id?: string | null;
+  iso_pre_plan_id?: string | null;
+  iso_driver_operator_training_type?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -1065,15 +1065,15 @@ export default async function TrainingPage() {
     })),
     ...assignmentMembers.filter((row) => row.completion_status === "approved").flatMap((row) => {
       const assignment = assignments.find((item) => item.id === row.training_assignment_id);
-      if (!assignment || assignment.iso_classifications.length === 0) return [];
+      if (!assignment || !assignment.iso_classifications?.length) return [];
       const facility = facilities.find((item) => item.id === assignment.iso_facility_id);
       const facilityCredit = facility ? getFacilityIsoCreditLevel(facility, row.completed_at ?? row.updated_at) : "none";
       return [{
         id: `assignment-${row.id}`, status: "completed", starts_at: row.completed_at ?? row.updated_at,
-        hours_credit: row.hours_earned ?? assignment.hours_credit, iso_classifications: assignment.iso_classifications,
+        hours_credit: row.hours_earned ?? assignment.hours_credit, iso_classifications: assignment.iso_classifications ?? [],
         iso_qualifying_facility: facilityCredit !== "none", iso_facility_credit_level: facilityCredit,
-        iso_facility_stories: facility?.tower_stories ?? null, iso_pre_plan_id: assignment.iso_pre_plan_id,
-        iso_driver_operator_training_type: assignment.iso_driver_operator_training_type,
+        iso_facility_stories: facility?.tower_stories ?? null, iso_pre_plan_id: assignment.iso_pre_plan_id ?? null,
+        iso_driver_operator_training_type: assignment.iso_driver_operator_training_type ?? null,
       }];
     }),
   ];
