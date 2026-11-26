@@ -594,9 +594,8 @@ export default function ScbaPackWorkspace({
 
 	const showPackQr = async (row: ScbaPackRecord) => {
 		const identifier = row.qr_identifier || `scba-pack:${row.id}`;
-		const url = `${window.location.origin}/mobile/scba-inspections?qr=${encodeURIComponent(identifier)}&returnTo=%2Finventory%2Fscba-packs`;
-		const dataUrl = await QRCode.toDataURL(url, { width: 360, margin: 2, errorCorrectionLevel: "H" });
-		setQrModal({ packNumber: row.pack_number, dataUrl, url });
+		const dataUrl = await QRCode.toDataURL(identifier, { width: 360, margin: 2, errorCorrectionLevel: "H" });
+		setQrModal({ packNumber: row.pack_number, dataUrl, url: identifier });
 	};
 
 	const viewFlowTestHistoryForRow = (row: ScbaPackRecord) => {
@@ -1163,16 +1162,16 @@ export default function ScbaPackWorkspace({
 																	</button>
 
 																	<button
-																		type="button"
-																		onClick={(event) => {
-																			event.stopPropagation();
-																			viewInspectionHistoryForRow(row);
-																		}}
-																		className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800 whitespace-nowrap"
-																	>
-																		<button type="button" onClick={(event) => { event.stopPropagation(); void showPackQr(row); }} className="rounded-lg border border-red-500/30 bg-red-900/20 px-3 py-1.5 text-xs font-semibold text-red-100 whitespace-nowrap">QR Code</button>
-																	Inspection History
-																	</button>
+								type="button"
+								onClick={(event) => {
+									event.stopPropagation();
+									viewInspectionHistoryForRow(row);
+								}}
+								className="rounded-lg border border-white/15 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-neutral-800 whitespace-nowrap"
+							>
+								Inspection History
+							</button>
+							<button type="button" onClick={(event) => { event.stopPropagation(); void showPackQr(row); }} className="rounded-lg border border-red-500/30 bg-red-900/20 px-3 py-1.5 text-xs font-semibold text-red-100 whitespace-nowrap">QR Code</button>
 
 																	<button
 																		type="button"
@@ -1212,10 +1211,10 @@ export default function ScbaPackWorkspace({
 				<div role="dialog" aria-modal="true" aria-label={`QR code for SCBA pack ${qrModal.packNumber}`} className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4">
 					<section className="w-full max-w-sm rounded-2xl border border-white/15 bg-[#242424] p-5 text-center">
 						<h2 className="text-xl font-black text-white">SCBA Pack {qrModal.packNumber}</h2>
-						<p className="mt-1 text-sm text-neutral-400">Print or save this QR label and attach it to the matching pack</p>
+						<p className="mt-1 text-sm text-neutral-400">Attach this label to the matching pack. Scan it using the Scan tab in the Redline HQ mobile app.</p>
 						<img src={qrModal.dataUrl} alt={`QR code for SCBA pack ${qrModal.packNumber}`} className="mx-auto mt-4 h-64 w-64 rounded-lg bg-white p-2" />
 						<div className="mt-4 flex gap-2"><button type="button" onClick={() => window.print()} className="min-h-11 flex-1 rounded-xl bg-red-600 px-3 font-bold text-white">Print QR</button><button type="button" onClick={() => setQrModal(null)} className="min-h-11 flex-1 rounded-xl border border-white/15 px-3 font-bold text-white">Close</button></div>
-						<p className="mt-3 break-all text-[10px] text-neutral-500">{qrModal.url}</p>
+						<p className="mt-3 break-all text-[10px] text-neutral-500">QR ID: {qrModal.url}</p>
 					</section>
 				</div>
 			) : null}
