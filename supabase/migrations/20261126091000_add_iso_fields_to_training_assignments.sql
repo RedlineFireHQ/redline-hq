@@ -36,7 +36,7 @@ begin
     end if;
   end if;
   if 'driver_operator' = any(coalesce(new.iso_classifications,'{}'::text[]))
-     and new.iso_driver_operator_training_type not in ('initial','refresher') then
+     and (new.iso_driver_operator_training_type is null or new.iso_driver_operator_training_type not in ('initial','refresher')) then
     raise exception 'Select initial or refresher training for ISO Driver / Operator classification.';
   end if;
   if 'building_familiarization' = any(coalesce(new.iso_classifications,'{}'::text[])) then
