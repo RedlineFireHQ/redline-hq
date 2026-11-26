@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { getDrugTemplateSections, type DrugBoxRecord } from "@/lib/drug-boxes/data";
+import EmsContainerInspectionContents from "@/components/inventory/EmsContainerInspectionContents";
 
 type DrugBoxChecklistWorkspaceProps = {
   box: DrugBoxRecord;
@@ -139,6 +140,8 @@ export default function DrugBoxChecklistWorkspace({ box }: DrugBoxChecklistWorks
           Back to Drug Boxes
         </button>
       </div>
+
+      <EmsContainerInspectionContents departmentId={box.departmentId} containerId={box.id} containerType="drug_box" />
 
       <section className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-5">
         <h2 className="text-xl font-bold text-white">Inspection Details</h2>
