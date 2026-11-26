@@ -92,14 +92,8 @@ export default function DrugInspectionDetail({ inspection }: { inspection: DrugI
                   {item.sectionName} · Qty: {item.requiredQuantity}
                 </p>
               </div>
-              <span
-                className={`rounded-full border px-3 py-1 text-xs font-semibold ${
-                  item.checked
-                    ? "border-emerald-500/40 bg-emerald-950/30 text-emerald-200"
-                    : "border-white/10 bg-white/[0.03] text-neutral-300"
-                }`}
-              >
-                {item.checked ? "PASS" : "EXPIRED"}
+              <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${item.status === "pass" ? "border-emerald-500/40 bg-emerald-950/30 text-emerald-200" : item.status === "expired" ? "border-red-500/40 bg-red-950/30 text-red-200" : "border-amber-500/40 bg-amber-950/30 text-amber-200"}`}>
+                {item.status === "pass" ? "PASS" : item.status === "expired" ? "EXPIRED" : "MISSING"}
               </span>
             </div>
           ))}
