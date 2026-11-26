@@ -1114,6 +1114,8 @@ export default async function TrainingPage() {
       approvedSelfReported={approvedSelfReported}
       facilities={facilities}
       prePlans={prePlans}
+      isoDashboardEvents={isoDashboardEvents}
+      isoDashboardAttendanceRows={isoDashboardAttendanceRows}
     />
   );
 }
