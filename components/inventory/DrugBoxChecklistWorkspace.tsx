@@ -3,7 +3,6 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { getDrugTemplateSections, type DrugBoxRecord } from "@/lib/drug-boxes/data";
-import EmsContainerInspectionContents from "@/components/inventory/EmsContainerInspectionContents";
 
 type DrugBoxChecklistWorkspaceProps = {
   box: DrugBoxRecord;
