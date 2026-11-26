@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   if (!member?.departmentId) return json({ error: "Unauthorized" }, 401);
 
   const allowed = await hasInventoryPermission(
-    supabase, member.departmentId, member.role, "ems_supply_management",
+    supabase, member.departmentId, member.role, "inventory_management",
   );
   if (!allowed) return json({ error: "You do not have permission to manage EMS supplies." }, 403);
 
