@@ -80,17 +80,28 @@ export default function IsoTrainingFields({
         <p className="text-sm text-neutral-400">Choose every applicable ISO training category. This is separate from the training subject category above, so one event can be Fire Suppression training and also qualify for Company Training or Training Facilities.</p>
       </div>
 
-      <div className="mt-4 grid gap-2 md:grid-cols-2">
-        {ISO_TRAINING_CLASSIFICATIONS.map((item) => (
-          <label key={item.code} className="flex cursor-pointer gap-3 rounded-xl border border-white/10 bg-black/20 p-3 hover:bg-white/[0.04]">
-            <input type="checkbox" disabled={disabled} checked={has(item.code)} onChange={(event) => toggle(item.code, event.target.checked)} className="mt-1 h-4 w-4 accent-red-600" />
-            <span className="min-w-0">
-              <span className="flex flex-wrap items-center gap-2 text-sm font-semibold text-white">{item.label}<span className="rounded-full bg-white/[0.07] px-2 py-0.5 text-[10px] font-bold text-sky-200">{item.weight}%</span></span>
-              <span className="mt-1 block text-xs leading-relaxed text-neutral-400">{item.target}</span>
-            </span>
-          </label>
-        ))}
-      </div>
+      <label className="mt-4 block">
+        <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">ISO Classification</span>
+        <select
+          disabled={disabled}
+          value={classifications[0] ?? ""}
+          onChange={(event) => onClassificationsChange(event.target.value ? [event.target.value] : [])}
+          className={fieldClass}
+        >
+          <option value="">Does not qualify for a separate ISO training classification</option>
+          {ISO_TRAINING_CLASSIFICATIONS.map((item) => (
+            <option key={item.code} value={item.code}>{item.label} — {item.weight}%</option>
+          ))}
+        </select>
+        {classifications.length > 1 ? (
+          <span className="mt-1 block text-xs text-amber-200">This older record has multiple ISO classifications. They are being preserved unless you choose a new classification.</span>
+        ) : null}
+        {classifications[0] ? (
+          <span className="mt-1 block text-xs text-neutral-400">
+            {ISO_TRAINING_CLASSIFICATIONS.find((item) => item.code === classifications[0])?.target}
+          </span>
+        ) : null}
+      </label>
 
       {has("training_facilities") ? (
         <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/[0.05] p-4">
