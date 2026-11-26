@@ -26,6 +26,19 @@ interface Props {
 }
 
 const fieldClass = "w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none";
+export function suggestTrainingIsoClassification(categoryName: string, trainingTitle: string): IsoTrainingClassification | null {
+  const value = (categoryName + " " + trainingTitle).toLowerCase();
+  const match = [
+    { code: "company_training" as const, pattern: /fire|suppression|company|hose|ladder|search|rescue|ventilation|forcible entry/ },
+    { code: "officer_training" as const, pattern: /officer|leadership|command|ics|size.?up/ },
+    { code: "driver_operator" as const, pattern: /driver|operator|apparatus|pump|hydraulic|water supply/ },
+    { code: "hazmat" as const, pattern: /hazmat|hazardous material|erg|decontamination/ },
+    { code: "recruit" as const, pattern: /recruit|academy|firefighter i|basic training/ },
+    { code: "building_familiarization" as const, pattern: /building familiarization|pre.?plan|property visit|building walk.?through|occupancy familiarization/ },
+  ].find((item) => item.pattern.test(value));
+  return match?.code ?? (categoryName.trim().toLowerCase() === "fire training" ? "company_training" : null);
+}
+
 const isoOptions: Array<{ code: IsoTrainingClassification; label: string; match: RegExp }> = [
   { code: "company_training", label: "Company Training", match: /fire|suppression|company|hose|ladder|search|rescue|ventilation|forcible entry/ },
   { code: "officer_training", label: "Officer Training", match: /officer|leadership|command|ics|size.?up/ },
@@ -40,7 +53,7 @@ export default function TrainingEventIsoFields({
   prePlanId, onPrePlanChange, prePlans, driverOperatorTrainingType,
   onDriverOperatorTrainingTypeChange, eventDate, categoryName = "", trainingTitle = "", disabled = false,
 }: Props) {
-  const selectedClassification = classifications.find((item) => item !== "training_facilities") as IsoTrainingClassification | undefined;
+  const selectedClassification = classifications.find((item) => item !== "training_facilities" && item !== "none") as IsoTrainingClassification | undefined;
   const isFacilityCreditSelected = classifications.includes("training_facilities");
   const normalizedInput = (categoryName + " " + trainingTitle).toLowerCase();
   const suggested = isoOptions.find((item) => item.match.test(normalizedInput))?.code
@@ -75,7 +88,7 @@ export default function TrainingEventIsoFields({
 
       <label className="mt-3 block">
         <span className="mb-1.5 block text-xs font-semibold text-neutral-200">ISO Classification</span>
-        <select disabled={disabled} value={selectedClassification ?? suggested ?? ""} onChange={(event) => setClassification(event.target.value)} className={fieldClass}>
+        <select disabled={disabled} value={classifications.includes("none") ? "" : selectedClassification ?? suggested ?? ""} onChange={(event) => setClassification(event.target.value)} className={fieldClass}>
           <option value="">No ISO classification</option>
           {isoOptions.map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}
         </select>
