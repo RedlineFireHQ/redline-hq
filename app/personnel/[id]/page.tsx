@@ -874,8 +874,8 @@ export default async function PersonnelProfilePage({
     const assignment = assignmentById.get(member.training_assignment_id);
     const completedAt = member.completed_at ?? member.updated_at ?? member.created_at;
     if (!assignment || !completedAt) return [];
-    const earnedHours = parseHours(member.hours_earned);
-    const hours = earnedHours > 0 ? earnedHours : parseHours(assignment.hours_credit);
+    const earnedHours = parseHours(member.hours_earned) ?? 0;
+    const hours = earnedHours > 0 ? earnedHours : (parseHours(assignment.hours_credit) ?? 0);
     return [{
       id: `assignment-${member.training_assignment_id}`,
       title: assignment.title,
