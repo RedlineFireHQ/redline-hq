@@ -196,6 +196,8 @@ interface TrainingWorkspaceProps {
   prePlans?: IsoPrePlanOption[];
   initialAddTrainingEventOpen?: boolean;
   approvedSelfReported?: SelfReportedTraining[];
+  isoDashboardEvents?: Array<{ id: string; status: string; starts_at: string; hours_credit: number | null; iso_classifications: string[]; iso_qualifying_facility: boolean; iso_facility_credit_level: string; iso_facility_stories: number | null; iso_pre_plan_id: string | null; iso_driver_operator_training_type: string | null }>;
+  isoDashboardAttendanceRows?: Array<{ training_event_id: string; member_id: string; attendance_status: string; hours_earned: number | null }>;
   departmentSummary?: ReactNode;
   departmentHistory?: ReactNode;
 }
@@ -233,6 +235,10 @@ type HomeworkAssignmentFormState = {
   externalVideoUrl: string;
   externalAudioUrl: string;
   assignDepartmentWide: boolean;
+  isoClassifications: string[];
+  isoFacilityId: string;
+  isoPrePlanId: string;
+  isoDriverOperatorTrainingType: string;
 };
 
 const TRAINING_METHOD_OPTIONS = [
@@ -290,6 +296,10 @@ function emptyHomeworkAssignmentFormState(defaultCategoryId: string): HomeworkAs
     externalVideoUrl: "",
     externalAudioUrl: "",
     assignDepartmentWide: false,
+    isoClassifications: [],
+    isoFacilityId: "",
+    isoPrePlanId: "",
+    isoDriverOperatorTrainingType: "",
   };
 }
 
@@ -520,6 +530,8 @@ export default function TrainingWorkspace({
   facilities = [],
   prePlans = [],
   approvedSelfReported = [],
+  isoDashboardEvents = [],
+  isoDashboardAttendanceRows = [],
   departmentSummary,
   departmentHistory,
 }: TrainingWorkspaceProps) {
@@ -1042,6 +1054,22 @@ export default function TrainingWorkspace({
       return;
     }
 
+    if (homeworkFormState.isoClassifications.includes("training_facilities")) {
+      const facility = facilities.find((item) => item.id === homeworkFormState.isoFacilityId);
+      if (!facility || !facilityQualifiesForIso(facility, getTodayDateKey())) {
+        setHomeworkSaveError("Select a qualifying ISO training facility for this assignment.");
+        return;
+      }
+    }
+    if (homeworkFormState.isoClassifications.includes("driver_operator") && !["initial", "refresher"].includes(homeworkFormState.isoDriverOperatorTrainingType)) {
+      setHomeworkSaveError("Select initial or refresher for ISO Driver / Operator training.");
+      return;
+    }
+    if (homeworkFormState.isoClassifications.includes("building_familiarization") && !prePlans.some((item) => item.id === homeworkFormState.isoPrePlanId && item.lifecycle_status === "active")) {
+      setHomeworkSaveError("Select an active building pre-plan for ISO Building Familiarization.");
+      return;
+    }
+
     const targetedMemberIds = homeworkFormState.assignDepartmentWide
       ? departmentMembers.map((member) => member.id)
       : Array.from(selectedHomeworkMemberIds);
@@ -1103,9 +1131,13 @@ export default function TrainingWorkspace({
           status: "active",
           created_by: currentMemberId,
           updated_by: currentMemberId,
+          iso_classifications: homeworkFormState.isoClassifications,
+          iso_facility_id: homeworkFormState.isoFacilityId || null,
+          iso_pre_plan_id: homeworkFormState.isoPrePlanId || null,
+          iso_driver_operator_training_type: homeworkFormState.isoDriverOperatorTrainingType || null,
         })
         .select(
-          "id, title, category_id, description, due_at, hours_credit, is_required, review_required, status, external_video_url, external_audio_url, supporting_document_id, created_at, updated_at",
+          "id, title, category_id, description, due_at, hours_credit, is_required, review_required, status, external_video_url, external_audio_url, supporting_document_id, iso_classifications, iso_facility_id, iso_pre_plan_id, iso_driver_operator_training_type, created_at, updated_at",
         )
         .single();
 
@@ -2871,7 +2903,7 @@ export default function TrainingWorkspace({
       </div>
 
       {canManageTraining ? (
-        <IsoTrainingDashboard events={eventRows} attendanceRows={attendanceRows} members={members} prePlans={prePlans} />
+        <IsoTrainingDashboard events={[...eventRows, ...isoDashboardEvents]} attendanceRows={[...attendanceRows, ...isoDashboardAttendanceRows]} members={members} prePlans={prePlans} />
       ) : null}
 
       {myAssignedTrainingSection}
@@ -3442,6 +3474,22 @@ export default function TrainingWorkspace({
                   />
                 </label>
 
+                <div className="md:col-span-2">
+                  <TrainingEventIsoFields
+                    classifications={homeworkFormState.isoClassifications}
+                    onClassificationsChange={(next) => setHomeworkFormState((current) => ({ ...current, isoClassifications: next }))}
+                    facilityId={homeworkFormState.isoFacilityId}
+                    onFacilityChange={(next) => setHomeworkFormState((current) => ({ ...current, isoFacilityId: next }))}
+                    facilities={facilities}
+                    prePlanId={homeworkFormState.isoPrePlanId}
+                    onPrePlanChange={(next) => setHomeworkFormState((current) => ({ ...current, isoPrePlanId: next }))}
+                    prePlans={prePlans}
+                    driverOperatorTrainingType={homeworkFormState.isoDriverOperatorTrainingType}
+                    onDriverOperatorTrainingTypeChange={(next) => setHomeworkFormState((current) => ({ ...current, isoDriverOperatorTrainingType: next }))}
+                    categoryName={activeCategories.find((item) => item.id === homeworkFormState.categoryId)?.name ?? ""}
+                    trainingTitle={homeworkFormState.title}
+                  />
+                </div>
                 <div className="rounded-xl border border-white/10 bg-[#151515] p-4 md:col-span-2">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-neutral-300">Assigned Material</p>
                   <p className="mt-1 text-xs text-neutral-400">Use an existing department document or upload new training material.</p>

@@ -7,6 +7,8 @@ import { EMS_CORE_TOPICS, type EmsCoreTopicCode } from "@/lib/ems/requirements";
 import { triggerEmsAllocationRecalculationForMembers } from "@/lib/ems/recalculate-client";
 import { supabase } from "@/lib/supabase";
 import { buildOutsideSubmissionNotes } from "@/lib/training/outside-submission-notes";
+import TrainingEventIsoFields, { type IsoTrainingFacilityOption, type IsoPrePlanOption } from "@/components/training/TrainingEventIsoFields";
+import { facilityQualifiesForIso } from "@/lib/training/iso-training";
 
 type Category = { id: string; name: string; active: boolean; system_key: string | null; compliance_bucket: string | null };
 type EmsCourse = { id: string; course_name: string; active: boolean };
@@ -58,12 +60,16 @@ export default function MobileTrainingForm({
   categories,
   emsCourses,
   members,
+  facilities,
+  prePlans,
 }: {
   departmentId: string;
   memberId: string;
   categories: Category[];
   emsCourses: EmsCourse[];
   members: Member[];
+  facilities: IsoTrainingFacilityOption[];
+  prePlans: IsoPrePlanOption[];
 }) {
   const router = useRouter();
   const evidenceRef = useRef<HTMLInputElement | null>(null);
@@ -80,6 +86,10 @@ export default function MobileTrainingForm({
   const [emsTopic, setEmsTopic] = useState<EmsCoreTopicCode>("other");
   const [emsCourseId, setEmsCourseId] = useState("");
   const [emsNeedsReview, setEmsNeedsReview] = useState(false);
+  const [isoClassifications, setIsoClassifications] = useState<string[]>([]);
+  const [isoFacilityId, setIsoFacilityId] = useState("");
+  const [isoPrePlanId, setIsoPrePlanId] = useState("");
+  const [isoDriverOperatorTrainingType, setIsoDriverOperatorTrainingType] = useState("");
   const [evidence, setEvidence] = useState<File | null>(null);
   const [openDetails, setOpenDetails] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,6 +124,21 @@ export default function MobileTrainingForm({
       setError(
         "Enter a training topic, category, date, and training hours greater than 0.",
       );
+      return;
+    }
+    if (isoClassifications.includes("training_facilities")) {
+      const facility = facilities.find((item) => item.id === isoFacilityId);
+      if (!facility || !facilityQualifiesForIso(facility, dateCompleted)) {
+        setError("Select a qualifying ISO training facility for the training date.");
+        return;
+      }
+    }
+    if (isoClassifications.includes("driver_operator") && !["initial", "refresher"].includes(isoDriverOperatorTrainingType)) {
+      setError("Select initial or refresher for ISO Driver / Operator training.");
+      return;
+    }
+    if (isoClassifications.includes("building_familiarization") && !prePlans.some((item) => item.id === isoPrePlanId && item.lifecycle_status === "active")) {
+      setError("Select an active building pre-plan for ISO Building Familiarization.");
       return;
     }
     if (
@@ -151,6 +176,10 @@ export default function MobileTrainingForm({
             location,
           }),
           p_participant_ids: Array.from(new Set(participants)),
+          p_iso_classifications: isoClassifications,
+          p_iso_facility_id: isoFacilityId || null,
+          p_iso_pre_plan_id: isoPrePlanId || null,
+          p_iso_driver_operator_training_type: isoDriverOperatorTrainingType || null,
         },
       );
       const submissionId =
@@ -293,6 +322,22 @@ export default function MobileTrainingForm({
               </label>
             </div>
           </section>
+          <TrainingEventIsoFields
+            classifications={isoClassifications}
+            onClassificationsChange={setIsoClassifications}
+            facilityId={isoFacilityId}
+            onFacilityChange={setIsoFacilityId}
+            facilities={facilities}
+            prePlanId={isoPrePlanId}
+            onPrePlanChange={setIsoPrePlanId}
+            prePlans={prePlans}
+            driverOperatorTrainingType={isoDriverOperatorTrainingType}
+            onDriverOperatorTrainingTypeChange={setIsoDriverOperatorTrainingType}
+            eventDate={dateCompleted}
+            categoryName={selectedCategory?.name ?? ""}
+            trainingTitle={title}
+            disabled={saving}
+          />
           <section className="rounded-2xl border border-white/10 bg-[#17181b] p-5">
             <button
               type="button"

@@ -7,6 +7,7 @@ import { hasAssignedDepartmentPermission } from "@/lib/member-permissions";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 import { calculateDepartmentTrainingMemberHours } from "@/lib/training/training-hours";
+import { getFacilityIsoCreditLevel } from "@/lib/training/iso-training";
 import { parseOutsideSubmissionNotes } from "@/lib/training/outside-submission-notes";
 
 type TrainingCategoryRow = {
@@ -98,6 +99,11 @@ type TrainingOutsideSubmissionRow = {
   review_notes: string | null;
   created_at: string;
   updated_at: string;
+  iso_classifications?: string[];
+  iso_facility_id?: string | null;
+  iso_pre_plan_id?: string | null;
+  iso_driver_operator_training_type?: string | null;
+  iso_facility_credit_level?: string;
 };
 
 type TrainingOutsideEvidenceRow = {
@@ -123,6 +129,10 @@ type TrainingAssignmentRow = {
   external_video_url: string | null;
   external_audio_url: string | null;
   supporting_document_id: string | null;
+  iso_classifications?: string[];
+  iso_facility_id?: string | null;
+  iso_pre_plan_id?: string | null;
+  iso_driver_operator_training_type?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -226,7 +236,7 @@ export default async function TrainingPage() {
       supabase
         .from("training_outside_submissions")
         .select(
-          "id, member_id, title, category_id, training_date, hours, is_ems_training, ems_core_topic, ems_course_definition_id, ems_needs_review, ems_provider_name, description, notes, status, review_required, reviewed_by, reviewed_at, review_notes, created_at, updated_at",
+          "id, member_id, title, category_id, training_date, hours, is_ems_training, ems_core_topic, ems_course_definition_id, ems_needs_review, ems_provider_name, description, notes, status, review_required, reviewed_by, reviewed_at, review_notes, created_at, updated_at, iso_classifications, iso_facility_id, iso_pre_plan_id, iso_driver_operator_training_type, iso_facility_credit_level",
         )
         .eq("department_id", currentMember.departmentId)
         .eq("member_id", currentMember.id)
@@ -466,7 +476,7 @@ export default async function TrainingPage() {
       ? await supabase
           .from("training_assignments")
           .select(
-            "id, title, category_id, description, due_at, hours_credit, is_required, review_required, status, external_video_url, external_audio_url, supporting_document_id, created_at, updated_at",
+            "id, title, category_id, description, due_at, hours_credit, is_required, review_required, status, external_video_url, external_audio_url, supporting_document_id, iso_classifications, iso_facility_id, iso_pre_plan_id, iso_driver_operator_training_type, created_at, updated_at",
           )
           .eq("department_id", currentMember.departmentId)
           .in("id", assignmentIds)
@@ -655,7 +665,7 @@ export default async function TrainingPage() {
     supabase
       .from("training_outside_submissions")
       .select(
-        "id, member_id, title, category_id, training_date, hours, is_ems_training, ems_core_topic, ems_course_definition_id, ems_needs_review, ems_provider_name, description, notes, status, review_required, reviewed_by, reviewed_at, review_notes, created_at, updated_at",
+        "id, member_id, title, category_id, training_date, hours, is_ems_training, ems_core_topic, ems_course_definition_id, ems_needs_review, ems_provider_name, description, notes, status, review_required, reviewed_by, reviewed_at, review_notes, created_at, updated_at, iso_classifications, iso_facility_id, iso_pre_plan_id, iso_driver_operator_training_type, iso_facility_credit_level",
       )
       .eq("department_id", currentMember.departmentId)
       .eq("status", "pending_review")
@@ -667,7 +677,7 @@ export default async function TrainingPage() {
     supabase
       .from("training_assignments")
       .select(
-        "id, title, category_id, description, due_at, hours_credit, is_required, review_required, status, external_video_url, external_audio_url, supporting_document_id, created_at, updated_at",
+        "id, title, category_id, description, due_at, hours_credit, is_required, review_required, status, external_video_url, external_audio_url, supporting_document_id, iso_classifications, iso_facility_id, iso_pre_plan_id, iso_driver_operator_training_type, created_at, updated_at",
       )
       .eq("department_id", currentMember.departmentId)
       .order("created_at", { ascending: false }),
@@ -690,7 +700,7 @@ export default async function TrainingPage() {
       .order("course_name", { ascending: true }),
     supabase
       .from("training_outside_submissions")
-      .select("id, member_id, title, category_id, training_date, hours, status, notes, is_ems_training, ems_provider_name")
+      .select("id, member_id, title, category_id, training_date, hours, status, notes, is_ems_training, ems_provider_name, iso_classifications, iso_facility_id, iso_pre_plan_id, iso_driver_operator_training_type, iso_facility_credit_level")
       .eq("department_id", currentMember.departmentId)
       .eq("status", "approved")
       .order("training_date", { ascending: false }),
@@ -708,7 +718,6 @@ export default async function TrainingPage() {
       .from("training_facilities")
       .select("id, name, facility_type, ownership_type, address, city, state, zip, tower_stories, yard_acres, purpose_built_live_fire, formal_agreement, agreement_reference, agreement_start_date, agreement_end_date, active")
       .eq("department_id", currentMember.departmentId)
-      .eq("active", true)
       .order("name", { ascending: true }),
     supabase
       .from("pre_plans")
@@ -875,6 +884,11 @@ export default async function TrainingPage() {
     review_notes: typeof row.review_notes === "string" ? row.review_notes : null,
     created_at: typeof row.created_at === "string" ? row.created_at : "",
     updated_at: typeof row.updated_at === "string" ? row.updated_at : "",
+    iso_classifications: Array.isArray(row.iso_classifications) ? row.iso_classifications.filter((value): value is string => typeof value === "string") : [],
+    iso_facility_id: typeof row.iso_facility_id === "string" ? row.iso_facility_id : null,
+    iso_pre_plan_id: typeof row.iso_pre_plan_id === "string" ? row.iso_pre_plan_id : null,
+    iso_driver_operator_training_type: typeof row.iso_driver_operator_training_type === "string" ? row.iso_driver_operator_training_type : null,
+    iso_facility_credit_level: typeof row.iso_facility_credit_level === "string" ? row.iso_facility_credit_level : "none",
   }));
 
   const outsideEvidenceRows: TrainingOutsideEvidenceRow[] = (outsideEvidenceData ?? []).map((row) => ({
@@ -901,6 +915,10 @@ export default async function TrainingPage() {
     external_audio_url: typeof row.external_audio_url === "string" ? row.external_audio_url : null,
     supporting_document_id: typeof row.supporting_document_id === "string" ? row.supporting_document_id : null,
     created_at: typeof row.created_at === "string" ? row.created_at : "",
+    iso_classifications: Array.isArray(row.iso_classifications) ? row.iso_classifications.filter((value): value is string => typeof value === "string") : [],
+    iso_facility_id: typeof row.iso_facility_id === "string" ? row.iso_facility_id : null,
+    iso_pre_plan_id: typeof row.iso_pre_plan_id === "string" ? row.iso_pre_plan_id : null,
+    iso_driver_operator_training_type: typeof row.iso_driver_operator_training_type === "string" ? row.iso_driver_operator_training_type : null,
     updated_at: typeof row.updated_at === "string" ? row.updated_at : "",
   }));
 
@@ -1001,6 +1019,10 @@ export default async function TrainingPage() {
     notes: string | null;
     is_ems_training: boolean | null;
     ems_provider_name: string | null;
+    iso_classifications?: string[] | null;
+    iso_pre_plan_id?: string | null;
+    iso_driver_operator_training_type?: string | null;
+    iso_facility_credit_level?: string | null;
   }>).map((row) => {
     const noteDetails = parseOutsideSubmissionNotes(row.notes);
     // EMS submissions store the instructor/provider in ems_provider_name
@@ -1032,6 +1054,41 @@ export default async function TrainingPage() {
       attendeeNames,
     };
   });
+
+  const isoDashboardEvents = [
+    ...((approvedOutsideDisplayData ?? []) as Array<{ id: string; training_date: string; hours: number | string | null; iso_classifications?: string[] | null; iso_pre_plan_id?: string | null; iso_driver_operator_training_type?: string | null; iso_facility_credit_level?: string | null }>).filter((row) => Array.isArray(row.iso_classifications) && row.iso_classifications.length > 0).map((row) => ({
+      id: `outside-${row.id}`, status: "completed", starts_at: row.training_date, hours_credit: typeof row.hours === "string" ? Number.parseFloat(row.hours) : row.hours,
+      iso_classifications: row.iso_classifications ?? [], iso_qualifying_facility: row.iso_facility_credit_level === "full" || row.iso_facility_credit_level === "partial",
+      iso_facility_credit_level: row.iso_facility_credit_level ?? "none", iso_facility_stories: null,
+      iso_pre_plan_id: row.iso_pre_plan_id ?? null, iso_driver_operator_training_type: row.iso_driver_operator_training_type ?? null,
+    })),
+    ...assignmentMembers.filter((row) => row.completion_status === "approved").flatMap((row) => {
+      const assignment = assignments.find((item) => item.id === row.training_assignment_id);
+      if (!assignment || !assignment.iso_classifications?.length) return [];
+      const facility = facilities.find((item) => item.id === assignment.iso_facility_id);
+      const facilityCredit = facility ? getFacilityIsoCreditLevel(facility, row.completed_at ?? row.updated_at) : "none";
+      return [{
+        id: `assignment-${row.id}`, status: "completed", starts_at: row.completed_at ?? row.updated_at,
+        hours_credit: row.hours_earned ?? assignment.hours_credit, iso_classifications: assignment.iso_classifications ?? [],
+        iso_qualifying_facility: facilityCredit !== "none", iso_facility_credit_level: facilityCredit,
+        iso_facility_stories: facility?.tower_stories ?? null, iso_pre_plan_id: assignment.iso_pre_plan_id ?? null,
+        iso_driver_operator_training_type: assignment.iso_driver_operator_training_type ?? null,
+      }];
+    }),
+  ];
+  const isoDashboardAttendanceRows = [
+    ...((approvedOutsideDisplayData ?? []) as Array<{ id: string; member_id: string; hours: number | string | null }>).flatMap((row) => {
+      const attendeeIds = new Set<string>([row.member_id]);
+      for (const participant of (departmentOutsideParticipantsData ?? []) as Array<{ submission_id: string; member_id: string }>) {
+        if (participant.submission_id === row.id) attendeeIds.add(participant.member_id);
+      }
+      return Array.from(attendeeIds).map((memberId) => ({ training_event_id: `outside-${row.id}`, member_id: memberId, attendance_status: "attending", hours_earned: typeof row.hours === "string" ? Number.parseFloat(row.hours) : row.hours }));
+    }),
+    ...assignmentMembers.filter((row) => row.completion_status === "approved").map((row) => ({
+      training_event_id: `assignment-${row.id}`, member_id: row.member_id, attendance_status: "attending",
+      hours_earned: row.hours_earned ?? assignments.find((item) => item.id === row.training_assignment_id)?.hours_credit ?? null,
+    })),
+  ];
 
   return (
     <TrainingWorkspace
