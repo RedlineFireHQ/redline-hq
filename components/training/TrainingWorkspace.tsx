@@ -233,6 +233,10 @@ type HomeworkAssignmentFormState = {
   externalVideoUrl: string;
   externalAudioUrl: string;
   assignDepartmentWide: boolean;
+  isoClassifications: string[];
+  isoFacilityId: string;
+  isoPrePlanId: string;
+  isoDriverOperatorTrainingType: string;
 };
 
 const TRAINING_METHOD_OPTIONS = [
@@ -290,6 +294,10 @@ function emptyHomeworkAssignmentFormState(defaultCategoryId: string): HomeworkAs
     externalVideoUrl: "",
     externalAudioUrl: "",
     assignDepartmentWide: false,
+    isoClassifications: [],
+    isoFacilityId: "",
+    isoPrePlanId: "",
+    isoDriverOperatorTrainingType: "",
   };
 }
 
@@ -1042,6 +1050,22 @@ export default function TrainingWorkspace({
       return;
     }
 
+    if (homeworkFormState.isoClassifications.includes("training_facilities")) {
+      const facility = facilities.find((item) => item.id === homeworkFormState.isoFacilityId);
+      if (!facility || !facilityQualifiesForIso(facility, getTodayDateKey())) {
+        setHomeworkSaveError("Select a qualifying ISO training facility for this assignment.");
+        return;
+      }
+    }
+    if (homeworkFormState.isoClassifications.includes("driver_operator") && !["initial", "refresher"].includes(homeworkFormState.isoDriverOperatorTrainingType)) {
+      setHomeworkSaveError("Select initial or refresher for ISO Driver / Operator training.");
+      return;
+    }
+    if (homeworkFormState.isoClassifications.includes("building_familiarization") && !prePlans.some((item) => item.id === homeworkFormState.isoPrePlanId && item.lifecycle_status === "active")) {
+      setHomeworkSaveError("Select an active building pre-plan for ISO Building Familiarization.");
+      return;
+    }
+
     const targetedMemberIds = homeworkFormState.assignDepartmentWide
       ? departmentMembers.map((member) => member.id)
       : Array.from(selectedHomeworkMemberIds);
@@ -1103,9 +1127,13 @@ export default function TrainingWorkspace({
           status: "active",
           created_by: currentMemberId,
           updated_by: currentMemberId,
+          iso_classifications: homeworkFormState.isoClassifications,
+          iso_facility_id: homeworkFormState.isoFacilityId || null,
+          iso_pre_plan_id: homeworkFormState.isoPrePlanId || null,
+          iso_driver_operator_training_type: homeworkFormState.isoDriverOperatorTrainingType || null,
         })
         .select(
-          "id, title, category_id, description, due_at, hours_credit, is_required, review_required, status, external_video_url, external_audio_url, supporting_document_id, created_at, updated_at",
+          "id, title, category_id, description, due_at, hours_credit, is_required, review_required, status, external_video_url, external_audio_url, supporting_document_id, iso_classifications, iso_facility_id, iso_pre_plan_id, iso_driver_operator_training_type, created_at, updated_at",
         )
         .single();
 
