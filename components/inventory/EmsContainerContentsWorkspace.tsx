@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { supabase } from "@/lib/supabase";
 import { supabase } from "@/lib/supabase";
 import { PEDIATRIC_INVENTORY } from "@/lib/pediatric-bags/inventory";
 import { DRUG_BOX_INVENTORY } from "@/lib/drug-boxes/inventory";
@@ -19,6 +20,7 @@ type ExistingContent = {
 };
 type TemplateItem = { key: string; section: string; label: string; required: number | null; sourceQuantityText: string };
 type Draft = { supplyItemId: string; quantityOnHand: string; notes: string };
+type BatchSummary = { supply_item_id: string; quantity_remaining: number; expiration_date: string | null; lot_number: string | null };
 
 export default function EmsContainerContentsWorkspace({
   containers,
@@ -42,6 +44,19 @@ export default function EmsContainerContentsWorkspace({
     return initial;
   });
   const [saving, setSaving] = useState(false);
+  const [batches, setBatches] = useState<BatchSummary[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    async function loadBatches() {
+      const { data, error } = await supabase.from("ems_supply_batches")
+        .select("supply_item_id, quantity_remaining, expiration_date, lot_number")
+        .eq("department_id", departmentId).gt("quantity_remaining", 0)
+        .order("expiration_date", { ascending: true, nullsFirst: false });
+      if (!cancelled && !error) setBatches((data ?? []) as BatchSummary[]);
+    }
+    void loadBatches();
+    return () => { cancelled = true; };
+  }, [departmentId]);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -138,7 +153,7 @@ export default function EmsContainerContentsWorkspace({
               const storageKey = `${container?.id ?? ""}:${item.key}`;
               const draft = drafts[storageKey] ?? { supplyItemId: "", quantityOnHand: "0", notes: "" };
               return <div key={item.key} className="grid gap-2 p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_100px]">
-                <div><p className="text-sm font-medium text-white">{item.label}</p><p className="text-xs text-neutral-500">Required: {item.required ?? "Not specified"}{item.sourceQuantityText ? ` · Source: ${item.sourceQuantityText}` : ""}</p></div>
+                <div><p className="text-sm font-medium text-white">{item.label}</p><p className="text-xs text-neutral-500">Required: {item.required ?? "Not specified"}{item.sourceQuantityText ? ` · Source: ${item.sourceQuantityText}` : ""}</p>{draft.supplyItemId ? <p className="mt-1 text-xs text-amber-200">{batches.filter(batch => batch.supply_item_id === draft.supplyItemId).length ? `${batches.filter(batch => batch.supply_item_id === draft.supplyItemId).length} tracked batch(es) · earliest expiration ${batches.find(batch => batch.supply_item_id === draft.supplyItemId && batch.expiration_date)?.expiration_date ?? "not recorded"}` : "No tracked batches for this supply yet"}</p> : null}</div>
                 <select value={draft.supplyItemId} onChange={(event) => update(storageKey, { supplyItemId: event.target.value })} className="min-w-0 rounded-lg border border-neutral-700 bg-neutral-900 p-2 text-sm text-white">
                   <option value="">Not linked to EMS inventory</option>
                   {supplies.map((supply) => <option key={supply.id} value={supply.id}>{supply.item_name} ({supply.unit_of_measure})</option>)}
