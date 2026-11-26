@@ -110,7 +110,6 @@ export default function RedOakEmsCompetencyForm({ members, verifications }: Prop
           </div>
           {selectedId ? <button type="button" onClick={reset} className="rounded-lg border border-white/20 px-3 py-2 text-sm text-neutral-200 hover:bg-white/5">Clear selection</button> : null}
         </div>
-        <p className="mt-1 text-sm text-neutral-400">CQI Policy – Section D: Skill Maintenance · Frequency: Annually</p>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <label className="text-sm">Member Name<select className={field} disabled={Boolean(selectedId)} value={memberId} onChange={(e) => setMemberId(e.target.value)}><option value="">Select member</option>{members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
           <label className="text-sm">Certification Level<input className={field} value={certificationLevel} onChange={(e) => setCertificationLevel(e.target.value)} placeholder="e.g. EMT, AEMT, Paramedic" /></label>
