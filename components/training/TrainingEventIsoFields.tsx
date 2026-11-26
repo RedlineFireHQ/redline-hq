@@ -63,13 +63,13 @@ export default function TrainingEventIsoFields({
     || ["company_training", "officer_training", "recruit", "hazmat"].includes(selectedClassification ?? suggested ?? "");
 
   function setClassification(value: string) {
-    const next = classifications.filter((item) => item === "training_facilities");
+    const next: string[] = classifications.filter((item) => item === "training_facilities");
     if (value) next.unshift(value);
     else next.unshift("none");
     onClassificationsChange(next);
   }
   function setFacilityCredit(checked: boolean) {
-    const next = classifications.filter((item) => item !== "training_facilities" && item !== selectedClassification);
+    const next: string[] = classifications.filter((item) => item !== "training_facilities" && item !== selectedClassification);
     if (selectedClassification) next.unshift(selectedClassification);
     else if (classifications.includes("none")) next.unshift("none");
     if (checked) next.push("training_facilities");
