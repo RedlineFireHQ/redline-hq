@@ -38,7 +38,7 @@ export default function EmsContainerInspectionContents({ departmentId, container
       const next = linked.flatMap((row) => {
         if (!row.supply_item_id) return [];
         return batches.filter((batch) => batch.supply_item_id === row.supply_item_id && batch.expiration_date && batch.expiration_date <= limit)
-          .map((batch) => ({ key: row.template_item_key + batch.lot_number, label: row.item_label, supplyName: supplyNames.get(row.supply_item_id!) ?? "EMS supply", lot: batch.lot_number, expiration: batch.expiration_date!, expired: batch.expiration_date! < today }));
+          .map((batch, batchIndex) => ({ key: `${row.template_item_key}:${batch.lot_number ?? "no-lot"}:${batch.expiration_date}:${batchIndex}`, label: row.item_label, supplyName: supplyNames.get(row.supply_item_id!) ?? "EMS supply", lot: batch.lot_number, expiration: batch.expiration_date!, expired: batch.expiration_date! < today }));
       });
       setWarnings(next);
       setLoaded(true);
