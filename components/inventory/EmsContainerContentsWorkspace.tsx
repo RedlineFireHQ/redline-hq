@@ -77,7 +77,8 @@ export default function EmsContainerContentsWorkspace({
       const storageKey = `${container.id}:${item.key}`;
       const draft = drafts[storageKey] ?? { supplyItemId: "", quantityOnHand: "0", notes: "" };
       const qty = Number(draft.quantityOnHand);
-      const alreadyConfigured = existing.some((row) => row.container_id === container.id && row.template_item_key === item.key);\n      if (!draft.supplyItemId && (!Number.isFinite(qty) || qty === 0) && !draft.notes.trim() && !alreadyConfigured) return [];
+      const alreadyConfigured = existing.some((row) => row.container_id === container.id && row.template_item_key === item.key);
+      if (!draft.supplyItemId && (!Number.isFinite(qty) || qty === 0) && !draft.notes.trim() && !alreadyConfigured) return [];
       if (!Number.isFinite(qty) || qty < 0) throw new Error(`Enter a valid on-hand quantity for ${item.label}.`);
       return [{
         department_id: departmentId,
