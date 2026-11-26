@@ -2,8 +2,8 @@
 -- when an individual member completes the assignment.
 alter table public.training_assignments
   add column if not exists iso_classifications text[] not null default '{}'::text[],
-  add column if not exists iso_facility_id uuid references public.training_facilities(id) on delete set null,
-  add column if not exists iso_pre_plan_id uuid references public.pre_plans(id) on delete set null,
+  add column if not exists iso_facility_id uuid references public.training_facilities(id) on delete restrict,
+  add column if not exists iso_pre_plan_id uuid references public.pre_plans(id) on delete restrict,
   add column if not exists iso_driver_operator_training_type text;
 
 alter table public.training_assignments
