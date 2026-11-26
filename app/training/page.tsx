@@ -98,6 +98,11 @@ type TrainingOutsideSubmissionRow = {
   review_notes: string | null;
   created_at: string;
   updated_at: string;
+  iso_classifications: string[];
+  iso_facility_id: string | null;
+  iso_pre_plan_id: string | null;
+  iso_driver_operator_training_type: string | null;
+  iso_facility_credit_level: string;
 };
 
 type TrainingOutsideEvidenceRow = {
@@ -123,6 +128,10 @@ type TrainingAssignmentRow = {
   external_video_url: string | null;
   external_audio_url: string | null;
   supporting_document_id: string | null;
+  iso_classifications: string[];
+  iso_facility_id: string | null;
+  iso_pre_plan_id: string | null;
+  iso_driver_operator_training_type: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -466,7 +475,7 @@ export default async function TrainingPage() {
       ? await supabase
           .from("training_assignments")
           .select(
-            "id, title, category_id, description, due_at, hours_credit, is_required, review_required, status, external_video_url, external_audio_url, supporting_document_id, created_at, updated_at",
+            "id, title, category_id, description, due_at, hours_credit, is_required, review_required, status, external_video_url, external_audio_url, supporting_document_id, iso_classifications, iso_facility_id, iso_pre_plan_id, iso_driver_operator_training_type, created_at, updated_at",
           )
           .eq("department_id", currentMember.departmentId)
           .in("id", assignmentIds)
@@ -690,7 +699,7 @@ export default async function TrainingPage() {
       .order("course_name", { ascending: true }),
     supabase
       .from("training_outside_submissions")
-      .select("id, member_id, title, category_id, training_date, hours, status, notes, is_ems_training, ems_provider_name")
+      .select("id, member_id, title, category_id, training_date, hours, status, notes, is_ems_training, ems_provider_name, iso_classifications, iso_facility_id, iso_pre_plan_id, iso_driver_operator_training_type, iso_facility_credit_level")
       .eq("department_id", currentMember.departmentId)
       .eq("status", "approved")
       .order("training_date", { ascending: false }),
@@ -901,6 +910,11 @@ export default async function TrainingPage() {
     external_audio_url: typeof row.external_audio_url === "string" ? row.external_audio_url : null,
     supporting_document_id: typeof row.supporting_document_id === "string" ? row.supporting_document_id : null,
     created_at: typeof row.created_at === "string" ? row.created_at : "",
+    iso_classifications: Array.isArray(row.iso_classifications) ? row.iso_classifications.filter((value): value is string => typeof value === "string") : [],
+    iso_facility_id: typeof row.iso_facility_id === "string" ? row.iso_facility_id : null,
+    iso_pre_plan_id: typeof row.iso_pre_plan_id === "string" ? row.iso_pre_plan_id : null,
+    iso_driver_operator_training_type: typeof row.iso_driver_operator_training_type === "string" ? row.iso_driver_operator_training_type : null,
+    iso_facility_credit_level: typeof row.iso_facility_credit_level === "string" ? row.iso_facility_credit_level : "none",
     updated_at: typeof row.updated_at === "string" ? row.updated_at : "",
   }));
 
