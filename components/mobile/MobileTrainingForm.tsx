@@ -7,7 +7,7 @@ import { EMS_CORE_TOPICS, type EmsCoreTopicCode } from "@/lib/ems/requirements";
 import { triggerEmsAllocationRecalculationForMembers } from "@/lib/ems/recalculate-client";
 import { supabase } from "@/lib/supabase";
 import { buildOutsideSubmissionNotes } from "@/lib/training/outside-submission-notes";
-import TrainingEventIsoFields, { suggestTrainingIsoClassification, type IsoTrainingFacilityOption, type IsoPrePlanOption } from "@/components/training/TrainingEventIsoFields";
+import TrainingEventIsoFields, { type IsoTrainingFacilityOption, type IsoPrePlanOption } from "@/components/training/TrainingEventIsoFields";
 import { facilityQualifiesForIso } from "@/lib/training/iso-training";
 
 type Category = { id: string; name: string; active: boolean; system_key: string | null; compliance_bucket: string | null };
