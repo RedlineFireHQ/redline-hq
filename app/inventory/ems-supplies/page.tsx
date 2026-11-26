@@ -57,7 +57,7 @@ export default async function EmsSuppliesInventoryPage() {
       supabase
         .from("ems_supply_items")
         .select(
-          "id, item_name, item_category, unit_of_measure, custom_unit_of_measure, quantity_on_hand, reorder_threshold, critical_threshold, target_quantity, location, notes, status, qr_identifier, created_at, updated_at",
+          "id, item_name, manufacturer, reference_number, item_category, unit_of_measure, custom_unit_of_measure, quantity_on_hand, reorder_threshold, critical_threshold, target_quantity, location, notes, status, qr_identifier, created_at, updated_at",
         )
         .eq("department_id", departmentId)
         .order("status", { ascending: true })
