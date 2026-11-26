@@ -43,26 +43,16 @@ export async function POST(request: Request) {
   if (!supplyItemId) return json({ error: "Choose an EMS supply item." }, 400);
   if (!Number.isFinite(quantity) || quantity <= 0) return json({ error: "Quantity must be greater than zero." }, 400);
 
-  const { data: item, error: itemError } = await supabase
-    .from("ems_supply_items")
-    .select("id, quantity_on_hand")
-    .eq("id", supplyItemId)
-    .eq("department_id", member.departmentId)
-    .maybeSingle();
-  if (itemError || !item) return json({ error: itemError?.message || "Supply item not found in this department." }, 404);
-
-  const { data, error } = await supabase.from("ems_supply_batches").insert({
-    department_id: member.departmentId,
-    supply_item_id: supplyItemId,
-    lot_number: lotNumber,
-    quantity_received: quantity,
-    quantity_remaining: quantity,
-    expiration_date: expirationDate,
-    storage_location: storageLocation,
-    notes,
-    created_by_member_id: member.id,
-  }).select("id").single();
+  const { data, error } = await supabase.rpc("receive_ems_supply_batch", {
+    p_supply_item_id: supplyItemId,
+    p_quantity: quantity,
+    p_expiration_date: expirationDate,
+    p_lot_number: lotNumber,
+    p_storage_location: storageLocation,
+    p_notes: notes,
+  });
 
   if (error) return json({ error: error.message }, 400);
-  return json({ ok: true, batchId: data.id }, 201);
+  const row = Array.isArray(data) ? data[0] : data;
+  return json({ ok: true, batchId: row?.batch_id, transactionId: row?.transaction_id, quantityOnHand: row?.quantity_after }, 201);
 }
