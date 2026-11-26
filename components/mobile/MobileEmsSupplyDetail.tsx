@@ -226,6 +226,12 @@ export default function MobileEmsSupplyDetail({ supplyId, canAudit }: Props) {
               </span>
             ) : null}
           </div>
+          {(item.manufacturer || item.reference_number) ? (
+            <div className="mt-4 grid grid-cols-2 gap-3 border-t border-white/10 pt-4">
+              <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/40">Manufacturer</p><p className="mt-1 break-words text-sm font-semibold text-white">{item.manufacturer || "-"}</p></div>
+              <div><p className="text-[10px] font-black uppercase tracking-[0.16em] text-white/40">Reference Number</p><p className="mt-1 break-words text-sm font-semibold text-white">{item.reference_number || "-"}</p></div>
+            </div>
+          ) : null}
         </header>
         <section className="rounded-[20px] border border-white/10 bg-[#121212] p-5">
           <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/40">
