@@ -3470,6 +3470,22 @@ export default function TrainingWorkspace({
                   />
                 </label>
 
+                <div className="md:col-span-2">
+                  <TrainingEventIsoFields
+                    classifications={homeworkFormState.isoClassifications}
+                    onClassificationsChange={(next) => setHomeworkFormState((current) => ({ ...current, isoClassifications: next }))}
+                    facilityId={homeworkFormState.isoFacilityId}
+                    onFacilityChange={(next) => setHomeworkFormState((current) => ({ ...current, isoFacilityId: next }))}
+                    facilities={facilities}
+                    prePlanId={homeworkFormState.isoPrePlanId}
+                    onPrePlanChange={(next) => setHomeworkFormState((current) => ({ ...current, isoPrePlanId: next }))}
+                    prePlans={prePlans}
+                    driverOperatorTrainingType={homeworkFormState.isoDriverOperatorTrainingType}
+                    onDriverOperatorTrainingTypeChange={(next) => setHomeworkFormState((current) => ({ ...current, isoDriverOperatorTrainingType: next }))}
+                    categoryName={activeCategories.find((item) => item.id === homeworkFormState.categoryId)?.name ?? ""}
+                    trainingTitle={homeworkFormState.title}
+                  />
+                </div>
                 <div className="rounded-xl border border-white/10 bg-[#151515] p-4 md:col-span-2">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-neutral-300">Assigned Material</p>
                   <p className="mt-1 text-xs text-neutral-400">Use an existing department document or upload new training material.</p>
