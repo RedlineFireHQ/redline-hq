@@ -17,7 +17,7 @@ drop policy if exists ems_supply_batch_replacements_select on public.ems_supply_
 create policy ems_supply_batch_replacements_select on public.ems_supply_batch_replacements
 for select to authenticated using (exists (
   select 1 from public.auth_user_department_memberships m
-  where m.auth_user_id = auth.uid() and m.department_id = department_id
+  where m.auth_user_id = auth.uid() and m.department_id = ems_supply_batch_replacements.department_id
 ));
 grant select on public.ems_supply_batch_replacements to authenticated;
 
@@ -52,6 +52,9 @@ begin
   where x.auth_user_id = v_user and x.department_id = v_old.department_id and m.active = true
   order by m.id limit 1;
   if v_member is null then raise exception 'This batch does not belong to your department.'; end if;
+  if not public.member_has_app_permission(v_old.department_id, 'inventory_management') then
+    raise exception 'You do not have permission to manage EMS inventory.';
+  end if;
 
   update public.ems_supply_batches
   set quantity_remaining = quantity_remaining - p_quantity, updated_at = now()
