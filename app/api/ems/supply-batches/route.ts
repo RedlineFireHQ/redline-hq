@@ -1,5 +1,5 @@
 import { getCurrentMember } from "@/lib/current-member";
-import { hasDepartmentPermission } from "@/lib/member-permissions";
+import { hasInventoryPermission } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 function json(payload: unknown, status = 200) {
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   const member = await getCurrentMember(supabase);
   if (!member?.departmentId) return json({ error: "Unauthorized" }, 401);
 
-  const allowed = await hasDepartmentPermission(
+  const allowed = await hasInventoryPermission(
     supabase, member.departmentId, member.role, "ems_supply_management",
   );
   if (!allowed) return json({ error: "You do not have permission to manage EMS supplies." }, 403);
