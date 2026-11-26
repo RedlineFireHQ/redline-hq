@@ -665,7 +665,7 @@ export default async function TrainingPage() {
     supabase
       .from("training_outside_submissions")
       .select(
-        "id, member_id, title, category_id, training_date, hours, is_ems_training, ems_core_topic, ems_course_definition_id, ems_needs_review, ems_provider_name, description, notes, status, review_required, reviewed_by, reviewed_at, review_notes, created_at, updated_at",
+        "id, member_id, title, category_id, training_date, hours, is_ems_training, ems_core_topic, ems_course_definition_id, ems_needs_review, ems_provider_name, description, notes, status, review_required, reviewed_by, reviewed_at, review_notes, created_at, updated_at, iso_classifications, iso_facility_id, iso_pre_plan_id, iso_driver_operator_training_type, iso_facility_credit_level",
       )
       .eq("department_id", currentMember.departmentId)
       .eq("status", "pending_review")
@@ -677,7 +677,7 @@ export default async function TrainingPage() {
     supabase
       .from("training_assignments")
       .select(
-        "id, title, category_id, description, due_at, hours_credit, is_required, review_required, status, external_video_url, external_audio_url, supporting_document_id, created_at, updated_at",
+        "id, title, category_id, description, due_at, hours_credit, is_required, review_required, status, external_video_url, external_audio_url, supporting_document_id, iso_classifications, iso_facility_id, iso_pre_plan_id, iso_driver_operator_training_type, created_at, updated_at",
       )
       .eq("department_id", currentMember.departmentId)
       .order("created_at", { ascending: false }),
