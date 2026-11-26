@@ -154,7 +154,7 @@ type EmsTrackRow = {
 type MemberTrainingHistoryItem = {
   id: string;
   title: string;
-  source: "department_event" | "outside_submission";
+  source: "department_event" | "outside_submission" | "assigned_training";
   categoryName: string;
   completedAt: string;
   startTimeValue: string | null;
@@ -869,7 +869,30 @@ export default async function PersonnelProfilePage({
     };
   });
 
-  const trainingHistory: MemberTrainingHistoryItem[] = [...eventHistoryItems, ...outsideHistoryItems].sort(
+  const assignmentById = new Map(trainingAssignments.map((assignment) => [assignment.id, assignment]));
+  const assignedTrainingHistoryItems: MemberTrainingHistoryItem[] = approvedAssignmentMembers.flatMap((member) => {
+    const assignment = assignmentById.get(member.training_assignment_id);
+    const completedAt = member.completed_at ?? member.updated_at ?? member.created_at;
+    if (!assignment || !completedAt) return [];
+    const earnedHours = parseHours(member.hours_earned);
+    const hours = earnedHours > 0 ? earnedHours : parseHours(assignment.hours_credit);
+    return [{
+      id: `assignment-${member.training_assignment_id}`,
+      title: assignment.title,
+      source: "assigned_training" as const,
+      categoryName: assignment.category_id
+        ? trainingCategoryLookup.get(assignment.category_id) ?? "Uncategorized"
+        : "Uncategorized",
+      completedAt,
+      startTimeValue: null,
+      hoursCredit: hours,
+      trainingMethod: "Assigned Training",
+      instructorName: null,
+      location: null,
+    }];
+  });
+
+  const trainingHistory: MemberTrainingHistoryItem[] = [...eventHistoryItems, ...outsideHistoryItems, ...assignedTrainingHistoryItems].sort(
     (left, right) => new Date(right.completedAt).getTime() - new Date(left.completedAt).getTime(),
   );
 
@@ -1209,7 +1232,7 @@ export default async function PersonnelProfilePage({
                     <tr key={record.id} className="border-b border-neutral-800 transition hover:bg-neutral-800/40">
                       <td className="px-4 py-3 font-medium text-white">{record.title}</td>
                       <td className="px-4 py-3 text-sm text-neutral-200">
-                        {record.source === "outside_submission" ? "Outside" : "Department"}
+                        {record.source === "outside_submission" ? "Outside" : record.source === "assigned_training" ? "Assigned Training" : "Department"}
                       </td>
                       <td className="px-4 py-3 text-sm text-neutral-200">{record.categoryName}</td>
                       <td className="px-4 py-3 text-sm text-neutral-200">{formatDateOnly(record.completedAt)}</td>
