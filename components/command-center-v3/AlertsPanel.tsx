@@ -191,10 +191,10 @@ export default function AlertsPanel() {
     async function loadEmsBatchAlerts() {
       if (!departmentId) { setEmsBatchAlerts([]); return; }
       const today = new Date();
-      const todayKey = today.toISOString().slice(0, 10);
+      const todayKey = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, "0"), String(today.getDate()).padStart(2, "0")].join("-");
       const future = new Date(today);
       future.setDate(future.getDate() + 90);
-      const futureKey = future.toISOString().slice(0, 10);
+      const futureKey = [future.getFullYear(), String(future.getMonth() + 1).padStart(2, "0"), String(future.getDate()).padStart(2, "0")].join("-");
       const { data: batchData, error: batchError } = await supabase
         .from("ems_supply_batches")
         .select("id,supply_item_id,quantity_remaining,expiration_date,lot_number")
