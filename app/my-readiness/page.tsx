@@ -434,11 +434,11 @@ export default async function MyReadinessPage() {
       .single(),
     supabase
       .from("department_roles")
-      .select("id, name, active, compliance_bucket, system_key")
+      .select("id, name, active")
       .eq("department_id", currentMember.departmentId),
     supabase
       .from("qualifications")
-      .select("id, name, active, compliance_bucket, system_key")
+      .select("id, name, active")
       .eq("department_id", currentMember.departmentId),
     supabase
       .from("member_qualifications")
