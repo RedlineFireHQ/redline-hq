@@ -24,7 +24,9 @@ export default function EmsContainerContentsWorkspace({
   containers,
   supplies,
   existing,
+  departmentId,
 }: {
+  departmentId: string;
   containers: ContainerOption[];
   supplies: SupplyOption[];
   existing: ExistingContent[];
@@ -32,7 +34,7 @@ export default function EmsContainerContentsWorkspace({
   const [selectedContainerId, setSelectedContainerId] = useState(containers[0]?.id ?? "");
   const [drafts, setDrafts] = useState<Record<string, Draft>>(() => {
     const initial: Record<string, Draft> = {};
-    for (const row of existing) initial[row.template_item_key] = {
+    for (const row of existing) initial[`${row.container_id}:${row.template_item_key}`] = {
       supplyItemId: row.supply_item_id ?? "",
       quantityOnHand: String(row.quantity_on_hand ?? 0),
       notes: row.notes ?? "",
@@ -70,15 +72,15 @@ export default function EmsContainerContentsWorkspace({
   async function save() {
     if (!container) return;
     setSaving(true); setError(null); setMessage(null);
-    const rows = template.flatMap((item) => {
-      const draft = drafts[item.key] ?? { supplyItemId: "", quantityOnHand: "0", notes: "" };
+    try {
+      const rows = template.flatMap((item) => {
+      const storageKey = `${container.id}:${item.key}`;
+      const draft = drafts[storageKey] ?? { supplyItemId: "", quantityOnHand: "0", notes: "" };
       const qty = Number(draft.quantityOnHand);
       if (!draft.supplyItemId && (!Number.isFinite(qty) || qty === 0) && !draft.notes.trim()) return [];
       if (!Number.isFinite(qty) || qty < 0) throw new Error(`Enter a valid on-hand quantity for ${item.label}.`);
       return [{
-        department_id: container.type === "pediatric_bag"
-          ? containers.find((c) => c.id === container.id)?.id // department is supplied separately below
-          : undefined,
+        department_id: departmentId,
         container_type: container.type,
         container_id: container.id,
         template_item_key: item.key,
@@ -90,10 +92,9 @@ export default function EmsContainerContentsWorkspace({
         notes: draft.notes.trim() || null,
       }];
     });
-    try {
       if (rows.length) {
         const { error: saveError } = await supabase.from("ems_supply_container_contents")
-          .upsert(rows.map(({ department_id: _unused, ...row }) => row), {
+          .upsert(rows, {
             onConflict: "department_id,container_type,container_id,template_item_key",
           });
         if (saveError) throw new Error(saveError.message);
@@ -122,15 +123,16 @@ export default function EmsContainerContentsWorkspace({
           <h2 className="border-b border-neutral-800 px-4 py-3 text-sm font-bold text-white">{section}</h2>
           <div className="divide-y divide-neutral-800">
             {items.map((item) => {
-              const draft = drafts[item.key] ?? { supplyItemId: "", quantityOnHand: "0", notes: "" };
+              const storageKey = `${container?.id ?? ""}:${item.key}`;
+              const draft = drafts[storageKey] ?? { supplyItemId: "", quantityOnHand: "0", notes: "" };
               return <div key={item.key} className="grid gap-2 p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_100px]">
                 <div><p className="text-sm font-medium text-white">{item.label}</p><p className="text-xs text-neutral-500">Required: {item.required ?? "Not specified"}</p></div>
-                <select value={draft.supplyItemId} onChange={(event) => update(item.key, { supplyItemId: event.target.value })} className="min-w-0 rounded-lg border border-neutral-700 bg-neutral-900 p-2 text-sm text-white">
+                <select value={draft.supplyItemId} onChange={(event) => update(storageKey, { supplyItemId: event.target.value })} className="min-w-0 rounded-lg border border-neutral-700 bg-neutral-900 p-2 text-sm text-white">
                   <option value="">Not linked to EMS inventory</option>
                   {supplies.map((supply) => <option key={supply.id} value={supply.id}>{supply.item_name} ({supply.unit_of_measure})</option>)}
                 </select>
-                <input aria-label={`Quantity on hand for ${item.label}`} type="number" min="0" step="0.01" value={draft.quantityOnHand} onChange={(event) => update(item.key, { quantityOnHand: event.target.value })} className="w-full rounded-lg border border-neutral-700 bg-neutral-900 p-2 text-sm text-white" />
-                <input aria-label={`Notes for ${item.label}`} value={draft.notes} onChange={(event) => update(item.key, { notes: event.target.value })} placeholder="Notes (optional)" className="rounded-lg border border-neutral-700 bg-neutral-900 p-2 text-sm text-white md:col-span-3" />
+                <input aria-label={`Quantity on hand for ${item.label}`} type="number" min="0" step="0.01" value={draft.quantityOnHand} onChange={(event) => update(storageKey, { quantityOnHand: event.target.value })} className="w-full rounded-lg border border-neutral-700 bg-neutral-900 p-2 text-sm text-white" />
+                <input aria-label={`Notes for ${item.label}`} value={draft.notes} onChange={(event) => update(storageKey, { notes: event.target.value })} placeholder="Notes (optional)" className="rounded-lg border border-neutral-700 bg-neutral-900 p-2 text-sm text-white md:col-span-3" />
               </div>;
             })}
           </div>
