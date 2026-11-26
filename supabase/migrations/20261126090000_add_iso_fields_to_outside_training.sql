@@ -111,7 +111,7 @@ begin
     raise exception 'Training Facilities ISO credit requires a qualifying facility and valid agreement for the training date.';
   end if;
   if 'driver_operator' = any(new.iso_classifications)
-     and new.iso_driver_operator_training_type not in ('initial','refresher') then
+     and (new.iso_driver_operator_training_type is null or new.iso_driver_operator_training_type not in ('initial','refresher')) then
     raise exception 'Select initial or refresher training for ISO Driver / Operator classification.';
   end if;
   if 'building_familiarization' = any(new.iso_classifications) then
