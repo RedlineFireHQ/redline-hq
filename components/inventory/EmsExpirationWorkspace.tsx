@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 type Supply = { id: string; item_name: string; unit_of_measure: string; custom_unit_of_measure: string | null };
@@ -99,6 +100,7 @@ export default function EmsExpirationWorkspace({ supplies, canManage }: { suppli
   }
 
   return <div className="space-y-5">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#242424] p-4"><div><h2 className="font-bold text-white">Track expirations in bags and drug boxes</h2><p className="mt-1 text-sm text-neutral-400">First connect the checklist items to inventory once, then record incoming lots and expiration dates.</p></div><Link href="/inventory/ems-container-contents" className="rounded-lg border border-red-500/40 px-4 py-2 text-sm font-bold text-red-200 hover:bg-red-950/30">Connect bag / box items</Link></div>
     <section className="grid gap-3 sm:grid-cols-3">
       <div className="rounded-xl border border-red-500/25 bg-red-950/20 p-4"><p className="text-xs font-bold uppercase tracking-wide text-red-200">Expired batches</p><p className="mt-1 text-3xl font-black text-white">{summary.expired}</p></div>
       <div className="rounded-xl border border-amber-500/25 bg-amber-950/20 p-4"><p className="text-xs font-bold uppercase tracking-wide text-amber-200">Expiring within 90 days</p><p className="mt-1 text-3xl font-black text-white">{summary.soon}</p></div>
