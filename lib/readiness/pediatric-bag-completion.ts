@@ -16,7 +16,7 @@
  *     EXPIRED item completes as 'needs_attention' and is shown as "Items Expired".
  */
 
-export type PediatricItemStatus = "checked" | "expired";
+export type PediatricItemStatus = "checked" | "expired" | "missing";
 export type PediatricFinalStatus = "ready" | "needs_attention" | "out_of_service";
 
 export const PEDIATRIC_FINAL_STATUSES: readonly PediatricFinalStatus[] = [
