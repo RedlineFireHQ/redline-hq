@@ -7,8 +7,8 @@
  * executing SQL, while the RPC enforces the same rules atomically in the
  * database. If one changes, the other must change too (guarded by tests).
  *
- * Status model (PASS / EXPIRED):
- *   - Item status:  'checked' | 'expired'
+ * Status model (PASS / EXPIRED / MISSING):
+ *   - Item status:  'checked' | 'expired' | 'missing'
  *     ('checked' = PASS = present & acceptable; 'expired' = EXPIRED = documented
  *     as expired. No expiration dates are captured.)
  *   - Final status: 'ready' | 'needs_attention' | 'out_of_service'
@@ -53,7 +53,7 @@ export function isUnresolvedQuantityItem(item: PediatricTemplateItem) {
 
 /** An item status counts as "addressed" (PASS or EXPIRED) for the completion gate. */
 export function isCompletedItemStatus(status: PediatricItemStatus | null) {
-  return status === "checked" || status === "expired";
+  return status === "checked" || status === "expired" || status === "missing";
 }
 
 export function countUnresolvedQuantityItems(items: PediatricTemplateItem[]) {
