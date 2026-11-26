@@ -322,6 +322,22 @@ export default function MobileTrainingForm({
               </label>
             </div>
           </section>
+          <TrainingEventIsoFields
+            classifications={isoClassifications}
+            onClassificationsChange={setIsoClassifications}
+            facilityId={isoFacilityId}
+            onFacilityChange={setIsoFacilityId}
+            facilities={facilities}
+            prePlanId={isoPrePlanId}
+            onPrePlanChange={setIsoPrePlanId}
+            prePlans={prePlans}
+            driverOperatorTrainingType={isoDriverOperatorTrainingType}
+            onDriverOperatorTrainingTypeChange={setIsoDriverOperatorTrainingType}
+            eventDate={dateCompleted}
+            categoryName={selectedCategory?.name ?? ""}
+            trainingTitle={title}
+            disabled={saving}
+          />
           <section className="rounded-2xl border border-white/10 bg-[#17181b] p-5">
             <button
               type="button"
