@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import TrainingEventDetailWorkspace from "@/components/training/TrainingEventDetailWorkspace";
 import type { IsoTrainingFacilityOption, IsoPrePlanOption } from "@/components/training/IsoTrainingFields";
 import { getCurrentMember } from "@/lib/current-member";
-import { hasAssignedDepartmentPermission } from "@/lib/member-permissions";
+import { hasTrainingProgramManagementPermission } from "@/lib/member-permissions";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 type TrainingCategoryRow = {
@@ -93,9 +93,11 @@ export default async function TrainingEventDetailPage({
     redirect("/login");
   }
 
-  const canManageTraining =
-    (await hasAssignedDepartmentPermission(supabase, currentMember.departmentId, "training_program_management")) ||
-    (await hasAssignedDepartmentPermission(supabase, currentMember.departmentId, "training_management"));
+  const canManageTraining = await hasTrainingProgramManagementPermission(
+    supabase,
+    currentMember.departmentId,
+    currentMember.role,
+  );
 
   const [
     { data: eventData, error: eventError },

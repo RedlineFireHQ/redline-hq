@@ -295,7 +295,7 @@ export default function TrainingEventDetailWorkspace({
   );
 
   const categoryOptions = useMemo(() => {
-    const active = categories.filter((category) => category.active);
+    const active = categories.filter((category) => category.active && category.name.trim().toLowerCase() !== "fire suppression");
     if (eventState.category_id) {
       const current = categoryLookup.get(eventState.category_id);
       if (current && !active.some((category) => category.id === current.id)) {
@@ -984,37 +984,13 @@ export default function TrainingEventDetailWorkspace({
                     ))}
                   </select>
                 </label>
-
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">EMS Course / Training</span>
-                  <select
-                    value={formState.emsCourseDefinitionId}
-                    onChange={(event) => setFormState((current) => ({ ...current, emsCourseDefinitionId: event.target.value }))}
-                    className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
-                  >
-                    <option value="">Unlisted / Other (Needs Review)</option>
-                    {activeEmsCourseDefinitions.map((course) => (
-                      <option key={course.id} value={course.id}>{course.course_name}</option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="block">
+              <label className="block">
                   <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Training Provider / Sponsor</span>
                   <input
                     value={formState.emsProviderName}
                     onChange={(event) => setFormState((current) => ({ ...current, emsProviderName: event.target.value }))}
                     className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2.5 text-sm text-white focus:border-red-500/50 focus:outline-none"
                   />
-                </label>
-
-                <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300 md:col-span-2">
-                  <input
-                    type="checkbox"
-                    checked={formState.emsNeedsReview}
-                    onChange={(event) => setFormState((current) => ({ ...current, emsNeedsReview: event.target.checked }))}
-                  />
-                  Mark as NEEDS REVIEW
                 </label>
               </>
             ) : (
@@ -1034,6 +1010,8 @@ export default function TrainingEventDetailWorkspace({
                 onClassificationsChange={(next) => setFormState((current) => ({ ...current, isoClassifications: next }))}
                 facilityId={formState.isoFacilityId}
                 onFacilityChange={(next) => setFormState((current) => ({ ...current, isoFacilityId: next }))}
+                categoryName={categories.find((category) => category.id === formState.categoryId)?.name ?? ""}
+                trainingTitle={formState.title}
                 facilities={facilities}
                 eventDate={formState.date}
                 prePlanId={formState.isoPrePlanId}
