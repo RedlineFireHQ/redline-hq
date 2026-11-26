@@ -196,6 +196,8 @@ interface TrainingWorkspaceProps {
   prePlans?: IsoPrePlanOption[];
   initialAddTrainingEventOpen?: boolean;
   approvedSelfReported?: SelfReportedTraining[];
+  isoDashboardEvents?: Array<{ id: string; status: string; starts_at: string; hours_credit: number | null; iso_classifications: string[]; iso_qualifying_facility: boolean; iso_facility_credit_level: string; iso_facility_stories: number | null; iso_pre_plan_id: string | null; iso_driver_operator_training_type: string | null }>;
+  isoDashboardAttendanceRows?: Array<{ training_event_id: string; member_id: string; attendance_status: string; hours_earned: number | null }>;
   departmentSummary?: ReactNode;
   departmentHistory?: ReactNode;
 }
@@ -528,6 +530,8 @@ export default function TrainingWorkspace({
   facilities = [],
   prePlans = [],
   approvedSelfReported = [],
+  isoDashboardEvents = [],
+  isoDashboardAttendanceRows = [],
   departmentSummary,
   departmentHistory,
 }: TrainingWorkspaceProps) {
@@ -2899,7 +2903,7 @@ export default function TrainingWorkspace({
       </div>
 
       {canManageTraining ? (
-        <IsoTrainingDashboard events={eventRows} attendanceRows={attendanceRows} members={members} prePlans={prePlans} />
+        <IsoTrainingDashboard events={[...eventRows, ...isoDashboardEvents]} attendanceRows={[...attendanceRows, ...isoDashboardAttendanceRows]} members={members} prePlans={prePlans} />
       ) : null}
 
       {myAssignedTrainingSection}
