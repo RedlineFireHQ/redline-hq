@@ -18,6 +18,7 @@ export type EmsSupplyItemRow = {
   id: string;
   item_name: string;
   manufacturer: string | null;
+  reference_number: string | null;
   item_category: string | null;
   unit_of_measure: string;
   custom_unit_of_measure: string | null;
@@ -233,6 +234,7 @@ function toFormValues(row: EmsSupplyItemRow): EmsSupplyFormValues {
   return {
     itemName: row.item_name,
     manufacturer: row.manufacturer ?? "",
+    referenceNumber: row.reference_number ?? "",
     itemCategory: row.item_category ?? "",
     unitOfMeasure: row.unit_of_measure as EmsSupplyUnitOptionValue,
     customUnitOfMeasure: row.custom_unit_of_measure ?? "",
@@ -458,7 +460,7 @@ export default function EmsSupplyWorkspace({
         return true;
       }
 
-      const haystack = [row.item_name, row.item_category, row.location]
+      const haystack = [row.item_name, row.manufacturer, row.reference_number, row.item_category, row.location]
         .map((value) => (typeof value === "string" ? value.toLowerCase() : ""))
         .join(" ");
 
@@ -622,6 +624,7 @@ export default function EmsSupplyWorkspace({
     const payload = {
       itemName: values.itemName,
       manufacturer: values.manufacturer,
+      referenceNumber: values.referenceNumber,
       unitOfMeasure: values.unitOfMeasure,
       customUnitOfMeasure: values.customUnitOfMeasure,
       reorderThreshold: values.reorderThreshold,
@@ -692,6 +695,7 @@ export default function EmsSupplyWorkspace({
         body: JSON.stringify({
           itemName: selectedItem.item_name,
           manufacturer: selectedItem.manufacturer ?? "",
+          referenceNumber: selectedItem.reference_number ?? "",
           unitOfMeasure: selectedItem.unit_of_measure,
           customUnitOfMeasure: selectedItem.custom_unit_of_measure,
           reorderThreshold: selectedItem.reorder_threshold,
@@ -1283,6 +1287,14 @@ export default function EmsSupplyWorkspace({
                     </p>
                   </div>
                   <div className="rounded-xl border border-white/10 bg-[#1b1b1b] p-4">
+                    <p className="text-xs uppercase tracking-[0.14em] text-neutral-500">Manufacturer</p>
+                    <p className="mt-2 text-sm font-semibold text-white">{selectedItem.manufacturer || "-"}</p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-[#1b1b1b] p-4">
+                    <p className="text-xs uppercase tracking-[0.14em] text-neutral-500">Reference Number</p>
+                    <p className="mt-2 break-all text-sm font-semibold text-white">{selectedItem.reference_number || "-"}</p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-[#1b1b1b] p-4">
                     <p className="text-xs uppercase tracking-[0.14em] text-neutral-500">Location</p>
                     <p className="mt-2 text-sm font-semibold text-white">{selectedItem.location || "-"}</p>
                   </div>
@@ -1430,7 +1442,7 @@ export default function EmsSupplyWorkspace({
         onClose={() => setIsCheckoutOpen(false)}
         onSubmit={submitCheckout}
       />
-      {canManageSupplies && isQrDialogOpen && selectedItem ? <QrLabelDialog title={selectedItem.item_name} subtitle={selectedItem.manufacturer} value={selectedItem.qr_identifier} onClose={() => setIsQrDialogOpen(false)} /> : null}
+      {canManageSupplies && isQrDialogOpen && selectedItem ? <QrLabelDialog title={selectedItem.item_name} subtitle={[selectedItem.manufacturer, selectedItem.reference_number].filter(Boolean).join(" · ")} value={selectedItem.qr_identifier} onClose={() => setIsQrDialogOpen(false)} /> : null}
     </div>
   );
 }
