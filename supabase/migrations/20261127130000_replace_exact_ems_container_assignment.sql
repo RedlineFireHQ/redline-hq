@@ -24,6 +24,7 @@ begin
   if v_user is null then raise exception 'Unauthorized.'; end if;
   if p_quantity is null or p_quantity <= 0 then raise exception 'Replacement quantity must be greater than zero.'; end if;
   if p_new_expiration_date is null then raise exception 'Enter the replacement expiration date.'; end if;
+  if p_new_expiration_date < current_date then raise exception 'The replacement expiration date must be today or later.'; end if;
 
   select * into v_assignment
   from public.ems_container_item_batches
