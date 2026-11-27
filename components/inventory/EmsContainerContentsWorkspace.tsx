@@ -70,7 +70,11 @@ export default function EmsContainerContentsWorkspace({ departmentId, containers
     return [...map.entries()];
   }, [template]);
 
-  function normalizeSupplyName(value: string) {\n    return value.toLowerCase().replace(/[^a-z0-9.]+/g, " ").trim().split(/\\s+/).filter(Boolean).sort().join(" ");\n  }\n\n  async function load() {
+  function normalizeSupplyName(value: string) {
+    return value.toLowerCase().replace(/[^a-z0-9.]+/g, " ").trim().split(/\s+/).filter(Boolean).sort().join(" ");
+  }
+
+  async function load() {
     setLoading(true);
     const [assignmentResult, batchResult] = await Promise.all([
       supabase.from("ems_container_item_batches").select("id,container_type,container_id,template_item_key,item_label,batch_id,quantity_on_hand").eq("department_id", departmentId),
