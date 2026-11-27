@@ -187,7 +187,7 @@ export default function EmsContainerContentsWorkspace({ departmentId, containers
           </select>
           <input aria-label={`Quantity in ${item.label}`} type="number" min="0" step="0.01" value={draft.quantity} onChange={(event) => update(item.key, { quantity: event.target.value })} className="w-full rounded-lg border border-neutral-700 bg-neutral-900 p-2 text-sm text-white" />
           {(() => {
-            const assigned = assignments.find((row) => row.container_type === container.type && row.container_id === container.id && row.template_item_key === item.key && row.batch_id === draft.batchId && row.quantity_on_hand > 0);
+            const assigned = assignments.find((row) => row.container_type === container?.type && row.container_id === container?.id && row.template_item_key === item.key && row.batch_id === draft.batchId && row.quantity_on_hand > 0);
             if (!assigned || !draft.batchId) return null;
             return <div className="md:col-span-3">
               <button type="button" onClick={() => {
