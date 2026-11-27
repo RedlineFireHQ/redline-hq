@@ -15,7 +15,7 @@ export default async function EmsContainerContentsPage() {
   const [{ data: bags }, { data: boxes }, { data: supplies }, { data: existing, error }] = await Promise.all([
     supabase.from("pediatric_bags").select("id, bag_label").eq("department_id", departmentId).eq("is_active", true).order("bag_label"),
     supabase.from("drug_boxes").select("id, squad_number").eq("department_id", departmentId).eq("is_active", true).order("squad_number"),
-    supabase.from("ems_supply_items").select("id, item_name, unit_of_measure").eq("department_id", departmentId).eq("status", "active").order("item_name"),
+    supabase.from("ems_supply_items").select("id, item_name, unit_of_measure").eq("department_id", departmentId).eq("status", "Active").order("item_name"),
     supabase.from("ems_supply_container_contents").select("id, container_type, container_id, template_item_key, supply_item_id, quantity_on_hand, notes").eq("department_id", departmentId),
   ]);
   if (error) console.error("[ems-container-contents] load failed", error);
