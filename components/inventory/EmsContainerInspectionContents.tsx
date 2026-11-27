@@ -39,6 +39,7 @@ export default function EmsContainerInspectionContents({ departmentId, container
         if (!batch?.expiration_date || batch.expiration_date > limit) return [];
         return [{
           key: assignment.id,
+          templateItemKey: assignment.template_item_key,
           label: assignment.item_label,
           supplyName: supplyNames.get(batch.supply_item_id) ?? assignment.item_label,
           lot: batch.lot_number,
