@@ -82,8 +82,8 @@ export default function EmsContainerContentsWorkspace({ departmentId, containers
       ? await supabase.from("ems_container_item_batches").upsert(rows, { onConflict: "department_id,container_type,container_id,template_item_key,batch_id" })
       : { error: null };
     if (upsertError) { setError(upsertError.message); setSaving(false); return; }
-    const retainedKeys = new Set(rows.map((row) => row.template_item_key));
-    const staleRows = assignments.filter((row) => row.container_type === container.type && row.container_id === container.id && !retainedKeys.has(row.template_item_key));
+    const retainedAssignments = new Set(rows.map((row) => `${row.template_item_key}:${row.batch_id}`));
+    const staleRows = assignments.filter((row) => row.container_type === container.type && row.container_id === container.id && !retainedAssignments.has(`${row.template_item_key}:${row.batch_id}`));
     if (staleRows.length) {
       const { error: cleanupError } = await supabase.from("ems_container_item_batches").delete().in("id", staleRows.map((row) => row.id));
       if (cleanupError) { setError(`Assignments saved, but old selections could not be cleared: ${cleanupError.message}`); setSaving(false); return; }
