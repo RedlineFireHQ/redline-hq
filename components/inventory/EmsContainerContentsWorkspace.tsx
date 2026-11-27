@@ -144,7 +144,11 @@ export default function EmsContainerContentsWorkspace({ departmentId, containers
       <h2 className="border-b border-neutral-800 px-4 py-3 text-sm font-bold text-white">{section}</h2>
       <div className="divide-y divide-neutral-800">{items.map((item) => {
         const draft = drafts[item.key] ?? { batchId: "", quantity: String(item.required ?? 1) };
-        const itemKey = normalizeSupplyName(item.label);\n        const options = batches.filter((batch) => {\n          const supply = supplies.find((candidate) => candidate.id === batch.supply_item_id);\n          return supply ? normalizeSupplyName(supply.item_name) === itemKey : false;\n        });
+        const itemKey = normalizeSupplyName(item.label);
+        const options = batches.filter((batch) => {
+          const supply = supplies.find((candidate) => candidate.id === batch.supply_item_id);
+          return supply ? normalizeSupplyName(supply.item_name) === itemKey : false;
+        });
         return <div key={item.key} className="grid gap-2 p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_90px] md:items-center">
           <div><p className="text-sm font-semibold text-white">{item.label}</p><p className="text-xs text-neutral-500">Required: {item.required ?? "Not specified"}{item.sourceQuantityText ? ` · Source: ${item.sourceQuantityText}` : ""}</p></div>
           <select value={draft.batchId} onChange={(event) => update(item.key, { batchId: event.target.value })} className="min-w-0 rounded-lg border border-neutral-700 bg-neutral-900 p-2 text-sm text-white">
