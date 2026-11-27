@@ -142,6 +142,7 @@ export default async function PediatricHistoryDetailPage({ params }: PediatricHi
                       {item.requiredQuantity !== null ? ` · Qty: ${item.requiredQuantity}` : ""}
                       {item.sourceQuantityText ? ` · Source: ${item.sourceQuantityText}` : ""}
                     </p>
+                    {item.expirationSnapshot.length > 0 ? <div className="mt-1 space-y-0.5">{item.expirationSnapshot.map((batch, batchIndex) => <p key={`${batch.lot_number ?? "lot"}-${batchIndex}`} className="text-xs text-amber-200">{batch.supply_name ?? item.itemLabel} · {batch.expiration_date ? `Expires ${batch.expiration_date}` : "No expiration date"}{batch.lot_number ? ` · Lot ${batch.lot_number}` : ""} · Qty {batch.quantity_in_container ?? "—"}</p>)}</div> : null}
                   </div>
                   <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs font-semibold text-neutral-200">
                     {itemStatusLabel(item.resultStatus)}
