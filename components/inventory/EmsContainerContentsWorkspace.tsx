@@ -90,7 +90,7 @@ export default function EmsContainerContentsWorkspace({ departmentId, containers
     <section className="rounded-xl border border-neutral-800 bg-[#202020] p-4">
       <p className="text-xs font-semibold uppercase tracking-wider text-neutral-400">One-time setup</p>
       <h2 className="mt-1 text-lg font-bold text-white">Choose a bag or drug box</h2>
-      <p className="mt-2 text-sm text-neutral-400">Select the actual expiration batch stored in each container. Leave an item blank if you are not tracking its expiration.</p>
+      <p className="mt-2 text-sm text-neutral-400">Select from {supplies.length} department supply item(s) and their recorded batches. Leave an item blank if you are not tracking its expiration.</p>
       <div className="mt-4 flex flex-wrap gap-2">{containers.map((item) => <button key={item.id} type="button" onClick={() => setSelectedContainerId(item.id)} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${selectedContainerId === item.id ? "border-red-500 bg-red-950/30 text-white" : "border-neutral-700 text-neutral-300"}`}>{item.label}</button>)}</div>
     </section>
     {loading ? <p className="p-4 text-sm text-neutral-400">Loading supplies...</p> : grouped.map(([section, items]) => <section key={section} className="overflow-hidden rounded-xl border border-neutral-800 bg-[#202020]">
