@@ -138,7 +138,7 @@ export default function DrugBoxChecklistWorkspace({ box }: DrugBoxChecklistWorks
         </button>
       </div>
 
-      <EmsContainerInspectionContents departmentId={box.departmentId} containerId={box.id} containerType="drug_box" onOverridePass={(itemLabel) => { const item = sections.flatMap((section) => section.items).find((candidate) => candidate.itemLabel === itemLabel); if (item) setStatusByItem((current) => { const next = new Map(current); next.set(item.id, "pass"); return next; }); }} />
+      <EmsContainerInspectionContents departmentId={box.departmentId} containerId={box.id} containerType="drug_box" onOverridePass={(templateItemKey) => { setStatusByItem((current) => { const next = new Map(current); next.set(templateItemKey, "pass"); return next; }); }} />
 
       <section className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-5">
         <h2 className="text-xl font-bold text-white">Inspection Details</h2>
