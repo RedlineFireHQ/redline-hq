@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { PEDIATRIC_INVENTORY } from "@/lib/pediatric-bags/inventory";
 import { DRUG_BOX_INVENTORY } from "@/lib/drug-boxes/inventory";
 
 type ContainerType = "pediatric_bag" | "drug_box";
@@ -26,16 +25,52 @@ export default function EmsContainerContentsWorkspace({ departmentId, containers
   const container = containers.find((item) => item.id === selectedContainerId);
   const template: TemplateItem[] = useMemo(() => {
     if (!container) return [];
-    const source = container.type === "pediatric_bag" ? PEDIATRIC_INVENTORY : DRUG_BOX_INVENTORY;
-    return source.map((item, index) => ({ key: container.type === "pediatric_bag" ? `pediatric-item-${index}` : `drug-item-${index}`, section: item[0], label: item[1], required: item[2], sourceQuantityText: item[3] }));
-  }, [container]);
+    if (container.type === "pediatric_bag") return pediatricTemplate;
+    return DRUG_BOX_INVENTORY.map((item, index) => ({
+      key: `drug-item-${index}`,
+      section: item[0],
+      label: item[1],
+      required: item[2],
+      sourceQuantityText: item[3],
+    }));
+  }, [container, pediatricTemplate]);
+  useEffect(() => {
+    let cancelled = false;
+    async function loadPediatricTemplate() {
+      if (!container || container.type !== "pediatric_bag") {
+        setPediatricTemplate([]);
+        return;
+      }
+      const { data, error: templateError } = await supabase
+        .from("pediatric_bag_checklist_items")
+        .select("id,section_name,item_label,required_quantity,source_quantity_text")
+        .eq("department_id", departmentId)
+        .eq("is_active", true)
+        .order("display_order", { ascending: true });
+      if (cancelled) return;
+      if (templateError) {
+        setError(templateError.message || "Unable to load the pediatric bag checklist.");
+        setPediatricTemplate([]);
+        return;
+      }
+      setPediatricTemplate((data ?? []).map((row) => ({
+        key: row.id,
+        section: row.section_name || "General",
+        label: row.item_label,
+        required: row.required_quantity,
+        sourceQuantityText: row.source_quantity_text || "",
+      })));
+    }
+    void loadPediatricTemplate();
+    return () => { cancelled = true; };
+  }, [departmentId, container?.id, container?.type]);
   const grouped = useMemo(() => {
     const map = new Map<string, TemplateItem[]>();
     for (const item of template) map.set(item.section, [...(map.get(item.section) ?? []), item]);
     return [...map.entries()];
   }, [template]);
 
-  async function load() {
+  function normalizeSupplyName(value: string) {\n    return value.toLowerCase().replace(/[^a-z0-9.]+/g, " ").trim().split(/\\s+/).filter(Boolean).sort().join(" ");\n  }\n\n  async function load() {
     setLoading(true);
     const [assignmentResult, batchResult] = await Promise.all([
       supabase.from("ems_container_item_batches").select("id,container_type,container_id,template_item_key,item_label,batch_id,quantity_on_hand").eq("department_id", departmentId),
@@ -105,12 +140,12 @@ export default function EmsContainerContentsWorkspace({ departmentId, containers
       <h2 className="border-b border-neutral-800 px-4 py-3 text-sm font-bold text-white">{section}</h2>
       <div className="divide-y divide-neutral-800">{items.map((item) => {
         const draft = drafts[item.key] ?? { batchId: "", quantity: String(item.required ?? 1) };
-        const options = batches;
+        const itemKey = normalizeSupplyName(item.label);\n        const options = batches.filter((batch) => {\n          const supply = supplies.find((candidate) => candidate.id === batch.supply_item_id);\n          return supply ? normalizeSupplyName(supply.item_name) === itemKey : false;\n        });
         return <div key={item.key} className="grid gap-2 p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_90px] md:items-center">
           <div><p className="text-sm font-semibold text-white">{item.label}</p><p className="text-xs text-neutral-500">Required: {item.required ?? "Not specified"}{item.sourceQuantityText ? ` · Source: ${item.sourceQuantityText}` : ""}</p></div>
           <select value={draft.batchId} onChange={(event) => update(item.key, { batchId: event.target.value })} className="min-w-0 rounded-lg border border-neutral-700 bg-neutral-900 p-2 text-sm text-white">
             <option value="">Not tracking expiration</option>
-            {options.map((batch) => <option key={batch.id} value={batch.id}>{supplies.find((supply) => supply.id === batch.supply_item_id)?.item_name ?? "EMS supply"} · {batch.expiration_date ? `Exp ${batch.expiration_date}` : "No date"} · Qty {batch.quantity_remaining}{batch.lot_number ? ` · Lot ${batch.lot_number}` : ""}</option>)}
+            {options.map((batch) => <option key={batch.id} value={batch.id}>{batch.expiration_date ? `Exp ${batch.expiration_date}` : "No date"} · Qty {batch.quantity_remaining}{batch.lot_number ? ` · Lot ${batch.lot_number}` : ""}</option>)}
           </select>
           <input aria-label={`Quantity in ${item.label}`} type="number" min="0" step="0.01" value={draft.quantity} onChange={(event) => update(item.key, { quantity: event.target.value })} className="w-full rounded-lg border border-neutral-700 bg-neutral-900 p-2 text-sm text-white" />
         </div>;
