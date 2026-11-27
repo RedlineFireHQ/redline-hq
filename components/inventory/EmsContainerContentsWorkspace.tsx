@@ -26,7 +26,7 @@ export default function EmsContainerContentsWorkspace({ departmentId, containers
   const template: TemplateItem[] = useMemo(() => {
     if (!container) return [];
     const source = container.type === "pediatric_bag" ? PEDIATRIC_INVENTORY : DRUG_BOX_INVENTORY;
-    return source.map((item, index) => ({ key: container.type === "pediatric_bag" ? `pediatric-${index}` : `drug-${index}`, section: item[0], label: item[1], required: item[2], sourceQuantityText: item[3] }));
+    return source.map((item, index) => ({ key: container.type === "pediatric_bag" ? `pediatric-item-${index}` : `drug-item-${index}`, section: item[0], label: item[1], required: item[2], sourceQuantityText: item[3] }));
   }, [container]);
   const grouped = useMemo(() => {
     const map = new Map<string, TemplateItem[]>();
@@ -66,19 +66,26 @@ export default function EmsContainerContentsWorkspace({ departmentId, containers
   async function save() {
     if (!container) return;
     setSaving(true); setError(""); setMessage("");
+    let validationError = "";
     const rows = template.flatMap((item) => {
       const draft = drafts[item.key];
       if (!draft?.batchId) return [];
       const qty = Number(draft.quantity);
-      if (!Number.isFinite(qty) || qty < 0) { setError(`Enter a valid quantity for ${item.label}.`); return []; }
+      if (!Number.isFinite(qty) || qty <= 0) { validationError = `Enter a quantity greater than zero for ${item.label}.`; return []; }
+      const batch = batches.find((candidate) => candidate.id === draft.batchId);
+      if (!batch) { validationError = `Choose a valid recorded batch for ${item.label}.`; return []; }
       return [{ department_id: departmentId, container_type: container.type, container_id: container.id, template_item_key: item.key, item_label: item.label, batch_id: draft.batchId, quantity_on_hand: qty }];
     });
-    if (error) { setSaving(false); return; }
-    const { error: deleteError } = await supabase.from("ems_container_item_batches").delete().eq("department_id", departmentId).eq("container_type", container.type).eq("container_id", container.id);
-    if (deleteError) { setError(deleteError.message); setSaving(false); return; }
-    if (rows.length) {
-      const { error: insertError } = await supabase.from("ems_container_item_batches").insert(rows);
-      if (insertError) { setError(insertError.message); setSaving(false); return; }
+    if (validationError) { setError(validationError); setSaving(false); return; }
+    const { error: upsertError } = rows.length
+      ? await supabase.from("ems_container_item_batches").upsert(rows, { onConflict: "department_id,container_type,container_id,template_item_key,batch_id" })
+      : { error: null };
+    if (upsertError) { setError(upsertError.message); setSaving(false); return; }
+    const retainedKeys = new Set(rows.map((row) => row.template_item_key));
+    const staleRows = assignments.filter((row) => row.container_type === container.type && row.container_id === container.id && !retainedKeys.has(row.template_item_key));
+    if (staleRows.length) {
+      const { error: cleanupError } = await supabase.from("ems_container_item_batches").delete().in("id", staleRows.map((row) => row.id));
+      if (cleanupError) { setError(`Assignments saved, but old selections could not be cleared: ${cleanupError.message}`); setSaving(false); return; }
     }
     await load();
     setMessage("Saved. This bag or box now has its own expiration records.");
@@ -97,10 +104,7 @@ export default function EmsContainerContentsWorkspace({ departmentId, containers
       <h2 className="border-b border-neutral-800 px-4 py-3 text-sm font-bold text-white">{section}</h2>
       <div className="divide-y divide-neutral-800">{items.map((item) => {
         const draft = drafts[item.key] ?? { batchId: "", quantity: String(item.required ?? 1) };
-        const options = batches.filter((batch) => {
-          const supply = Array.isArray(batch.supply_item) ? batch.supply_item[0] : batch.supply_item;
-          return Boolean(supply);
-        });
+        const options = batches;
         return <div key={item.key} className="grid gap-2 p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_90px] md:items-center">
           <div><p className="text-sm font-semibold text-white">{item.label}</p><p className="text-xs text-neutral-500">Required: {item.required ?? "Not specified"}{item.sourceQuantityText ? ` · Source: ${item.sourceQuantityText}` : ""}</p></div>
           <select value={draft.batchId} onChange={(event) => update(item.key, { batchId: event.target.value })} className="min-w-0 rounded-lg border border-neutral-700 bg-neutral-900 p-2 text-sm text-white">
