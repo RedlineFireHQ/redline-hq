@@ -91,6 +91,7 @@ export default function DrugInspectionDetail({ inspection }: { inspection: DrugI
                 <p className="mt-0.5 text-xs text-neutral-400">
                   {item.sectionName} · Qty: {item.requiredQuantity}
                 </p>
+                {item.expirationSnapshot.length > 0 ? <div className="mt-1 space-y-0.5">{item.expirationSnapshot.map((batch, index) => <p key={`${batch.lot_number ?? "lot"}-${index}`} className="text-xs text-amber-200">{batch.supply_name ?? item.itemLabel} · {batch.expiration_date ? `Expires ${batch.expiration_date}` : "No expiration date"}{batch.lot_number ? ` · Lot ${batch.lot_number}` : ""} · Qty {batch.quantity_in_container ?? "—"}</p>)}</div> : null}
               </div>
               <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${item.status === "pass" ? "border-emerald-500/40 bg-emerald-950/30 text-emerald-200" : item.status === "expired" ? "border-red-500/40 bg-red-950/30 text-red-200" : "border-amber-500/40 bg-amber-950/30 text-amber-200"}`}>
                 {item.status === "pass" ? "PASS" : item.status === "expired" ? "EXPIRED" : "MISSING"}
