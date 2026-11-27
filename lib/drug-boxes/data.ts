@@ -62,6 +62,7 @@ export type DrugInspectionItemSnapshot = {
   checked: boolean;
   status: "pass" | "expired" | "missing";
   itemOrder: number;
+  expirationSnapshot: Array<{ supplyName?: string; lotNumber?: string | null; expirationDate?: string | null; quantityInContainer?: number }>;
 };
 
 export type DrugInspectionRecord = {
@@ -398,7 +399,7 @@ export async function getDrugInspection(
   const [resultsRes, memberRes] = await Promise.all([
     client
       .from("drug_box_checklist_results")
-      .select("checklist_item_id, section_name_snapshot, item_label_snapshot, required_quantity_snapshot, source_quantity_text_snapshot, is_checked, result_status, item_order")
+      .select("checklist_item_id, section_name_snapshot, item_label_snapshot, required_quantity_snapshot, source_quantity_text_snapshot, is_checked, result_status, item_order, expiration_snapshot")
       .eq("department_id", departmentId)
       .eq("inspection_id", inspectionId)
       .order("item_order", { ascending: true }),
@@ -416,6 +417,7 @@ export async function getDrugInspection(
     checked: r.is_checked === true,
     status: r.result_status === "missing" ? "missing" : r.result_status === "expired" ? "expired" : "pass",
     itemOrder: typeof r.item_order === "number" ? r.item_order : index,
+    expirationSnapshot: Array.isArray(r.expiration_snapshot) ? r.expiration_snapshot as DrugInspectionItemSnapshot["expirationSnapshot"] : [],
   }));
 
   const inspectorName = memberRes.data ? formatMemberName(memberRes.data as Record<string, unknown>) : "Unknown";
