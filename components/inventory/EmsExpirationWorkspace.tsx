@@ -49,6 +49,23 @@ export default function EmsExpirationWorkspace({ supplies, canManage, expiration
   const [replacementLot, setReplacementLot] = useState("");
   const [replacementReason, setReplacementReason] = useState("");
 
+  async function toggleExpirationTracking() {
+    setSavingSetting(true);
+    setError(null);
+    const response = await fetch("/api/ems/expiration-settings", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ enabled: !trackingEnabled }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setError(payload.error || "Unable to update expiration tracking.");
+    } else {
+      setTrackingEnabled(payload.enabled === true);
+    }
+    setSavingSetting(false);
+  }
+
   async function refresh() {
     setLoading(true);
     const response = await fetch("/api/ems/supply-batches");
@@ -103,6 +120,7 @@ export default function EmsExpirationWorkspace({ supplies, canManage, expiration
   }
 
   return <div className="space-y-5">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#242424] p-4"><div className="min-w-0 flex-1"><h2 className="font-bold text-white">Expiration tracking</h2><p className="mt-1 text-sm text-neutral-400">{trackingEnabled ? "Expiration warnings are active during bag and drug-box inspections." : "Expiration tracking is off. You can prepare batch dates and bag contents without changing normal inspections."}</p></div>{canManage ? <button type="button" onClick={() => void toggleExpirationTracking()} disabled={savingSetting} className={`min-h-10 rounded-lg px-4 text-sm font-bold ${trackingEnabled ? "border border-amber-500/40 text-amber-200" : "bg-red-700 text-white"} disabled:opacity-50`}>{savingSetting ? "Saving..." : trackingEnabled ? "Turn tracking off" : "Turn tracking on"}</button> : <span className="rounded-lg border border-white/10 px-3 py-2 text-xs font-semibold text-neutral-400">{trackingEnabled ? "ON" : "OFF"}</span>}</div>
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#242424] p-4"><div><h2 className="font-bold text-white">Track expirations in bags and drug boxes</h2><p className="mt-1 text-sm text-neutral-400">Record each supply batch once, then assign the actual batch to the bag or drug box where it is stored.</p></div><Link href="/inventory/ems-container-contents" className="rounded-lg border border-red-500/40 px-4 py-2 text-sm font-bold text-red-200 hover:bg-red-950/30">Connect bag / box items</Link></div>
     <section className="grid gap-3 sm:grid-cols-3">
       <div className="rounded-xl border border-red-500/25 bg-red-950/20 p-4"><p className="text-xs font-bold uppercase tracking-wide text-red-200">Expired batches</p><p className="mt-1 text-3xl font-black text-white">{summary.expired}</p></div>
@@ -110,9 +128,9 @@ export default function EmsExpirationWorkspace({ supplies, canManage, expiration
       <div className="rounded-xl border border-white/10 bg-[#242424] p-4"><p className="text-xs font-bold uppercase tracking-wide text-neutral-400">Date range on hand</p><p className="mt-2 text-sm font-semibold text-white">{summary.earliest ?? "—"} <span className="text-neutral-500">to</span> {summary.latest ?? "—"}</p></div>
     </section>
 
-    {canManage && trackingEnabled && supplies.length > 0 ? <form onSubmit={addBatch} className="rounded-xl border border-white/10 bg-[#242424] p-5">
-      <h2 className="text-lg font-black text-white">Receive EMS supply batch</h2>
-      <p className="mt-1 text-sm text-neutral-400">For the first setup, choose Existing stock so Redline records expiration details without adding the same supplies to inventory a second time. Choose New restock only for newly delivered supplies.</p>
+    {canManage && supplies.length > 0 ? <form onSubmit={addBatch} className="rounded-xl border border-white/10 bg-[#242424] p-5">
+      <h2 className="text-lg font-black text-white">Record EMS supply batch</h2>
+      <p className="mt-1 text-sm text-neutral-400">You can prepare expiration records while tracking is off. Choose Existing stock to record dates without adding the same supplies to inventory again. Choose New restock only for newly delivered supplies.</p>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <label className="text-sm text-neutral-300 sm:col-span-2 lg:col-span-3">Stock entry type
           <select value={entryMode} onChange={e=>setEntryMode(e.target.value as "receive" | "existing")} className="mt-1 min-h-11 w-full rounded-lg border border-white/10 bg-[#171717] px-3 text-white"><option value="existing">Existing stock — do not change on-hand quantity</option><option value="receive">New restock — increase on-hand quantity</option></select>
