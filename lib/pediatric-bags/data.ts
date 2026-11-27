@@ -288,7 +288,7 @@ export type PediatricInspectionResultRow = {
   sourceQuantityText: string | null;
   resultStatus: string;
   itemOrder: number;
-  expirationSnapshot: Array<{ supplyName?: string; lotNumber?: string | null; expirationDate?: string | null; quantityInContainer?: number }>;
+  expirationSnapshot: Array<{ supply_name?: string; lot_number?: string | null; expiration_date?: string | null; quantity_in_container?: number }>;
 };
 
 export type PediatricInspectionDetail =
