@@ -21,6 +21,12 @@ export default function EmsContainerContentsWorkspace({ departmentId, containers
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [pediatricTemplate, setPediatricTemplate] = useState<TemplateItem[]>([]);
+  const [replacementAssignmentId, setReplacementAssignmentId] = useState<string | null>(null);
+  const [replacementQuantity, setReplacementQuantity] = useState("");
+  const [replacementExpiration, setReplacementExpiration] = useState("");
+  const [replacementLot, setReplacementLot] = useState("");
+  const [replacementReason, setReplacementReason] = useState("");
+  const [replacing, setReplacing] = useState(false);
 
   const container = containers.find((item) => item.id === selectedContainerId);
   const template: TemplateItem[] = useMemo(() => {
@@ -132,6 +138,30 @@ export default function EmsContainerContentsWorkspace({ departmentId, containers
     setSaving(false);
   }
 
+  async function replaceContainerItem(assignmentId: string) {
+    setReplacing(true); setError(""); setMessage("");
+    const response = await fetch(`/api/ems/container-assignments/${assignmentId}/replace`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        quantity: replacementQuantity,
+        expirationDate: replacementExpiration,
+        lotNumber: replacementLot,
+        reason: replacementReason || "Replaced during bag / box check",
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setError(payload.error || "Unable to record this replacement.");
+    } else {
+      setReplacementAssignmentId(null);
+      setReplacementQuantity(""); setReplacementExpiration(""); setReplacementLot(""); setReplacementReason("");
+      await load();
+      setMessage("Replacement recorded for this bag or box only.");
+    }
+    setReplacing(false);
+  }
+
   if (!containers.length) return <p className="rounded-xl border border-neutral-800 p-5 text-sm text-neutral-400">No active EMS bags or drug boxes are configured.</p>;
   return <div className="space-y-5">
     <section className="rounded-xl border border-neutral-800 bg-[#202020] p-4">
@@ -156,6 +186,27 @@ export default function EmsContainerContentsWorkspace({ departmentId, containers
             {options.map((batch) => <option key={batch.id} value={batch.id}>{batch.expiration_date ? `Exp ${batch.expiration_date}` : "No date"} · Qty {batch.quantity_remaining}{batch.lot_number ? ` · Lot ${batch.lot_number}` : ""}</option>)}
           </select>
           <input aria-label={`Quantity in ${item.label}`} type="number" min="0" step="0.01" value={draft.quantity} onChange={(event) => update(item.key, { quantity: event.target.value })} className="w-full rounded-lg border border-neutral-700 bg-neutral-900 p-2 text-sm text-white" />
+          {(() => {
+            const assigned = assignments.find((row) => row.container_type === container.type && row.container_id === container.id && row.template_item_key === item.key && row.batch_id === draft.batchId && row.quantity_on_hand > 0);
+            if (!assigned || !draft.batchId) return null;
+            return <div className="md:col-span-3">
+              <button type="button" onClick={() => {
+                setReplacementAssignmentId(replacementAssignmentId === assigned.id ? null : assigned.id);
+                setReplacementQuantity(String(assigned.quantity_on_hand));
+                setReplacementExpiration(""); setReplacementLot(""); setReplacementReason("");
+              }} className="rounded-md border border-amber-500/40 px-3 py-1.5 text-xs font-bold text-amber-200 hover:bg-amber-950/30">
+                {replacementAssignmentId === assigned.id ? "Cancel replacement" : "Replace this bag / box item"}
+              </button>
+              {replacementAssignmentId === assigned.id ? <div className="mt-2 grid gap-2 rounded-lg border border-amber-500/30 bg-amber-950/10 p-3 sm:grid-cols-2 lg:grid-cols-4">
+                <p className="text-xs text-neutral-300 sm:col-span-2 lg:col-span-4">Only this bag or box assignment will be replaced. Other containers using the same lot will not change.</p>
+                <label className="text-xs text-neutral-300">Quantity replaced<input type="number" min="0.01" max={assigned.quantity_on_hand} step="0.01" value={replacementQuantity} onChange={(event) => setReplacementQuantity(event.target.value)} className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-900 p-2 text-sm text-white" /></label>
+                <label className="text-xs text-neutral-300">New expiration date<input type="date" required value={replacementExpiration} onChange={(event) => setReplacementExpiration(event.target.value)} className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-900 p-2 text-sm text-white" /></label>
+                <label className="text-xs text-neutral-300">New lot number (optional)<input value={replacementLot} onChange={(event) => setReplacementLot(event.target.value)} className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-900 p-2 text-sm text-white" /></label>
+                <label className="text-xs text-neutral-300">Note (optional)<input value={replacementReason} onChange={(event) => setReplacementReason(event.target.value)} className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-900 p-2 text-sm text-white" /></label>
+                <button type="button" disabled={replacing || !replacementExpiration || Number(replacementQuantity) <= 0 || Number(replacementQuantity) > assigned.quantity_on_hand} onClick={() => void replaceContainerItem(assigned.id)} className="rounded-lg bg-amber-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50 sm:col-span-2 lg:col-span-4">{replacing ? "Recording..." : "Confirm item replacement"}</button>
+              </div> : null}
+            </div>;
+          })()}
         </div>;
       })}</div>
     </section>)}
