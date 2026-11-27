@@ -92,7 +92,7 @@ export default function EmsContainerContentsWorkspace({ departmentId, containers
       setAssignments(rows);
       setBatches((batchResult.data ?? []) as BatchOption[]);
       const next: Record<string, { batchId: string; quantity: string }> = {};
-      for (const row of rows) if (row.container_id === selectedContainerId) next[row.template_item_key] = { batchId: row.batch_id, quantity: String(row.quantity_on_hand) };
+      for (const row of rows) if (row.container_id === selectedContainerId && row.quantity_on_hand > 0) next[row.template_item_key] = { batchId: row.batch_id, quantity: String(row.quantity_on_hand) };
       setDrafts(next);
     }
     setLoading(false);
@@ -101,7 +101,7 @@ export default function EmsContainerContentsWorkspace({ departmentId, containers
 
   useEffect(() => {
     const next: Record<string, { batchId: string; quantity: string }> = {};
-    for (const row of assignments) if (row.container_id === selectedContainerId) next[row.template_item_key] = { batchId: row.batch_id, quantity: String(row.quantity_on_hand) };
+    for (const row of assignments) if (row.container_id === selectedContainerId && row.quantity_on_hand > 0) next[row.template_item_key] = { batchId: row.batch_id, quantity: String(row.quantity_on_hand) };
     setDrafts(next);
   }, [selectedContainerId, assignments]);
 
@@ -198,12 +198,12 @@ export default function EmsContainerContentsWorkspace({ departmentId, containers
                 {replacementAssignmentId === assigned.id ? "Cancel replacement" : "Replace this bag / box item"}
               </button>
               {replacementAssignmentId === assigned.id ? <div className="mt-2 grid gap-2 rounded-lg border border-amber-500/30 bg-amber-950/10 p-3 sm:grid-cols-2 lg:grid-cols-4">
-                <p className="text-xs text-neutral-300 sm:col-span-2 lg:col-span-4">Only this bag or box assignment will be replaced. Other containers using the same lot will not change.</p>
-                <label className="text-xs text-neutral-300">Quantity replaced<input type="number" min="0.01" max={assigned.quantity_on_hand} step="0.01" value={replacementQuantity} onChange={(event) => setReplacementQuantity(event.target.value)} className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-900 p-2 text-sm text-white" /></label>
+                <p className="text-xs text-neutral-300 sm:col-span-2 lg:col-span-4">This replaces the full quantity assigned to this bag or box item. Other containers using the same lot will not change.</p>
+                <label className="text-xs text-neutral-300">Quantity replaced<input type="number" min="0.01" max={assigned.quantity_on_hand} step="0.01" readOnly value={replacementQuantity} onChange={(event) => setReplacementQuantity(event.target.value)} className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-900 p-2 text-sm text-white" /></label>
                 <label className="text-xs text-neutral-300">New expiration date<input type="date" required value={replacementExpiration} onChange={(event) => setReplacementExpiration(event.target.value)} className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-900 p-2 text-sm text-white" /></label>
                 <label className="text-xs text-neutral-300">New lot number (optional)<input value={replacementLot} onChange={(event) => setReplacementLot(event.target.value)} className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-900 p-2 text-sm text-white" /></label>
                 <label className="text-xs text-neutral-300">Note (optional)<input value={replacementReason} onChange={(event) => setReplacementReason(event.target.value)} className="mt-1 w-full rounded-lg border border-neutral-700 bg-neutral-900 p-2 text-sm text-white" /></label>
-                <button type="button" disabled={replacing || !replacementExpiration || Number(replacementQuantity) <= 0 || Number(replacementQuantity) > assigned.quantity_on_hand} onClick={() => void replaceContainerItem(assigned.id)} className="rounded-lg bg-amber-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50 sm:col-span-2 lg:col-span-4">{replacing ? "Recording..." : "Confirm item replacement"}</button>
+                <button type="button" disabled={replacing || !replacementExpiration || Number(replacementQuantity) <= 0 || Number(replacementQuantity) !== assigned.quantity_on_hand} onClick={() => void replaceContainerItem(assigned.id)} className="rounded-lg bg-amber-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50 sm:col-span-2 lg:col-span-4">{replacing ? "Recording..." : "Confirm item replacement"}</button>
               </div> : null}
             </div>;
           })()}
