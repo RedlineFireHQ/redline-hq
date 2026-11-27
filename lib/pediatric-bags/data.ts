@@ -288,6 +288,7 @@ export type PediatricInspectionResultRow = {
   sourceQuantityText: string | null;
   resultStatus: string;
   itemOrder: number;
+  expirationSnapshot: Array<{ supplyName?: string; lotNumber?: string | null; expirationDate?: string | null; quantityInContainer?: number }>;
 };
 
 export type PediatricInspectionDetail =
@@ -410,7 +411,7 @@ export async function getPediatricInspectionDetail(
   const [resultsRes, bagRes, memberRes, sessionRes] = await Promise.all([
     client
       .from("pediatric_bag_checklist_results")
-      .select("section_name_snapshot, item_label_snapshot, required_quantity_snapshot, source_quantity_text_snapshot, result_status, item_order")
+      .select("section_name_snapshot, item_label_snapshot, required_quantity_snapshot, source_quantity_text_snapshot, result_status, item_order, expiration_snapshot")
       .eq("department_id", departmentId)
       .eq("inspection_id", inspectionId)
       .order("item_order", { ascending: true }),
@@ -435,6 +436,7 @@ export async function getPediatricInspectionDetail(
     sourceQuantityText: typeof r.source_quantity_text_snapshot === "string" ? r.source_quantity_text_snapshot : null,
     resultStatus: typeof r.result_status === "string" ? r.result_status : "checked",
     itemOrder: typeof r.item_order === "number" ? r.item_order : 0,
+    expirationSnapshot: Array.isArray(r.expiration_snapshot) ? r.expiration_snapshot as PediatricInspectionResultRow["expirationSnapshot"] : [],
   }));
 
   const bagLabel =
