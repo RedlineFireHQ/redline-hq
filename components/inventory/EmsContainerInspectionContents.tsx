@@ -18,7 +18,7 @@ export default function EmsContainerInspectionContents({ departmentId, container
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const [assignmentsRes, batchesRes, suppliesRes] = await Promise.all([
+      const [settingsRes, assignmentsRes, batchesRes, suppliesRes] = await Promise.all([\n        supabase.from("departments").select("ems_expiration_tracking_enabled").eq("id", departmentId).maybeSingle(),
         supabase.from("ems_container_item_batches").select("id,template_item_key,item_label,batch_id,quantity_on_hand")
           .eq("department_id", departmentId).eq("container_type", containerType).eq("container_id", containerId).gt("quantity_on_hand", 0),
         supabase.from("ems_supply_batches").select("id,supply_item_id,quantity_remaining,expiration_date,lot_number")
@@ -26,7 +26,7 @@ export default function EmsContainerInspectionContents({ departmentId, container
         supabase.from("ems_supply_items").select("id,item_name").eq("department_id", departmentId),
       ]);
       if (cancelled) return;
-      if (assignmentsRes.error || batchesRes.error || suppliesRes.error) { setLoaded(true); return; }
+      if (settingsRes.error || assignmentsRes.error || batchesRes.error || suppliesRes.error || !settingsRes.data?.ems_expiration_tracking_enabled) { setWarnings([]); setLoaded(true); return; }
       const today = localDateKey(new Date());
       const future = new Date(); future.setDate(future.getDate() + 90);
       const limit = localDateKey(future);
