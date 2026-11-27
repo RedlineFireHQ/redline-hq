@@ -12,7 +12,7 @@ function localDateKey(date: Date) {
 }
 
 export default function EmsContainerInspectionContents({ departmentId, containerId, containerType, onOverridePass }: { departmentId: string; containerId: string; containerType: "pediatric_bag" | "drug_box"; onOverridePass?: (templateItemKey: string) => void }) {
-  const [warnings, setWarnings] = useState<Array<{ key: string; label: string; supplyName: string; lot: string | null; expiration: string; expired: boolean; quantity: number }>>([]);
+  const [warnings, setWarnings] = useState<Array<{ key: string; templateItemKey: string; label: string; supplyName: string; lot: string | null; expiration: string; expired: boolean; quantity: number }>>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -62,7 +62,7 @@ export default function EmsContainerInspectionContents({ departmentId, container
     <div className="mt-3 space-y-2">
       {warnings.map((item) => <div key={item.key} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
         <div><p className="text-sm font-semibold text-white">{item.label}</p><p className="text-xs text-neutral-400">{item.supplyName} · Qty {item.quantity}{item.lot ? ` · Lot ${item.lot}` : ""}</p></div>
-        <div className="flex items-center gap-2"><span className={item.expired ? "text-xs font-bold text-red-300" : "text-xs font-bold text-amber-200"}>{item.expired ? "EXPIRED" : `Expires ${item.expiration}`}</span>{item.expired && onOverridePass ? <button type="button" onClick={() => onOverridePass(warnings.find((warning) => warning.key === item.key)?.key ?? item.key)} className="rounded-md border border-emerald-500/40 px-2 py-1 text-[11px] font-bold text-emerald-200 hover:bg-emerald-950/40">Mark PASS</button> : null}</div>
+        <div className="flex items-center gap-2"><span className={item.expired ? "text-xs font-bold text-red-300" : "text-xs font-bold text-amber-200"}>{item.expired ? "EXPIRED" : `Expires ${item.expiration}`}</span>{item.expired && onOverridePass ? <button type="button" onClick={() => onOverridePass(item.templateItemKey)} className="rounded-md border border-emerald-500/40 px-2 py-1 text-[11px] font-bold text-emerald-200 hover:bg-emerald-950/40">Mark PASS</button> : null}</div>
       </div>)}
     </div>
     {expiredCount > 0 ? <p className="mt-3 text-sm font-semibold text-red-200">{expiredCount} expired batch warning(s) require attention.</p> : null}
