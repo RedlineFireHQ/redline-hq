@@ -8,7 +8,7 @@ import { DRUG_BOX_INVENTORY } from "@/lib/drug-boxes/inventory";
 type ContainerType = "pediatric_bag" | "drug_box";
 type ContainerOption = { id: string; label: string; type: ContainerType };
 type SupplyOption = { id: string; item_name: string; unit_of_measure: string };
-type BatchOption = { id: string; supply_item_id: string; expiration_date: string | null; lot_number: string | null; quantity_remaining: number; supply_item: { item_name: string } | { item_name: string }[] };
+type BatchOption = { id: string; supply_item_id: string; expiration_date: string | null; lot_number: string | null; quantity_remaining: number };
 type Assignment = { id: string; container_type: ContainerType; container_id: string; template_item_key: string; item_label: string; batch_id: string; quantity_on_hand: number };
 type TemplateItem = { key: string; section: string; label: string; required: number | null; sourceQuantityText: string };
 
@@ -38,7 +38,7 @@ export default function EmsContainerContentsWorkspace({ departmentId, containers
     setLoading(true);
     const [assignmentResult, batchResult] = await Promise.all([
       supabase.from("ems_container_item_batches").select("id,container_type,container_id,template_item_key,item_label,batch_id,quantity_on_hand").eq("department_id", departmentId),
-      supabase.from("ems_supply_batches").select("id,supply_item_id,expiration_date,lot_number,quantity_remaining,supply_item:ems_supply_items!inner(item_name)").eq("department_id", departmentId).gt("quantity_remaining", 0).order("expiration_date", { ascending: true, nullsFirst: false }),
+      supabase.from("ems_supply_batches").select("id,supply_item_id,expiration_date,lot_number,quantity_remaining").eq("department_id", departmentId).gt("quantity_remaining", 0).order("expiration_date", { ascending: true, nullsFirst: false }),
     ]);
     if (assignmentResult.error || batchResult.error) setError(assignmentResult.error?.message ?? batchResult.error?.message ?? "Unable to load expiration records.");
     else {
@@ -105,7 +105,7 @@ export default function EmsContainerContentsWorkspace({ departmentId, containers
           <div><p className="text-sm font-semibold text-white">{item.label}</p><p className="text-xs text-neutral-500">Required: {item.required ?? "Not specified"}{item.sourceQuantityText ? ` · Source: ${item.sourceQuantityText}` : ""}</p></div>
           <select value={draft.batchId} onChange={(event) => update(item.key, { batchId: event.target.value })} className="min-w-0 rounded-lg border border-neutral-700 bg-neutral-900 p-2 text-sm text-white">
             <option value="">Not tracking expiration</option>
-            {options.map((batch) => { const supply = Array.isArray(batch.supply_item) ? batch.supply_item[0] : batch.supply_item; return <option key={batch.id} value={batch.id}>{supply.item_name} · {batch.expiration_date ? `Exp ${batch.expiration_date}` : "No date"} · Qty {batch.quantity_remaining}{batch.lot_number ? ` · Lot ${batch.lot_number}` : ""}</option>; })}
+            {options.map((batch) => <option key={batch.id} value={batch.id}>{supplies.find((supply) => supply.id === batch.supply_item_id)?.item_name ?? "EMS supply"} · {batch.expiration_date ? `Exp ${batch.expiration_date}` : "No date"} · Qty {batch.quantity_remaining}{batch.lot_number ? ` · Lot ${batch.lot_number}` : ""}</option>)}
           </select>
           <input aria-label={`Quantity in ${item.label}`} type="number" min="0" step="0.01" value={draft.quantity} onChange={(event) => update(item.key, { quantity: event.target.value })} className="w-full rounded-lg border border-neutral-700 bg-neutral-900 p-2 text-sm text-white" />
         </div>;
