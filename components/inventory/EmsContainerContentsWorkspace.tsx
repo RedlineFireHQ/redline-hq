@@ -21,6 +21,7 @@ export default function EmsContainerContentsWorkspace({ departmentId, containers
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [pediatricTemplate, setPediatricTemplate] = useState<TemplateItem[]>([]);
 
   const container = containers.find((item) => item.id === selectedContainerId);
   const template: TemplateItem[] = useMemo(() => {
@@ -51,7 +52,7 @@ export default function EmsContainerContentsWorkspace({ departmentId, containers
     }
     setLoading(false);
   }
-  useEffect(() => { void load(); }, [departmentId]);
+  useEffect(() => { void load(); }, [departmentId, selectedContainerId]);
 
   useEffect(() => {
     const next: Record<string, { batchId: string; quantity: string }> = {};
