@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { getDrugTemplateSections, type DrugBoxRecord } from "@/lib/drug-boxes/data";
+import EmsContainerInspectionContents from "@/components/inventory/EmsContainerInspectionContents";
 
 type DrugBoxChecklistWorkspaceProps = {
   box: DrugBoxRecord;
@@ -20,7 +21,7 @@ export default function DrugBoxChecklistWorkspace({ box }: DrugBoxChecklistWorks
   const sections = useMemo(() => getDrugTemplateSections(), []);
   // Fresh inspection: nothing is pre-selected. Each item tracks PASS ('pass') or
   // EXPIRED ('expired'); the first click selects PASS.
-  const [statusByItem, setStatusByItem] = useState<Map<string, "pass" | "expired">>(new Map());
+  const [statusByItem, setStatusByItem] = useState<Map<string, "pass" | "expired" | "missing">>(new Map());
   const [unitNumber, setUnitNumber] = useState(box.squadNumber);
   const [boxLockNumber, setBoxLockNumber] = useState("");
   const [csLockNumber, setCsLockNumber] = useState("");
@@ -35,12 +36,9 @@ export default function DrugBoxChecklistWorkspace({ box }: DrugBoxChecklistWorks
     setStatusByItem((current) => {
       const next = new Map(current);
       const status = next.get(itemId);
-      if (status === "pass") {
-        next.set(itemId, "expired");
-      } else {
-        // unselected or expired → pass
-        next.set(itemId, "pass");
-      }
+      if (status === "pass") next.set(itemId, "expired");
+      else if (status === "expired") next.set(itemId, "missing");
+      else next.set(itemId, "pass");
       return next;
     });
   }
@@ -80,12 +78,11 @@ export default function DrugBoxChecklistWorkspace({ box }: DrugBoxChecklistWorks
       // separately so the server records them as not-present (is_checked=false).
       const passIds: string[] = [];
       const expiredIds: string[] = [];
+      const missingIds: string[] = [];
       for (const [itemId, status] of statusByItem.entries()) {
-        if (status === "pass") {
-          passIds.push(itemId);
-        } else {
-          expiredIds.push(itemId);
-        }
+        if (status === "pass") passIds.push(itemId);
+        else if (status === "expired") expiredIds.push(itemId);
+        else missingIds.push(itemId);
       }
 
       const response = await fetch("/api/drug-boxes/inspections", {
@@ -103,6 +100,7 @@ export default function DrugBoxChecklistWorkspace({ box }: DrugBoxChecklistWorks
             .filter(Boolean),
           checkedItemIds: passIds,
           expiredItemIds: expiredIds,
+          missingItemIds: missingIds,
         }),
       });
 
@@ -139,6 +137,8 @@ export default function DrugBoxChecklistWorkspace({ box }: DrugBoxChecklistWorks
           Back to Drug Boxes
         </button>
       </div>
+
+      <EmsContainerInspectionContents departmentId={box.departmentId} containerId={box.id} containerType="drug_box" onOverridePass={(templateItemKey) => { setStatusByItem((current) => { const next = new Map(current); next.set(templateItemKey, "pass"); return next; }); }} />
 
       <section className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-5">
         <h2 className="text-xl font-bold text-white">Inspection Details</h2>
@@ -213,20 +213,23 @@ export default function DrugBoxChecklistWorkspace({ box }: DrugBoxChecklistWorks
               const status = statusByItem.get(item.id);
               const isPass = status === "pass";
               const isExpired = status === "expired";
-              const stateLabel = isPass ? "PASS" : isExpired ? "EXPIRED" : "TAP TO MARK";
+              const isMissing = status === "missing";
+              const stateLabel = isPass ? "PASS" : isExpired ? "EXPIRED" : isMissing ? "MISSING" : "TAP TO MARK";
               return (
                 <button
                   key={item.id}
                   type="button"
-                  aria-pressed={isPass || isExpired}
-                  aria-label={`${item.itemLabel}: ${isPass ? "marked PASS" : isExpired ? "marked EXPIRED" : "mark PASS"}`}
+                  aria-pressed={isPass || isExpired || isMissing}
+                  aria-label={`${item.itemLabel}: ${isPass ? "marked PASS" : isExpired ? "marked EXPIRED" : isMissing ? "marked MISSING" : "mark PASS"}`}
                   onClick={() => toggleItem(item.id)}
                   className={`rounded-lg border p-2.5 text-left transition sm:rounded-xl sm:p-4 ${
                     isPass
                       ? "border-emerald-500/60 bg-emerald-950/40 ring-1 ring-emerald-500/40"
                       : isExpired
                         ? "border-red-500/60 bg-red-950/40 ring-1 ring-red-500/40"
-                        : "border-white/10 bg-[#1b1b1b] hover:border-white/25"
+                        : isMissing
+                          ? "border-amber-500/60 bg-amber-950/40 ring-1 ring-amber-500/40"
+                          : "border-white/10 bg-[#1b1b1b] hover:border-white/25"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -237,7 +240,9 @@ export default function DrugBoxChecklistWorkspace({ box }: DrugBoxChecklistWorks
                           ? "border-emerald-500/50 bg-emerald-950/40 text-emerald-200"
                           : isExpired
                             ? "border-red-500/50 bg-red-950/40 text-red-200"
-                            : "border-white/15 bg-white/[0.03] text-neutral-400"
+                            : isMissing
+                              ? "border-amber-500/50 bg-amber-950/40 text-amber-200"
+                              : "border-white/15 bg-white/[0.03] text-neutral-400"
                       }`}
                     >
                       {stateLabel}

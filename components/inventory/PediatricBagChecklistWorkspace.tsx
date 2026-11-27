@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import EmsContainerInspectionContents from "@/components/inventory/EmsContainerInspectionContents";
 import PediatricParticipantsPanel, {
   type PediatricParticipant,
 } from "@/components/inventory/PediatricParticipantsPanel";
@@ -169,13 +170,8 @@ export default function PediatricBagChecklistWorkspace({
   // state at completion time.
   function toggleItem(itemId: string) {
     const current = statusByItemId.get(itemId) ?? null;
-    if (current === "checked") {
-      // PASS → EXPIRED.
-      void saveItemStatus(itemId, "expired");
-      return;
-    }
-    // EXPIRED or unselected → PASS.
-    void saveItemStatus(itemId, "checked");
+    const next: PediatricItemStatus = current === "checked" ? "expired" : current === "expired" ? "missing" : "checked";
+    void saveItemStatus(itemId, next);
   }
 
   async function completeCheck() {
@@ -189,11 +185,12 @@ export default function PediatricBagChecklistWorkspace({
     const unresolvedCount = items.filter(
       (item) => item.isRequired && item.requiredQuantity === null,
     ).length;
-    const expiredCount = items.filter(
-      (item) => statusByItemId.get(item.id) === "expired",
-    ).length;
+    const attentionCount = items.filter((item) => {
+      const status = statusByItemId.get(item.id);
+      return status === "expired" || status === "missing";
+    }).length;
     const derivedStatus: "ready" | "needs_attention" =
-      uncheckedCount > 0 || unresolvedCount > 0 || expiredCount > 0 ? "needs_attention" : "ready";
+      uncheckedCount > 0 || unresolvedCount > 0 || attentionCount > 0 ? "needs_attention" : "ready";
 
     // Reuse the session created on mount so personnel added during this check
     // are recorded on the same session/inspection.
@@ -247,6 +244,9 @@ export default function PediatricBagChecklistWorkspace({
         </Link>
       </div>
 
+      <EmsContainerInspectionContents departmentId={departmentId} containerId={bagId} containerType="pediatric_bag" onOverridePass={(templateItemKey) => { const item = items.find((candidate) => candidate.id === templateItemKey); if (item) void saveItemStatus(item.id, "checked"); }} />
+
+
       {unresolvedQuantityCount > 0 ? (
         <div className="rounded-xl border border-orange-500/40 bg-orange-950/20 px-4 py-3">
           <p className="text-sm font-semibold text-orange-200">
@@ -277,15 +277,16 @@ export default function PediatricBagChecklistWorkspace({
 
               const isPass = currentStatus === "checked";
               const isExpired = currentStatus === "expired";
-              const stateLabel = isPass ? "PASS" : isExpired ? "EXPIRED" : "TAP TO MARK";
+              const isMissing = currentStatus === "missing";
+              const stateLabel = isPass ? "PASS" : isExpired ? "EXPIRED" : isMissing ? "MISSING" : "TAP TO MARK";
 
               return (
                 <button
                   key={item.id}
                   type="button"
                   disabled={isSaving}
-                  aria-pressed={isPass || isExpired}
-                  aria-label={`${item.itemLabel}: ${isPass ? "marked PASS" : isExpired ? "marked EXPIRED" : "mark EXPIRED"}`}
+                  aria-pressed={isPass || isExpired || isMissing}
+                  aria-label={`${item.itemLabel}: ${isPass ? "marked PASS" : isExpired ? "marked EXPIRED" : isMissing ? "marked MISSING" : "mark PASS"}`}
                   onClick={() => {
                     toggleItem(item.id);
                   }}
@@ -294,7 +295,9 @@ export default function PediatricBagChecklistWorkspace({
                       ? "border-emerald-500/60 bg-emerald-950/40 ring-1 ring-emerald-500/40"
                       : isExpired
                         ? "border-red-500/60 bg-red-950/40 ring-1 ring-red-500/40"
-                        : "border-white/10 bg-[#1b1b1b] hover:border-white/25"
+                        : isMissing
+                          ? "border-amber-500/60 bg-amber-950/40 ring-1 ring-amber-500/40"
+                          : "border-white/10 bg-[#1b1b1b] hover:border-white/25"
                   } disabled:cursor-not-allowed disabled:opacity-60`}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -305,7 +308,9 @@ export default function PediatricBagChecklistWorkspace({
                           ? "border-emerald-500/50 bg-emerald-950/40 text-emerald-200"
                           : isExpired
                             ? "border-red-500/50 bg-red-950/40 text-red-200"
-                            : "border-white/15 bg-white/[0.03] text-neutral-400"
+                            : isMissing
+                              ? "border-amber-500/50 bg-amber-950/40 text-amber-200"
+                              : "border-white/15 bg-white/[0.03] text-neutral-400"
                       }`}
                     >
                       {stateLabel}

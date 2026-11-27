@@ -1,5 +1,5 @@
 import { getCurrentMember } from "@/lib/current-member";
-import { parseApparatusQrValue } from "@/lib/qr-identifiers";
+import { parseApparatusQrValue, parseScbaPackQrValue } from "@/lib/qr-identifiers";
 import { createSupabaseServerClient } from "@/lib/supabase-server";
 
 function jsonResponse(payload: unknown, status = 200) {
@@ -22,6 +22,18 @@ export async function GET(request: Request) {
     .eq("status", "Active")
     .maybeSingle();
   if (supply) return jsonResponse({ ok: true, result: { type: "ems_supply", id: supply.id, label: supply.item_name, value } });
+
+  const scbaPackId = parseScbaPackQrValue(value);
+  if (scbaPackId) {
+    const { data: pack } = await supabase
+      .from("scba_packs")
+      .select("id, pack_number")
+      .eq("id", scbaPackId)
+      .eq("department_id", currentMember.departmentId)
+      .neq("status", "Retired")
+      .maybeSingle();
+    if (pack) return jsonResponse({ ok: true, result: { type: "scba_pack", id: pack.id, label: `SCBA Pack ${pack.pack_number}`, value } });
+  }
 
   const apparatusId = parseApparatusQrValue(value);
   if (apparatusId) {

@@ -15,6 +15,7 @@ type ScbaPackRecord = {
 	status: string;
 	notes: string | null;
 	created_at: string;
+	qr_identifier: string;
 };
 
 function comparePackNumbers(left: string | null | undefined, right: string | null | undefined) {
@@ -61,7 +62,7 @@ export default async function ScbaPacksInventoryPage() {
 		const { data, error } = await supabase
 			.from("scba_packs")
 			.select(
-				"id, department_id, pack_number, manufacturer, model, serial_number, in_service_date, last_flow_test_date, next_flow_test_due_date, status, notes, created_at",
+				"id, department_id, pack_number, manufacturer, model, serial_number, in_service_date, last_flow_test_date, next_flow_test_due_date, status, notes, created_at, qr_identifier",
 			)
 			.eq("department_id", departmentId)
 			.order("created_at", { ascending: false });

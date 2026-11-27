@@ -37,6 +37,9 @@ export async function POST(request: Request) {
     const expiredItemIds = Array.isArray(body.expiredItemIds)
       ? (body.expiredItemIds as unknown[]).filter((v): v is string => typeof v === "string")
       : [];
+    const missingItemIds = Array.isArray(body.missingItemIds)
+      ? (body.missingItemIds as unknown[]).filter((v): v is string => typeof v === "string")
+      : [];
 
     if (!drugBoxId) {
       return jsonResponse({ ok: false, error: "Drug box is required." }, 400);
@@ -68,6 +71,7 @@ export async function POST(request: Request) {
       assistingPersonnel: asStringArray(body.assistingPersonnel),
       checkedItemIds: new Set(checkedItemIds),
       expiredItemIds: new Set(expiredItemIds),
+      missingItemIds: new Set(missingItemIds),
     });
 
     if (result.status !== "ok") {

@@ -60,6 +60,7 @@ export type DrugInspectionItemSnapshot = {
   requiredQuantity: number;
   sourceQuantityText: string;
   checked: boolean;
+  status: "pass" | "expired" | "missing";
   itemOrder: number;
 };
 
@@ -202,6 +203,7 @@ export type CreateDrugInspectionInput = {
   checkedItemIds: ReadonlySet<string>;
   /** Items marked EXPIRED. Persisted as not-present (is_checked=false). */
   expiredItemIds?: ReadonlySet<string>;
+  missingItemIds?: ReadonlySet<string>;
 };
 
 /**
@@ -249,6 +251,7 @@ export async function createDrugInspection(
     required_quantity_snapshot: item.requiredQuantity,
     source_quantity_text_snapshot: item.sourceQuantityText,
     is_checked: input.checkedItemIds.has(item.id),
+    result_status: input.checkedItemIds.has(item.id) ? "checked" : input.missingItemIds?.has(item.id) ? "missing" : input.expiredItemIds?.has(item.id) ? "expired" : "missing",
     item_order: item.displayOrder,
   }));
 
@@ -395,7 +398,7 @@ export async function getDrugInspection(
   const [resultsRes, memberRes] = await Promise.all([
     client
       .from("drug_box_checklist_results")
-      .select("checklist_item_id, section_name_snapshot, item_label_snapshot, required_quantity_snapshot, source_quantity_text_snapshot, is_checked, item_order")
+      .select("checklist_item_id, section_name_snapshot, item_label_snapshot, required_quantity_snapshot, source_quantity_text_snapshot, is_checked, result_status, item_order")
       .eq("department_id", departmentId)
       .eq("inspection_id", inspectionId)
       .order("item_order", { ascending: true }),
@@ -411,6 +414,7 @@ export async function getDrugInspection(
     requiredQuantity: typeof r.required_quantity_snapshot === "number" ? r.required_quantity_snapshot : 1,
     sourceQuantityText: typeof r.source_quantity_text_snapshot === "string" ? r.source_quantity_text_snapshot : "",
     checked: r.is_checked === true,
+    status: r.result_status === "missing" ? "missing" : r.result_status === "expired" ? "expired" : "pass",
     itemOrder: typeof r.item_order === "number" ? r.item_order : index,
   }));
 

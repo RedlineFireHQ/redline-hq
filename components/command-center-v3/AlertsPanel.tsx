@@ -43,6 +43,9 @@ type DeficiencyHistoryRow = {
   created_at: string | null;
 };
 
+type EmsBatchAlertRow = { id: string; supply_item_id: string; quantity_remaining: number; expiration_date: string; lot_number: string | null };
+type EmsSupplyAlertRow = { id: string; item_name: string };
+
 type DeficiencyStatusRow = {
   id: string;
   name: string | null;
@@ -181,6 +184,39 @@ export default function AlertsPanel() {
   const [activityById, setActivityById] = useState<Map<string, string | null>>(new Map());
   const [activeStatusIds, setActiveStatusIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
+  const [emsBatchAlerts, setEmsBatchAlerts] = useState<Array<{ id: string; itemName: string; quantity: number; expirationDate: string; lotNumber: string | null; expired: boolean }>>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadEmsBatchAlerts() {
+      if (!departmentId) { setEmsBatchAlerts([]); return; }
+      const today = new Date();
+      const todayKey = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, "0"), String(today.getDate()).padStart(2, "0")].join("-");
+      const future = new Date(today);
+      future.setDate(future.getDate() + 90);
+      const futureKey = [future.getFullYear(), String(future.getMonth() + 1).padStart(2, "0"), String(future.getDate()).padStart(2, "0")].join("-");
+      const { data: batchData, error: batchError } = await supabase
+        .from("ems_supply_batches")
+        .select("id,supply_item_id,quantity_remaining,expiration_date,lot_number")
+        .eq("department_id", departmentId)
+        .gt("quantity_remaining", 0)
+        .not("expiration_date", "is", null)
+        .lte("expiration_date", futureKey)
+        .order("expiration_date", { ascending: true });
+      if (cancelled || batchError || !batchData?.length) { if (!cancelled) setEmsBatchAlerts([]); return; }
+      const batches = batchData as EmsBatchAlertRow[];
+      const ids = Array.from(new Set(batches.map((row) => row.supply_item_id)));
+      const { data: supplyData } = await supabase.from("ems_supply_items").select("id,item_name").eq("department_id", departmentId).in("id", ids);
+      const names = new Map(((supplyData ?? []) as EmsSupplyAlertRow[]).map((row) => [row.id, row.item_name]));
+      if (!cancelled) setEmsBatchAlerts(batches.map((row) => ({
+        id: row.id, itemName: names.get(row.supply_item_id) ?? "EMS supply",
+        quantity: Number(row.quantity_remaining), expirationDate: row.expiration_date,
+        lotNumber: row.lot_number, expired: row.expiration_date < todayKey,
+      })));
+    }
+    void loadEmsBatchAlerts();
+    return () => { cancelled = true; };
+  }, [departmentId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -398,6 +434,24 @@ export default function AlertsPanel() {
             </div>
           )}
         </div>
+
+        {emsBatchAlerts.length > 0 ? (
+          <div className="border-t border-amber-500/20 px-5 py-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <p className="text-[11px] font-bold uppercase tracking-[.14em] text-amber-200">EMS Supply Expirations</p>
+              <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-200">{emsBatchAlerts.length} batch(es)</span>
+            </div>
+            <div className="space-y-2">
+              {emsBatchAlerts.slice(0, 4).map((batch) => (
+                <div key={batch.id} className="flex items-center justify-between gap-3 text-xs">
+                  <div className="min-w-0"><p className="truncate font-semibold text-white">{batch.itemName}</p><p className="text-neutral-400">{batch.quantity} remaining{batch.lotNumber ? ` · Lot ${batch.lotNumber}` : ""}</p></div>
+                  <span className={batch.expired ? "shrink-0 font-bold text-red-300" : "shrink-0 text-amber-200"}>{batch.expired ? "EXPIRED" : `Expires ${batch.expirationDate}`}</span>
+                </div>
+              ))}
+            </div>
+            <Link href="/inventory/ems-expirations" className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-red-300 hover:text-white">Manage expiration batches <ArrowRight size={13} /></Link>
+          </div>
+        ) : null}
 
         {/* Footer */}
         <div className="mt-auto border-t border-white/10 px-5 py-2">

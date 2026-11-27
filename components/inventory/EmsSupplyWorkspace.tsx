@@ -67,6 +67,9 @@ type QuantityActionState = {
   quantity: string;
   reason: string;
   notes: string;
+  expirationDate: string;
+  lotNumber: string;
+  storageLocation: string;
 };
 
 function formatNumber(value: number | null | undefined) {
@@ -349,6 +352,13 @@ function TransactionActionModal({
             </label>
           ) : null}
 
+          {state.mode === "restock" ? (
+            <>
+              <label className="block"><span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Expiration Date (if applicable)</span><input type="date" value={state.expirationDate} onChange={(event) => onChange({ expirationDate: event.target.value })} className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white" /></label>
+              <label className="block"><span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Lot / Batch Number (optional)</span><input value={state.lotNumber} onChange={(event) => onChange({ lotNumber: event.target.value })} className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white" /></label>
+              <label className="block"><span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">Storage Location (optional)</span><input value={state.storageLocation} onChange={(event) => onChange({ storageLocation: event.target.value })} placeholder="Supply room, cabinet, etc." className="w-full rounded-lg border border-white/10 bg-[#1b1b1b] px-3 py-2 text-sm text-white" /></label>
+            </>
+          ) : null}
           <label className="block">
             <span className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.14em] text-neutral-300">
               Notes
@@ -413,6 +423,9 @@ export default function EmsSupplyWorkspace({
     quantity: "",
     reason: "",
     notes: "",
+    expirationDate: "",
+    lotNumber: "",
+    storageLocation: "",
   });
   const [isActionSaving, setIsActionSaving] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
@@ -777,6 +790,9 @@ export default function EmsSupplyWorkspace({
       quantity: "",
       reason: "",
       notes: "",
+      expirationDate: "",
+      lotNumber: "",
+      storageLocation: "",
     });
   };
 
@@ -809,35 +825,30 @@ export default function EmsSupplyWorkspace({
     setIsActionSaving(true);
 
     try {
-      const requestBody =
-        actionState.mode === "adjust"
-          ? {
+      const response = actionState.mode === "adjust"
+        ? await fetch("/api/ems/transactions", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
               transactionType: "Correction",
               supplyItemId: selectedItem.id,
               newQuantity: quantity,
               reason: actionState.reason,
               notes: actionState.notes,
-            }
-          : {
-              transactionType: "Restock",
-              items: [
-                {
-                  supplyItemId: selectedItem.id,
-                  quantity,
-                },
-              ],
-              destinationType: "SupplyRoom",
-              destinationLabel: "Supply Room",
+            }),
+          })
+        : await fetch("/api/ems/supply-batches", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              supplyItemId: selectedItem.id,
+              quantity,
+              expirationDate: actionState.expirationDate || null,
+              lotNumber: actionState.lotNumber,
+              storageLocation: actionState.storageLocation,
               notes: actionState.notes,
-            };
-
-      const response = await fetch("/api/ems/transactions", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-      });
+            }),
+          });
 
       const payload = (await response.json().catch(() => ({}))) as {
         ok?: boolean;
@@ -857,7 +868,7 @@ export default function EmsSupplyWorkspace({
       setToastMessage(
         actionState.mode === "adjust"
           ? "Quantity adjusted with audit trail."
-          : "Restock transaction recorded.",
+          : "Restock recorded with a separate supply batch.",
       );
     } catch {
       setIsActionSaving(false);
