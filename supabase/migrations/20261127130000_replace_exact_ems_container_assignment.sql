@@ -30,8 +30,8 @@ begin
   where id = p_assignment_id
   for update;
   if not found then raise exception 'Bag or box assignment not found.'; end if;
-  if p_quantity > v_assignment.quantity_on_hand then
-    raise exception 'Replacement quantity exceeds the quantity assigned to this bag or box.';
+  if p_quantity <> v_assignment.quantity_on_hand then
+    raise exception 'Replace the full quantity assigned to this bag or box item.';
   end if;
 
   select * into v_old
