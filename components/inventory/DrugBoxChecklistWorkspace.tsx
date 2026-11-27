@@ -138,7 +138,7 @@ export default function DrugBoxChecklistWorkspace({ box }: DrugBoxChecklistWorks
         </button>
       </div>
 
-      <EmsContainerInspectionContents departmentId={box.departmentId} containerId={box.id} containerType="drug_box" />
+      <EmsContainerInspectionContents departmentId={box.departmentId} containerId={box.id} containerType="drug_box" onOverridePass={(templateItemKey) => { setStatusByItem((current) => { const next = new Map(current); next.set(templateItemKey, "pass"); return next; }); }} />
 
       <section className="rounded-2xl border border-neutral-800 bg-[#2E2E2E] p-5">
         <h2 className="text-xl font-bold text-white">Inspection Details</h2>
@@ -220,7 +220,7 @@ export default function DrugBoxChecklistWorkspace({ box }: DrugBoxChecklistWorks
                   key={item.id}
                   type="button"
                   aria-pressed={isPass || isExpired || isMissing}
-                  aria-label={`${item.itemLabel}: ${isPass ? "marked PASS" : isExpired ? "marked EXPIRED" : "mark PASS"}`}
+                  aria-label={`${item.itemLabel}: ${isPass ? "marked PASS" : isExpired ? "marked EXPIRED" : isMissing ? "marked MISSING" : "mark PASS"}`}
                   onClick={() => toggleItem(item.id)}
                   className={`rounded-lg border p-2.5 text-left transition sm:rounded-xl sm:p-4 ${
                     isPass
