@@ -18,7 +18,8 @@ export default function EmsContainerInspectionContents({ departmentId, container
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const [settingsRes, assignmentsRes, batchesRes, suppliesRes] = await Promise.all([\n        supabase.from("departments").select("ems_expiration_tracking_enabled").eq("id", departmentId).maybeSingle(),
+      const [settingsRes, assignmentsRes, batchesRes, suppliesRes] = await Promise.all([
+        supabase.from("departments").select("ems_expiration_tracking_enabled").eq("id", departmentId).maybeSingle(),
         supabase.from("ems_container_item_batches").select("id,template_item_key,item_label,batch_id,quantity_on_hand")
           .eq("department_id", departmentId).eq("container_type", containerType).eq("container_id", containerId).gt("quantity_on_hand", 0),
         supabase.from("ems_supply_batches").select("id,supply_item_id,quantity_remaining,expiration_date,lot_number")
