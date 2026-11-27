@@ -29,7 +29,9 @@ function itemOf(batch: Batch): Supply | null {
   return Array.isArray(batch.supply_item) ? batch.supply_item[0] ?? null : batch.supply_item ?? null;
 }
 
-export default function EmsExpirationWorkspace({ supplies, canManage, expirationTrackingEnabled }: { supplies: Supply[]; canManage: boolean; expirationTrackingEnabled: boolean }) {\n  const [trackingEnabled, setTrackingEnabled] = useState(expirationTrackingEnabled);\n  const [savingSetting, setSavingSetting] = useState(false);
+export default function EmsExpirationWorkspace({ supplies, canManage, expirationTrackingEnabled }: { supplies: Supply[]; canManage: boolean; expirationTrackingEnabled: boolean }) {
+  const [trackingEnabled, setTrackingEnabled] = useState(expirationTrackingEnabled);
+  const [savingSetting, setSavingSetting] = useState(false);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -129,7 +131,8 @@ export default function EmsExpirationWorkspace({ supplies, canManage, expiration
       <button disabled={saving} className="mt-4 min-h-11 rounded-lg bg-red-600 px-5 font-bold text-white disabled:opacity-50">{saving ? "Saving..." : entryMode === "existing" ? "Record existing stock batch" : "Receive new stock batch"}</button>
     </form> : null}
 
-    {!trackingEnabled ? <p className="rounded-lg border border-neutral-700 bg-neutral-900 p-4 text-sm text-neutral-300">Expiration tracking is currently off. Turn it on above when you are ready. Your regular EMS inventory and inspections continue as usual.</p> : null}\n    {error ? <p role="alert" className="rounded-lg border border-red-500/30 bg-red-950/20 p-3 text-sm text-red-200">{error}</p> : null}
+    {!trackingEnabled ? <p className="rounded-lg border border-neutral-700 bg-neutral-900 p-4 text-sm text-neutral-300">Expiration tracking is currently off. Turn it on above when you are ready. Your regular EMS inventory and inspections continue as usual.</p> : null}
+    {error ? <p role="alert" className="rounded-lg border border-red-500/30 bg-red-950/20 p-3 text-sm text-red-200">{error}</p> : null}
     <section className="overflow-hidden rounded-xl border border-white/10 bg-[#242424]">
       <div className="border-b border-white/10 p-4"><h2 className="font-black text-white">Supply batches</h2><p className="text-sm text-neutral-400">Each row is a separate received batch.</p></div>
       {loading ? <p className="p-5 text-sm text-neutral-400">Loading batches...</p> : batches.length === 0 ? <p className="p-5 text-sm text-neutral-400">No batches have been recorded yet. Existing inventory quantities remain unchanged until batches are entered.</p> :
